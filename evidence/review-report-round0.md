@@ -1,7 +1,7 @@
 # Workflow 方法论交付物 —— 独立评审报告（Round 0）
 
 > 评审者：独立 `workflow-reviewer`（未参与任何设计与实现）。
-> 评审对象根目录：`/data/workspace/liuyuanjian/workflow/`
+> 评审对象根目录：`<repo-root>/`
 > 评审方式：Read/Bash/Grep 实际打开全部交付物 + **独立复现**最小示例的关键结论（非纸面通过）。
 > 评审日期：2026-06-23。Workflow API 判断一律以 `evidence/01-workflow-api-ground-truth.md` 为准。
 

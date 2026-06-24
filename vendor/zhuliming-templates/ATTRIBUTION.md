@@ -11,15 +11,14 @@
 
 ## 路径替换说明
 
-模板内 `{{WORKSPACE_ROOT}}` 占位符在原作者机器上默认 `/data/workspace/zhuliming`。
-在本项目内复用时，统一替换为本 vendored 目录：
+模板内 `{{WORKSPACE_ROOT}}` 是占位符，不应写死为任何作者机器路径。
+在本项目内复用时，统一替换为当前克隆仓库中的 vendored 目录：
 
 ```
-{{WORKSPACE_ROOT}}  →  /data/workspace/liuyuanjian/workflow/vendor/zhuliming-templates
+{{WORKSPACE_ROOT}}  →  <repo>/vendor/zhuliming-templates
 ```
 
-`build-prompt.md`、`build-workflow-js.md` 各有 1 处 `/data/workspace/zhuliming` 示例路径，
-按上表替换即可；模板正文逻辑无需改动。
+下游用户可把 `<repo>` 替换为自己的克隆目录。公开仓库中不保留作者机器绝对路径。
 
 ## 与本项目的关系
 

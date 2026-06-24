@@ -2,14 +2,14 @@
 
 > 本文件演示 **CLAUDE.md 的定位**：保存“项目级固定约束”——每次在本目录启动都生效、不随对话变化的硬规则。
 > 方法/清单放 Skill，专业任务放 Subagent，编排放 Workflow，确定性检查放 Hooks，**固定约束放这里**。
-> 本项目位于 `/data/workspace/liuyuanjian/workflow/`，从属于上层全局规范 `../CLAUDE.md`（冲突时以上层安全/提交约束优先）。
+> 本项目是可独立克隆的公开仓库。所有路径默认相对仓库根解析，不依赖作者机器上的父目录、兄弟目录或个人全局配置。
 
 ## 一、不可破坏的边界
-1. **不得修改或覆盖现有 Skill**：`../liu/ai-engineering-delivery-zh`（及其英文版、awesome-design-md、codex-coding-guidelines-skill）。本项目只**复用**，不改它们。
-2. 本项目所有新增/修改文件一律落在 `workflow/` 子树内。
+1. **不得依赖仓库外部文件作为默认运行条件**：外部 Skill、父目录规则、个人 harness 配置只能作为显式可选输入，不得成为默认路径。
+2. 本项目所有新增/修改文件一律落在当前仓库根目录内。
 3. 文件一律 UTF-8，中文不得乱码/转义。
-4. `CLAUDE.md`、`AGENTS.md`、个人 harness 配置默认按个人配置处理，**禁止混入共享账号 `laibo` 下同事的工作仓库**。
-   > **公开发布边界（C8）**：当本项目作为【独立的个人公开仓库】发布到个人 GitHub 时，`.claude/workflows`、`.claude/agents`、`.claude/skills` 是"项目自有、可复用、可展示"的核心资产，应**显式纳入发布**；只需排除真正的个人/敏感项——`settings.local.json`、个人记忆、密钥、`*.yml`、以及 `evidence/` 下的运行目录（`runs/plans/deliveries`，含客户代码副本）。这些排除已写入仓库根 `.gitignore`。CLAUDE.md 本身是否随公开仓库发布由作者决定（它正是"项目固定约束放 CLAUDE.md"的活样例，可作为方法论的一部分公开）。两种场景的区别：共享账号下是"防止个人配置污染同事仓库"，独立公开仓库下是"发布项目自有资产"，并不矛盾。
+4. 个人 harness 配置、个人记忆、密钥、客户代码副本、临时运行产物不得入库。
+   > **公开发布边界**：本仓库中的 `.claude/workflows`、`.claude/agents`、`.claude/skills`、`docs/`、`examples/`、`scripts/` 是项目自有资产，应随公开仓库发布；`.claude/settings.local.json`、`AGENTS.md`、`**/memory/`、真实客户仓库副本、`evidence/runs|plans|deliveries` 等仍应排除。
 
 ## 二、Workflow 脚本硬约束（与 evidence/01-workflow-api-ground-truth.md 一致）
 1. 脚本是**纯 JS**；以纯字面量 `export const meta = {...}` 开头；`meta.phases[].title` 与 `phase()` 调用逐字一致。

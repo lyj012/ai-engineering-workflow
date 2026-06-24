@@ -48,7 +48,7 @@ if (!check.pass) log(`验证未通过，被证伪点：${check.falsified.join(';
 "交叉审查"是把验证从"一个核查者"升级为"多个互不依赖的核查者"。原则：
 
 - **审查者是全新实例**：每个审查 agent 都是独立 `agent()` 调用，拥有自己的上下文窗口，看不到实现者的内部推理，只看到最终成果（Subagent 返回压缩摘要、上下文隔离，见 `evidence/02-research-findings.md` §1）。
-- **实现者不参与审查**：实现 agent 与审查 agent 不能是同一实例（`workflow/CLAUDE.md` 三-1；`03-decision-log.md` 采用第 12 条）。
+- **实现者不参与审查**：实现 agent 与审查 agent 不能是同一实例（`CLAUDE.md` 三-1；`03-decision-log.md` 采用第 12 条）。
 - **审查阶段用 `phase()` 归组**：把审查 agent 显式归入审查 phase，避免在 `pipeline/parallel` 内竞争全局 phase 状态（`01-workflow-api-ground-truth.md` §2 `opts.phase`）。
 
 本项目把"独立审查"沉淀为专职子代理 `workflow-reviewer`（见第八节），它的设定就是"没有参与任何设计与实现，只评审"（`.claude/agents/workflow-reviewer.md` 第 8 行）。
@@ -183,7 +183,7 @@ return { verdict, history, passed: verdict.verdict === 'PASS' && verdict.p0.leng
 
 - `index`/`round` 用来制造逐轮变化的 prompt/label（不用 `Date.now()/Math.random()`，它们会破坏断点恢复，`01-workflow-api-ground-truth.md` §1）。
 - 返工与评审用**不同 `agentType`**（`workflow-reviewer` 评审、`general-purpose` 返工），从机制上保证实现者不自评。
-- 退出时 `passed` 只在"PASS 且无 P0"时为真；两轮仍不过则 `passed` 为假，调用方应据此**如实报告未完成**（`workflow/CLAUDE.md` 三-4、`review-rubric.md` 第 4 步）。
+- 退出时 `passed` 只在"PASS 且无 P0"时为真；两轮仍不过则 `passed` 为假，调用方应据此**如实报告未完成**（`CLAUDE.md` 三-4、`review-rubric.md` 第 4 步）。
 
 > `agentType: 'workflow-reviewer'` 仅在从含 `.claude/agents/workflow-reviewer.md` 的项目目录启动时才可解析；否则改用内置 `agentType`（如 `general-purpose`）并把评审 rubric 写进 prompt（`script-patterns.md` §6 注；`01-workflow-api-ground-truth.md` §4、§6）。
 

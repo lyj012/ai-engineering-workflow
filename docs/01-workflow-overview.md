@@ -117,4 +117,4 @@ Claude Code 把"复杂工程能力"拆成五个互补构件。混用会出问题
 
 - 一手 API 基线：`evidence/01-workflow-api-ground-truth.md`
 - 设计方法 Skill：`.claude/skills/workflow-designer/SKILL.md`（口诀与设计主干同源）
-- 项目固定约束（本身就是 CLAUDE.md 定位的示范）：`workflow/CLAUDE.md`
+- 项目固定约束（本身就是 CLAUDE.md 定位的示范）：`CLAUDE.md`

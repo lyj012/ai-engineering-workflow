@@ -1,7 +1,7 @@
 # Workflow 方法论交付物 —— 独立复评报告（Round 1）
 
 > 评审者：全新独立 `workflow-reviewer` 实例（**未**参与任何设计、实现或 Round 0 评审）。
-> 评审对象根目录：`/data/workspace/liuyuanjian/workflow/`
+> 评审对象根目录：`<repo-root>/`
 > 评审方式：以 Read/Bash/Grep/Glob **亲自核查**为准；**不采信**返工记录中的"已修复"自述。
 > Workflow API 判断一律以 `evidence/01-workflow-api-ground-truth.md`（产品内一手规范）为准。
 > 复评日期：2026-06-23。上一轮（Round 0）判 CONDITIONAL_PASS（89/100，P0=0，P1=2，P2=3）。
@@ -22,7 +22,7 @@
 | 可运行性与真实证据 | 25 | 25 | `demo-run-raw.json`（106 KB）`result` 含 understand/scan/componentAnalyses(6)/risk/testPlan/review/report 七段，agentCount=12；`research-raw.json`（180 KB）`result` 含 charter/research(6)/reviews(3)/reconciliation，agentCount=11——与新入库脚本的 `return {...}` 与 meta phases 完全一致，证明脚本对应真实运行而非补造。 |
 | 阶段/职责设计 | 15 | 15 | 三脚本 + 评审门禁分工清晰；7 agent 职责无重复（independent-reviewer vs workflow-reviewer 已区分）；每 phase 有输入/输出/完成标准；`meta.phases[].title` 与 `phase()` 调用逐字一致（三脚本全部核对通过）。 |
 | 健壮性 | 10 | 10 | 三脚本均线性扇出+单点扇入，无 while/递归/死循环；评审-返工有界循环 ≤2 轮 + P0→FAIL 退出；`.filter(Boolean)` 全部作用于 `parallel()` 整体返回数组（4 处：106/121/58/164 行），无一进 stage 内部；空组件降级分支齐备。 |
-| 复用现有 Skill | 10 | 10 | 原 skill `liu/ai-engineering-delivery-zh/` 全树 `-newermt 2026-06-19` 无任何命中（mtime 全为 2026-06-18），**零修改**；脚本仅以只读路径引用原 skill。 |
+| 复用现有 Skill | 10 | 10 | 原 skill `<external-skill>/ai-engineering-delivery-zh/` 全树 `-newermt 2026-06-19` 无任何命中（mtime 全为 2026-06-18），**零修改**；脚本仅以只读路径引用原 skill。 |
 | 成本与规模克制 | 10 | 7 | agentCount 11/12/9 合理；决策记录诚实自陈"6 路研究约 5 路同质"堆 agent 教训；未为展示堆 agent。（Round 0 同口径，无新增成本问题。） |
 
 > 总分 = 29+25+15+10+10+7 = **96**。相较 Round 0（89）提升 7 分，主因两条阻断性 P1 均已实证修复、无新增阻断问题。
@@ -98,7 +98,7 @@
 - **README 死链**：无（9 处引用全部存在）。
 - **doc-01 改后内部矛盾**：无（无"仅 01"残留，导航 10 行全部与真实 H1 对齐）。
 - **analyze-repo.js 被 P2-2 注释改动破坏**：无——7 个 phase()、`return { ...9 字段 }` 结构完整，注释为纯插入。
-- **原 Skill 被波及**：无（`liu/ai-engineering-delivery-zh/` 全树 mtime=2026-06-18，`-newermt 2026-06-19` 零命中，零修改）。
+- **原 Skill 被波及**：无（`<external-skill>/ai-engineering-delivery-zh/` 全树 mtime=2026-06-18，`-newermt 2026-06-19` 零命中，零修改）。
 
 **未发现任何新增或回归问题。**
 

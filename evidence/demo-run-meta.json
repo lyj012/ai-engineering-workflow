@@ -1,7 +1,7 @@
 {
   "demo_run": { "name": "analyze-repo", "runId": "wf_e93aaabd-756", "taskId": "ww4dhmlh9",
     "scriptPath": ".claude/workflows/analyze-repo.js",
-    "target": "/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh",
+    "target": "<repo-root>/<external-skill>/ai-engineering-delivery-zh",
     "agentCount": 12, "componentsAnalyzed": "6/7", "risks": 7, "testCases": 18, "independentReviewVerdict": "CONDITIONAL_PASS",
     "rawResult": "evidence/demo-run-raw.json", "report": "evidence/demo-run-report.md" },
   "methodology_research_run": { "name": "wf-methodology-research", "runId": "wf_8b251548-42a", "taskId": "wb2pvf81g",

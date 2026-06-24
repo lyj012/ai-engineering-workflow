@@ -19,6 +19,7 @@ evidence/deliveries/
 # yml/yaml 配置默认不入库（全局规则 9）
 *.yml
 *.yaml
+!.github/workflows/*.yml
 
 # ============================================================
 # 临时 / 系统

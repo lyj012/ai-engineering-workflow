@@ -3,7 +3,7 @@
 > 这是 `.claude/workflows/analyze-repo.js` 的一次**真实运行**记录（非模拟）。
 > 运行方式：`Workflow({ scriptPath: ".../analyze-repo.js", args: { target, taskDescription, maxComponents: 6 } })`
 > Run ID：`wf_e93aaabd-756`　Task ID：`ww4dhmlh9`
-> 分析目标：`/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh`
+> 分析目标：`<repo-root>/<external-skill>/ai-engineering-delivery-zh`
 > 完整结构化结果（每阶段输入/输出）见 `evidence/demo-run-raw.json`。
 
 ## 运行元数据（一手）
@@ -45,7 +45,7 @@
 
 # ai-engineering-delivery-zh Skill 只读分析 · 最终报告
 
-> 目标：`/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh`
+> 目标：`<repo-root>/<external-skill>/ai-engineering-delivery-zh`
 > 性质：Claude Code Skill 包（工程化交付流程框架），非可独立运行的应用
 > 范围：只读静态分析 + 对唯一可执行模块（presubmit-scan 脚本）的动态实证测试
 > 全程未修改任何目标文件；所有结论附证据来源（文件/行号或实测）。
@@ -186,7 +186,7 @@ ai-engineering-delivery-zh/
 scripts/ 下实存 presubmit-scan.ps1，delivery-checklist L38-42 有 PowerShell 用法，但 SKILL.md L75 只提 `.sh`、从未提 `.ps1`（实测 grep 确认）。只读 SKILL.md 的 Windows 用户可能误以为无跨平台支持而跳过提交前扫描。建议 L75 补一句指向 `.ps1` 的跨平台说明。
 
 ### R6 [LOW] 脚本安装路径靠人工替换 `<skill-dir>` 占位符（可用性）
-SKILL.md L75、delivery-checklist L30/L44 示例给的是 `~/.claude/skills/ai-engineering-delivery-zh`，但本仓库实际位置为 `/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh`。脚本自身对路径无依赖（实测从任意 git 仓库内用绝对路径、或对显式文件/非 git 目录调用均正常）。若使用者照抄示例路径未替换，会因找不到脚本而无法执行——与 R1 叠加时尤其危险（兜底被静默跳过）。建议文档补"用 `realpath` 或先 `ls` 确认脚本路径"。
+SKILL.md L75、delivery-checklist L30/L44 示例给的是 `~/.claude/skills/ai-engineering-delivery-zh`，但本仓库实际位置为 `<repo-root>/<external-skill>/ai-engineering-delivery-zh`。脚本自身对路径无依赖（实测从任意 git 仓库内用绝对路径、或对显式文件/非 git 目录调用均正常）。若使用者照抄示例路径未替换，会因找不到脚本而无法执行——与 R1 叠加时尤其危险（兜底被静默跳过）。建议文档补"用 `realpath` 或先 `ls` 确认脚本路径"。
 
 ### R7 [LOW] 全流程纪律纯靠模型自觉，无强制校验（方法学元风险）
 SKILL.md 与全部 references 为自然语言软约束：任务分级、todo 勾选、"未验证不得写已验证"、最小改动、"绝不把猜测当已确认事实"、风险审查推演等均无 lint/hook/CI 把关。唯一可执行的 presubmit-scan 只覆盖提交前一小段文本面，且本身存在 R1/R3。这是 prompt 工程方法学固有风险，非文件缺陷。缓解：把修复 R1 后的脚本作为强制 pre-commit hook；高风险域人工复核留痕；复盘模板强制填"已做验证/残留风险"。
@@ -200,7 +200,7 @@ SKILL.md 与全部 references 为自然语言软约束：任务分级、todo 勾
 
 ## 五、测试验证方案
 
-> 策略：脚本做静态 + 动态实证（语法/退出码/两级密钥真假阳性/占位符降级/SQL/冲突/四模式）；文档做一致性核查。`SCRIPTDIR=/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/scripts`。下列标"已实测"者本次已复现。
+> 策略：脚本做静态 + 动态实证（语法/退出码/两级密钥真假阳性/占位符降级/SQL/冲突/四模式）；文档做一致性核查。`SCRIPTDIR=<repo-root>/<external-skill>/ai-engineering-delivery-zh/scripts`。下列标"已实测"者本次已复现。
 
 | ID | 场景 | 类型 | 预期（含实测结果） | 优先级 |
 |---|---|---|---|---|
@@ -225,7 +225,7 @@ SKILL.md 与全部 references 为自然语言软约束：任务分级、todo 勾
 
 ### 关键验证命令（节选）
 ```bash
-SCRIPTDIR=/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/scripts
+SCRIPTDIR=<repo-root>/<external-skill>/ai-engineering-delivery-zh/scripts
 # 用法/退出码
 bash "$SCRIPTDIR/presubmit-scan.sh" --help; echo "EXIT=$?"
 # TC-NG 非 git 目录默认模式负向断言（应非 0；实测当前 EXIT 0=R1）
@@ -243,10 +243,10 @@ printf 'password: SuperSecretValue12345\n' > "$D/r.txt"; bash "$SCRIPTDIR/presub
 bash "$SCRIPTDIR/presubmit-scan.sh" "$D/r.txt" >a 2>&1; bash "$SCRIPTDIR/presubmit-scan.sh" "$D/r.txt" >b 2>&1; diff -q a b
 # TC-16 跨平台/跨副本
 command -v pwsh >/dev/null && echo "pwsh OK" || echo "pwsh MISSING"
-sha256sum "$SCRIPTDIR/presubmit-scan.sh" /data/workspace/liuyuanjian/liu/ai-engineering-delivery/scripts/presubmit-scan.sh
+sha256sum "$SCRIPTDIR/presubmit-scan.sh" <repo-root>/liu/ai-engineering-delivery/scripts/presubmit-scan.sh
 # TC-14/15 文档一致性
-grep -n '退出码 2' /data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/delivery-checklist.md
-grep -n 'ps1\|PowerShell' /data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md
+grep -n '退出码 2' <repo-root>/<external-skill>/ai-engineering-delivery-zh/references/delivery-checklist.md
+grep -n 'ps1\|PowerShell' <repo-root>/<external-skill>/ai-engineering-delivery-zh/SKILL.md
 ```
 
 ---

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0",
+  "workflow": "deliver-from-plan",
+  "sourcePlan": "examples/artifacts/plan-ready",
+  "targetRepo": "examples/minimal-target",
+  "finalStatus": "DELIVERED",
+  "doneCommand": "cd examples/minimal-target && bash ./test.sh",
+  "doneTrustworthy": true,
+  "filesChanged": [
+    "examples/minimal-target/app.sh",
+    "examples/minimal-target/test.sh"
+  ],
+  "openItems": []
+}

@@ -9,10 +9,10 @@ export const meta = {
   ],
 }
 
-// 路径参数化（去除个人绝对路径）：args 为 JSON 字符串需先 parse；默认相对路径，相对运行 cwd 解析，可经 args 覆盖。
+// 路径参数化：默认从仓库根运行，所有默认路径都在当前公开仓库内；如要对外部 Skill 做研究，可用 args.skillDir 显式覆盖。
 const A = (() => { let a = args; if (typeof a === 'string') { try { a = a.trim() ? JSON.parse(a) : {} } catch (e) { a = {} } } return (a && typeof a === 'object') ? a : {} })()
-const WF = A.workflowDir || 'workflow'                              // 本方法论项目目录
-const SKILL_DIR = A.skillDir || 'liu/ai-engineering-delivery-zh'   // 现有工程交付 Skill 目录
+const WF = A.workflowDir || '.'
+const SKILL_DIR = A.skillDir || '.claude/skills/workflow-designer'
 const GT = `${WF}/evidence/01-workflow-api-ground-truth.md`
 const SKILL = `${SKILL_DIR}/SKILL.md`
 const SKILL_REF = `${SKILL_DIR}/references/`
@@ -20,8 +20,8 @@ const SKILL_REF = `${SKILL_DIR}/references/`
 const TASK_BRIEF = `公司要整理一套"Claude Code Workflow 技巧、设计规范、协作方式、质量评价方法"的方法论，并落地一个最小可运行示例，用于团队分享与排名评估。需要明确区分 Skill(方法/规范/清单) / Subagent(专业任务) / Workflow(阶段·循环·并行·分支·汇总·重试) / Hooks(确定性检查) / CLAUDE.md(项目固定约束)。已有资产是 ai-engineering-delivery-zh Skill(业务优先 8 阶段交付主干)，要复用其工程交付思想但不照搬。强调:不为展示规模堆 agent;不让实现者自评;先小范围再扩大;每阶段有输入/输出/完成标准;重要结论需独立复核;无法验证要如实说明;控制上下文与成本;成果要可被他人复用、适合向负责人展示。`
 
 const COMMON = `你在为团队知识库研究 Claude Code Workflow 方法论。\n` +
-  `权威事实锚点(必须先读): ${GT} 是本机 Claude Code 2.1.186 的 Workflow 工具官方规范(产品内一手定义); ${SKILL} 是现有 Skill,${SKILL_REF} 是其 references。\n` +
-  `对 Claude Code 概念(Skill/Subagent/Agent/Hooks/Dynamic Workflow/CLAUDE.md)请用 WebSearch + WebFetch 抓取 docs.claude.com 等官方资料佐证。\n` +
+  `权威事实锚点(必须先读): ${GT} 是本仓库保存的 Workflow 工具事实记录; ${SKILL} 是本仓库自带 Skill,${SKILL_REF} 是其 references。\n` +
+  `对 Claude Code 概念(Skill/Subagent/Agent/Hooks/Dynamic CLAUDE.md)请用 WebSearch + WebFetch 抓取 docs.claude.com 等官方资料佐证。\n` +
   `硬规则: 不得把未经证据的推测写成事实;每条 keyFindings 必须标注 sourceType(official-doc/product-spec/live-env/inference)与 confidence;凡涉及 Workflow 脚本 API,以 ${GT} 为准,不得凭训练记忆臆测;官方资料优先。\n` +
   `任务背景: ${TASK_BRIEF}\n` +
   `输出用中文。只返回结构化结果,不要写文件。`
@@ -92,7 +92,7 @@ const STREAMS = [
   { key: 'state', type: 'claude-code-guide', q: '研究状态保存、中间结果留存、上下文管理与断点恢复:structured output(schema)如何降低解析与上下文负担;evidence/中间产物文件如何作为可追踪记录;resumeFromRunId + scriptPath 断点恢复机制;主代理与子代理的上下文隔离;如何避免上下文膨胀。以 ground-truth 文件为 API 事实来源。' },
   { key: 'quality', type: 'claude-code-guide', q: '研究质量保障:测试/验证如何编排、独立交叉审查(实现者不自评)、对抗式验证(多 skeptic 证伪)、多视角验证、失败重试与降级、明确的退出条件与最大轮次(防无限循环)。给出"评审-返工-再评审"有界循环的设计要点与退出判据。' },
   { key: 'cost', type: 'claude-code-guide', q: '研究 Agent 数量、模型选择(opus/sonnet/haiku 分层)、effort 分层、Token 与成本控制:并发上限 min(16,cores-2)、总数上限 1000、单次 4096 item、budget 硬上限用法。重点给出"如何在不牺牲质量的前提下控制规模",以及"为展示规模而堆 agent / 只追运行时长或代码量"这类反模式的识别与规避。' },
-  { key: 'skill-conversion', type: 'general-purpose', q: '研究如何把现有 ai-engineering-delivery-zh Skill(8 阶段业务优先交付主干 + 三级任务分级 + 按需加载 references + presubmit 脚本)转化为可执行的工程交付 Workflow。要给出阶段到 Workflow phase 的映射、哪些应保留为 Skill(方法/清单)、哪些应做成 Subagent、哪个环节应由 Hooks(如 presubmit-scan)承担、哪些约束进 CLAUDE.md。强调复用而非复制。请实际读取 SKILL.md 与 references/ 后再下结论。' },
+  { key: 'skill-conversion', type: 'general-purpose', q: '研究如何把本仓库自带 workflow-designer Skill 与 docs/11、docs/12 的工程交付思想转化为可执行的工程交付 Workflow。要给出阶段到 Workflow phase 的映射、哪些应保留为 Skill(方法/清单)、哪些应做成 Subagent、哪个环节应由 Hooks 或脚本检查承担、哪些约束进 CLAUDE.md。强调复用而非复制。请实际读取 SKILL.md 与 references/ 后再下结论。' },
 ]
 
 // ---- Phase 1: Charter ----

@@ -1,6 +1,6 @@
 # 最终遗留风险与残留未决项
 
-> 最近更新：2026-06-24。本次更新专为修正一次独立审计指出的「披露不完整」——把 deep/standard 深度档、真实失败终态、评分门禁三项缺口，以及新增的「方案→编码」桥接链路，按**当前真实运行结果**如实补全。均不隐瞒。
+> 最近更新：2026-06-24。本次更新专为公开仓库状态对齐：路径已改为仓库相对表达，公开 README、示例、自检脚本与 CI 配置已补齐；历史运行证据仍按“已验证/未验证/人工开环”区分。
 >
 > 现状：方法论核心（需求→方案→风险→拆解→验收→记录→纠偏→多流程协作→独立审查→闭环）已 PASS；新增的「方案→编码到测试全绿」桥接经独立评审 PASS（92/100，无 P0/P1）。下列为仍需注意的遗留项。
 
@@ -26,7 +26,7 @@
 
 ## 三、复用前需核实（环境/版本相关）
 1. **版本依赖**：本套基于 Claude Code `2.1.186` + Dynamic Workflows。团队成员若版本不一或未启用 Workflow，需先核对（见 `evidence/00-environment-scan.md`）。
-2. **自定义 agentType 的可移植性**：`.claude/agents/*.md` 仅在**从 `workflow/` 目录启动** Claude 时进注册表。实跑脚本均改用**内置 agentType**（general-purpose/Explore 等）以保证任意目录可跑（见 `docs/04`）。
+2. **自定义 agentType 的可移植性**：`.claude/agents/*.md` 仅在从仓库根目录启动 Claude 时进注册表。实跑脚本均默认改用**内置 agentType**（general-purpose/Explore 等）以保证任意克隆目录名都可跑（见 `docs/04`）。
 3. **presubmit 强制门禁未落地为 Hook**：方法论指出红线应由 PreToolUse Hook 强制，但**具体 `settings.json` 配置须先读项目实际文件**后再写，本项目未代写（有意留白，见 `docs/01`、`03-decision-log.md` 未确认第 4 条）。
 4. **桥接的 `.ps1` 类开环项**：凡本机缺运行环境（pwsh 等）的目标，桥接会如实落为开环人工核对项，不自动闭合（见 `docs/12` §4.1、§9）。
 
@@ -41,8 +41,8 @@
 3. **桥接的命门是"测试物化"**：方案只给测试规格，必须先把它变成可运行 DONE 并"先红后绿"核验可信，否则闭环退化成开环（见 `docs/12` §4）。
 
 ## 六、不构成风险但需声明
-- 本项目所有文件均在 `workflow/` 子树内；原 `ai-engineering-delivery-zh` Skill **零修改**（多个评审实例 + 桥接 demo 后均核实 mtime 仍 2026-06-18）。
-- `CLAUDE.md`、`.claude/`、`AGENTS.md` 为个人配置，**禁止提交 Git**（遵全局规则第 15 条）。
+- `.claude/workflows`、`.claude/agents`、`.claude/skills` 是本公开仓库的项目资产，应随仓库发布；真正需要排除的是 `.claude/settings.local.json`、`AGENTS.md`、个人记忆、密钥和客户代码副本。
+- `evidence/runs/`、`evidence/plans/`、`evidence/deliveries/` 是动态运行目录，默认不发布；公开可复现示例已整理到 `examples/`。
 
-## 七、整个项目尚未完成的唯一大件
-- **GitHub 沉淀**：整理成可公开仓库 + 对外 README + 敏感信息核查 + 排除个人配置。此为第一阶段收尾的最后一步，尚未开始。
+## 七、公开仓库状态
+- GitHub 公开发布已完成；当前重点是持续保持路径可移植、示例可复现、文档状态一致，以及用 `node scripts/self-check.mjs` 在发布前做确定性自检。

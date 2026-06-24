@@ -69,7 +69,7 @@ Workflow({ scriptPath: ".../.claude/workflows/analyze-repo.js", args: {
   taskDescription: "<任务>",
   maxComponents: 4,                  // Select 后最多深入分析数
   outDir: "<输出根目录>",             // 缺省 "evidence/runs"（相对子代理 cwd）
-  useCustomAgents: false,            // true 仅当从 workflow/ 目录启动 Claude
+  useCustomAgents: false,            // true 仅当从仓库根目录启动 Claude
   runVerification: false,            // 默认只读；开启才执行白名单命令
   maxReworkRounds: 2,                // 返工上限（防无限循环）
   forceFirstVerdict: null,           // 测试注入：演练返工链路（产物会标注为测试）

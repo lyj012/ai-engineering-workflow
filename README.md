@@ -1,94 +1,150 @@
-# AI 软件工程 Workflow —— 需求 → 方案 → 编码到测试全绿
+# AI Engineering Workflow
 
-一套面向真实软件工程任务的 **Claude Code Dynamic Workflow** 方法论与可运行实现：把"一句客户需求"一路推到"经过测试验证的代码改动 diff"，每一步都**有据可查（行号证据）、有独立复核（实现者不自评）、有沙箱兜底（不动原仓库、不自动提交）**。
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-> 适用于：把模糊需求转成工程任务、分析陌生代码库、控制 AI 不盲目生成代码、对 AI 输出做独立审查、建立可验证的开发闭环。
+Claude Code Dynamic Workflows for turning a user requirement into a reviewed engineering plan, then into a sandboxed code diff with explicit verification evidence.
 
----
+This repository is a Claude Code project. It does not run in Codex or generic agent runners unless they implement the same `Workflow` tool surface.
 
-## 能做什么（场景）
+## What This Does
 
-| 场景 | 工作流 | 产出 |
+| Input | Workflow | Output |
 |---|---|---|
-| 需求 → 可落地方案（只读，不写码） | `plan-from-requirement` | `final-plan.md` + 结构化 JSON（复用/修改/新增/步骤/风险/验收） |
-| 方案 → 沙箱内编码到测试全绿 → diff | `deliver-from-plan` | `changes.diff` + 测试全绿 + 交付报告（不改原仓库/不提交） |
-| 一句需求 → 经测试验证的代码 diff | 上面两者串联（中间留就绪闸门） | 端到端交付 |
-| 陌生/外部仓库体检 | `analyze-repo` | 带证据的风险清单 + 测试方案 |
-| 复刻本方法论文档 | `wf-methodology-research` / `wf-docs-generation` | `docs/01–12` |
+| A user requirement plus a target repository | `plan-from-requirement` | `final-plan.md`, `plan.json`, risks, tests, and `readinessForDev` |
+| A ready plan plus the same target repository | `deliver-from-plan` | sandboxed implementation, `changes.diff`, delivery report, verification notes |
+| A repository audit request | `analyze-repo` | evidence-backed risk report and test plan |
 
-链路：`客户需求 →[plan-from-requirement]→ 方案 →(就绪闸门)→[deliver-from-plan]→ 沙箱代码+diff → 人工审 diff 决定落地`
+The main chain is intentionally split:
 
----
+1. `plan-from-requirement`: read-only requirement analysis and implementation plan.
+2. Human gate: review `final-plan.md`; continue only when `readinessForDev=ready`.
+3. `deliver-from-plan`: copy the target repo into a sandbox, materialize tests, implement inside the sandbox, review, verify, and emit a diff.
 
-## 环境要求
+## Requirements
 
-- **Claude Code** `2.1.186`+，已启用 **Dynamic Workflows**（`Workflow` 工具）。
-- 运行 demo/测试需 `bash`、`git`、`python3`、常规 GNU 工具。
-- PowerShell（`.ps1`）相关验证需 `pwsh`；**缺失时桥接会如实把 `.ps1` 半部标为"开环人工核对"**，不假装已验证。
-- 不需要编译环境（方案/分析为只读静态分析）。
+- Claude Code with Dynamic Workflows enabled.
+- A visible `Workflow` tool in the Claude Code session.
+- `bash`, `git`, and common POSIX tools for the demo and self-check scripts.
+- `pwsh` only when you want to verify PowerShell-specific behavior. If `pwsh` is missing, PowerShell checks must be marked as open manual verification.
 
-## 快速开始
+Known version used to build this project: Claude Code `2.1.186`. Dynamic Workflows may be version- or environment-gated; check your local Claude Code release notes when the `Workflow` tool is not available.
+
+Useful preflight checks:
+
+```bash
+claude --version
+git --version
+bash --version
+node --version
+```
+
+To confirm `Workflow` is available, start Claude Code from this repository root and check that the tool picker or tool list includes `Workflow`. If it does not, this repository can still be read as methodology, but the runnable workflows cannot be executed in that session.
+
+## Quick Start
+
+Clone into any directory name. The repository does not need to be named `workflow`.
+
+Start Claude Code from the repository root, then run:
 
 ```text
-# 1) 需求 → 方案（只读）
-Workflow({ scriptPath: "<abs>/.claude/workflows/plan-from-requirement.js", args: {
-  requirement: "<客户要实现什么>",
-  target: "<目标代码仓库>",
-  constraints: ["<已知约束>"],
-  mode: "standard",                 // 可省→自动选档 lite|standard|deep
-  outDir: "<abs>/evidence/plans"
-}})
-
-# 2) 方案 → 编码到测试全绿（沙箱内、出 diff、不提交）
-Workflow({ scriptPath: "<abs>/.claude/workflows/deliver-from-plan.js", args: {
-  planDir: "<abs>/evidence/plans/<ts>",   // 须 readinessForDev=ready
-  targetRepo: "<abs>/目标仓库",            // 被复制进沙箱，原仓库不被写
-  outDir: "<abs>/evidence/deliveries"
+Workflow({ scriptPath: "<repo>/.claude/workflows/plan-from-requirement.js", args: {
+  requirement: "Add a CLI flag --greet <name> that prints Hello, <name>! and keeps the current default output unchanged.",
+  target: "<repo>/examples/minimal-target",
+  constraints: ["Keep the change minimal", "Add a regression check for the default output"],
+  mode: "lite",
+  outDir: "<repo>/evidence/plans"
 }})
 ```
 
-各工作流的完整参数/产物说明见 `.claude/workflows/README.md`；方法论与设计真相源见 `docs/01–12`。
+After reviewing the generated `final-plan.md`, continue only if the plan says `readinessForDev=ready`:
 
----
-
-## 目录结构
-
+```text
+Workflow({ scriptPath: "<repo>/.claude/workflows/deliver-from-plan.js", args: {
+  planDir: "<repo>/evidence/plans/<timestamp>",
+  targetRepo: "<repo>/examples/minimal-target",
+  outDir: "<repo>/evidence/deliveries"
+}})
 ```
-workflow/
-├── README.md                 ← 本文件
-├── LICENSE                   ← MIT（vendor/ 另行署名）
-├── .gitignore                ← 排除运行数据/客户副本/个人配置
-├── 目标说明.md                ← 项目目标与完成标准
-├── CLAUDE.md                 ← 项目固定约束（含"公开发布边界"说明）
-├── docs/                     ← 方法论文档 01–12（概念→设计→实现→质量→链路）
+
+The complete sample input and sanitized output shape are in `examples/`.
+
+## Examples
+
+- `examples/minimal-target/`: tiny shell project used as a safe target repository.
+- `examples/requirements/simple-greeting.md`: copyable user requirement.
+- `examples/artifacts/plan-ready/`: sanitized plan artifacts including `final-plan.md`, `run-manifest.json`, `plan.json`, and `test-plan.json`.
+- `examples/artifacts/delivery-success/`: sanitized delivery artifacts including `changes.diff`, `delivery-report.md`, and `delivery-manifest.json`.
+
+These examples are static, public, and safe to inspect. They are not customer output.
+
+## Status Meanings
+
+| Status | Meaning |
+|---|---|
+| `PASS` | Plan passed review and has no known blocking gaps. |
+| `PARTIAL` | Plan passed but some coverage degraded or remains open; read `remainingGaps`. |
+| `CONDITIONAL` | No P0 blocker, but important P1 issues remain; use human judgment before coding. |
+| `FAILED_WITH_FINDINGS` | Review found blockers or the plan is not reliable enough to implement. |
+| `BLOCKED` | Workflow stopped before a safe handoff, usually because prerequisites or verification were missing. |
+| `DELIVERED` | Delivery workflow produced a verified sandbox diff with no open items. |
+| `DELIVERED_WITH_OPEN_ITEMS` | Delivery produced a diff, but some verification remained manual or environment-dependent. |
+
+## Repository Layout
+
+```text
+.
 ├── .claude/
-│   ├── workflows/            ← 可运行编排脚本（plan-from-requirement / deliver-from-plan / analyze-repo / 元流程）
-│   ├── agents/               ← 子代理角色定义
-│   └── skills/               ← workflow-designer 方法论 Skill
-├── vendor/zhuliming-templates/  ← 第三方"写码闭环"模板（已署名授权，见 ATTRIBUTION.md）
-└── evidence/                 ← 策展证据（00–03/评审/决策/遗留风险）+ 运行输出（runs/plans/deliveries，已 gitignore）
+│   ├── agents/                 # Role prompts used by the workflows
+│   ├── skills/workflow-designer # Local methodology skill
+│   └── workflows/              # Runnable Workflow scripts
+├── docs/                       # Methodology and design docs
+├── examples/                   # Minimal target project and sanitized artifacts
+├── evidence/                   # Curated public evidence; dynamic runs are ignored
+├── scripts/                    # Deterministic repository checks
+├── vendor/zhuliming-templates/ # Attributed third-party templates
+├── CLAUDE.md                   # Project-level rules for this public repo
+└── README.md
 ```
 
-## 设计原则（一句话）
+## Verification
 
-- **证据链**：结论带 `path/symbol/lineRange`，不确定填 `unknown`、**严禁编造行号**。
-- **实现者不自评**：独立实例审查；任何 P0→不通过；有界返工；Fix 后由全新实例重新复审。
-- **确定性优先**：状态以**独立验证子代理**复跑结果为准，不只信实现者自报。
-- **安全兜底**：写码只进沙箱副本、复制后清除 `.git`/密钥、不 commit/merge；支付/权限/密钥/认证等高风险域**有意只分析、编码须人工**。
-- **诚实**：没真验证就如实写"未验证/开环人工核对"，不撒谎；未确认的语义歧义不静默放行。
+Run the repository self-check before publishing changes:
 
-## 边界与已知限制
+```bash
+node scripts/self-check.mjs
+```
 
-- 桥接**不自动提交**：只产 diff，是否落地由人工决定。
-- 无 `pwsh` 时 `.ps1` 行为无法自动验 → 落为开环人工核对项。
-- 高风险安全域（支付/权限/密钥/认证/不可逆）桥接**只接受分析、编码须人工**（落实安全纵深，非能力缺口）。
-- 详见 `evidence/final-residual-risks.md` 与 `docs/12` §9。
+The check validates public-repo hygiene: forbidden local paths, key file references, workflow metadata consistency, basic secret patterns, example artifacts, license/attribution files, and README command paths.
 
-## 许可与署名
+## Troubleshooting
 
-- 本项目（刘远键）以 **MIT** 许可（见 `LICENSE`）。
-- `vendor/zhuliming-templates/` 为**朱立明**所作、经授权署名复用，单独适用其授权条款（见 `vendor/zhuliming-templates/ATTRIBUTION.md`）。
+- `Workflow` is unavailable: start Claude Code from the repository root and confirm your Claude Code build has Dynamic Workflows enabled.
+- A workflow tries to read a missing path: make sure paths are absolute or relative to the repository root. Defaults in this repo do not require the directory to be named `workflow`.
+- `deliver-from-plan` stops at the readiness gate: inspect `final-plan.md`, `run-manifest.json`, and `readinessForDev`.
+- PowerShell checks are open: install `pwsh` or keep those items as manual verification in `residual-verification.md`.
+- The diff contains absolute paths: treat that as a bug. `deliver-from-plan` should generate portable diff headers.
 
-## 版本
+## Current Stable Scope
 
-- v1（2026-06）：方法论 docs 01–12；工作流 plan-from-requirement / deliver-from-plan / analyze-repo / 元流程；需求→方案→编码到测试全绿链路已端到端真实运行并独立复核。
+Stable:
+
+- Requirement-to-plan workflow.
+- Plan-to-sandboxed-diff workflow.
+- Repository analysis workflow.
+- Public examples and deterministic repository self-check.
+
+Experimental:
+
+- Methodology research and docs-generation workflows.
+- Deep verification of environment-specific shell or PowerShell behavior.
+- Any use of external Skills through `args.skillDir`.
+
+## License And Attribution
+
+This project is MIT licensed. See `LICENSE`.
+
+`vendor/zhuliming-templates/` contains attributed third-party templates. See `vendor/zhuliming-templates/ATTRIBUTION.md` before redistributing or modifying that directory.
+
+## Release Notes
+
+See `CHANGELOG.md`.

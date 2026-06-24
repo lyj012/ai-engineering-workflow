@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0",
+  "workflow": "plan-from-requirement",
+  "target": "examples/minimal-target",
+  "finalStatus": "PASS",
+  "readinessForDev": "ready",
+  "triage": {
+    "clarity": "sufficient",
+    "complexity": "simple",
+    "riskFlags": ["none"]
+  },
+  "remainingGaps": []
+}

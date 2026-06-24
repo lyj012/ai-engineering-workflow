@@ -12,8 +12,8 @@
 | 平台 | Linux 4.4.0-142-generic（Ubuntu 16.04 系内核），shell=bash | 环境信息 |
 | 主模型 | Opus 4.8（1M context），id `claude-opus-4-8[1m]` | 环境信息 |
 | 联网 | 可用：`anthropic.com` HTTP 200，`docs.claude.com` HTTP 301（正常重定向） | `curl -m 5` |
-| 工作目录 | `/data/workspace/liuyuanjian`（非 git 仓库） | `pwd` / 环境信息 |
-| 目标目录 | `/data/workspace/liuyuanjian/workflow/`（启动时为空） | `ls` |
+| 工作目录 | `<author-workspace>`（历史采集环境，非运行要求） | `pwd` / 环境信息 |
+| 目标目录 | `<repo-root>/`（公开仓库克隆目录） | `ls` |
 
 ## 2. 现有 `.claude` 与 Skill 资产（只复用，不改动）
 
@@ -22,11 +22,11 @@
 | Skill | 真实路径 | 说明 |
 |---|---|---|
 | `ai-engineering-delivery` | `liu/ai-engineering-delivery` | 英文版工程交付 Skill |
-| `ai-engineering-delivery-zh` | `liu/ai-engineering-delivery-zh` | 中文版（本次复用对象） |
+| `ai-engineering-delivery-zh` | `<external-skill>/ai-engineering-delivery-zh` | 中文版（本次复用对象） |
 | `awesome-design-md` | `liu/awesome-design-md` | 视觉设计参考库 |
 | `codex-coding-guidelines-skill` | `liu/codex-coding-guidelines-skill` | 编码行为规范 |
 
-- `.claude/agents/`、`.claude/workflows/`、`.claude/commands/` 在项目根**不存在**（本次在 `workflow/` 子树下新建，互不影响）。
+- `.claude/agents/`、`.claude/workflows/`、`.claude/skills/` 是本公开仓库的项目资产；个人本地配置仍应放在被忽略的 `settings.local.json` 或个人记忆目录中。
 - 远程 Skill 源：`https://github.com/lyj012/ai-engineering-delivery`。
 
 ## 3. `ai-engineering-delivery-zh` Skill 实际结构（一手）

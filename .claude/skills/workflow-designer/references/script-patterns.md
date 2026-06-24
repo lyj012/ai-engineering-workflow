@@ -1,6 +1,6 @@
 # Workflow 脚本骨架（可直接照抄）
 
-> 全部与 `workflow/evidence/01-workflow-api-ground-truth.md` 一致。脚本是**纯 JS**；`meta` 必须纯字面量；脚本体禁用 `Date.now()/Math.random()/无参 new Date()`。
+> 全部与仓库内 `evidence/01-workflow-api-ground-truth.md` 一致。脚本是**纯 JS**；`meta` 必须纯字面量；脚本体禁用 `Date.now()/Math.random()/无参 new Date()`。
 
 ## 0. 最小骨架
 

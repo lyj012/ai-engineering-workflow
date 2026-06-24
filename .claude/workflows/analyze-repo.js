@@ -7,7 +7,7 @@
 //     taskDescription: "<任务描述>",
 //     maxComponents: undefined,         // 覆盖 mode 默认的组件数；不填用 mode 预设(lite3/std5/deep8)
 //     outDir: "<输出根目录>",            // 落盘根目录（persist 子代理在其下建带时间戳子目录）；缺省 "evidence/runs"
-//     useCustomAgents: false,           // true 仅当从 workflow/ 目录启动 Claude（否则自定义 agentType 无法解析，见下）
+//     useCustomAgents: false,           // true 仅当从仓库根目录启动 Claude（否则自定义 agentType 无法解析，见下）
 //     runVerification: false,           // 默认关闭：只读分析。开启才进入受限 Verify 阶段（命令由 JS 白名单硬校验）
 //     maxReworkRounds: undefined,       // 覆盖 mode 默认的评审-返工上限(lite0/std1/deep2)，防无限循环
 //     // —— 故障注入验证（用于自检控制流，产物会显式标注为测试，绝不冒充真实分析）——

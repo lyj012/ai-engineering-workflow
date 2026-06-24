@@ -168,7 +168,7 @@ const results = await pipeline(units,
 ## 7. 让 AI 帮你生成 .js 的提示词(复制改方括号)
 ```
 读 {{WORKSPACE_ROOT}}/build-workflow-js.md,按它的"通用骨架"帮我生成一个 .js 编排脚本。
-（{{WORKSPACE_ROOT}} = 模板所在目录,本机默认 /data/workspace/zhuliming,替换成你的实际路径）
+（{{WORKSPACE_ROOT}} = 模板所在目录，例如 `<repo>/vendor/zhuliming-templates`，替换成你的实际路径）
 
 - 任务名/ROOT:[task-name]
 - 引用的真相源:[task-name]-workflow/workflow.md

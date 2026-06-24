@@ -4,10 +4,10 @@ export const meta = {
   phases: [{ title: 'WriteDocs', detail: '9 parallel doc-writers, each grounded in evidence + actual files' }],
 }
 
-// 路径参数化（去除个人绝对路径）：args 为 JSON 字符串需先 parse；默认相对路径，相对运行 cwd 解析，可经 args 覆盖。
+// 路径参数化：默认从仓库根运行，所有默认路径都在当前公开仓库内；如要引用外部 Skill，可用 args.skillDir 显式覆盖。
 const A = (() => { let a = args; if (typeof a === 'string') { try { a = a.trim() ? JSON.parse(a) : {} } catch (e) { a = {} } } return (a && typeof a === 'object') ? a : {} })()
-const R = A.workflowDir || 'workflow'
-const SRC_SKILL = A.skillDir || 'liu/ai-engineering-delivery-zh'
+const R = A.workflowDir || '.'
+const SRC_SKILL = A.skillDir || '.claude/skills/workflow-designer'
 const GT = `${R}/evidence/01-workflow-api-ground-truth.md`
 const FIND = `${R}/evidence/02-research-findings.md`
 const DEC = `${R}/evidence/03-decision-log.md`
@@ -50,7 +50,7 @@ const DOCS = [
     spec: `写《08 质量评价与排名评估标准》。章节: 评分维度与权重(100分制: 需求覆盖与正确性30/可运行与真实证据25/阶段职责设计15/健壮性10/复用Skill10/成本规模克制10); 判级规则(任何P0→FAIL; CONDITIONAL_PASS; PASS); 需求覆盖矩阵模板; 每维"达标证据 vs 反模式"; 如何用于团队**排名评估**(可量化、要证据、防只追时长/代码量); 与 workflow-reviewer agent 的关系。` },
   { file: 'docs/09-existing-skill-integration.md', label: '09-integration',
     extra: `还要读: ${SRC_SKILL}/SKILL.md 以及 ${SRC_SKILL}/references/ 下文件(用 ls 后按需 Read), 以及 ${R}/evidence/00-environment-scan.md。`,
-    spec: `写《09 复用现有 ai-engineering-delivery-zh Skill》。章节: 现有 skill 结构与 8 阶段回顾; 8阶段→4 phase 映射表(1-4分析扫描/5-6实现验证/7风险审查/8复盘); 角色归位(哪些留 Skill 当方法清单、哪些做 Subagent、presubmit-scan 进 PreToolUse Hook、哪些进 CLAUDE.md); "借鉴思想 vs 不照搬业务8阶段"的明确边界; 为什么不能做成父workflow串多子workflow(仅一层嵌套); 复用落地清单。强调只读复用、不改原 skill。` },
+    spec: `写《09 复用现有工程交付 Skill 思想》。章节: 当前仓库自带 skill 结构回顾; 工程交付思想→Workflow phase 映射表; 角色归位(哪些留 Skill 当方法清单、哪些做 Subagent、哪些由确定性检查脚本承担、哪些进 CLAUDE.md); "借鉴思想 vs 不照搬外部 Skill"的明确边界; 为什么不能做成父workflow串多子workflow(仅一层嵌套); 复用落地清单。强调默认不依赖仓库外目录，外部 skill 只能通过 args.skillDir 显式接入。` },
 ]
 
 phase('WriteDocs')

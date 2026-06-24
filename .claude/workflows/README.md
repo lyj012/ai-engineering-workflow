@@ -13,7 +13,7 @@
 
 > `plan-from-requirement` 与 `analyze-repo` 共享同一套引擎（lite/standard/deep 分档、证据链、确定性一致性校验、有界返工、独立审查、失败降级、带时间戳落盘），但 `plan-from-requirement` 全程围绕**一条客户需求**产出实现方案，`analyze-repo` 是不带需求的通用审计。
 >
-> **完整链路**：`plan-from-requirement`（需求→方案，只读）→ 就绪闸门 → `deliver-from-plan`（方案→编码到测试全绿，沙箱内，出 diff）→ 人工审 diff 决定落地。桥接把"写码闭环"的流程真相源交给 `../../vendor/zhuliming-templates/`（朱立明模板，已署名授权），脚本只编排。设计见 `../../docs/12-plan-to-coding-bridge.md`。
+> **完整链路**：`plan-from-requirement`（需求→方案，只读）→ 就绪闸门 → `deliver-from-plan`（方案→编码到测试全绿，沙箱内，出 diff）→ 人工审 diff 决定落地。桥接把"写码闭环"的流程真相源交给 `vendor/zhuliming-templates/`（朱立明模板，已署名授权），脚本只编排。设计见 `docs/12-plan-to-coding-bridge.md`。
 
 ---
 
@@ -25,12 +25,12 @@ Workflow({ scriptPath: ".../.claude/workflows/plan-from-requirement.js", args: {
   target: "<目标代码仓库>",
   constraints: ["<已知约束>"],
   mode: "standard",                 // lite | standard | deep
-  outDir: "/abs/path/workflow/evidence/plans"
+  outDir: "/abs/path/evidence/plans"
 }})
 ```
 流程：需求理解 → 按需求定位现有代码 → 相关模块现状分析 → 现状/目标差距 → 实现方案(复用/修改/新增+影响面+步骤) → 风险 → 测试与验收 → 独立审查 →(必要时返工)→ 开发可直接实施的方案报告 → 落盘。
 产出在 `evidence/plans/<时间戳>/`（含 `final-plan.md` + requirement/located-code/gap/plan/risks/test-plan/review-history 等 JSON）。
-> Skill 仅作参考：需求理解参考 `requirement-analysis.md`、方案参考 `delivery-checklist.md`、风险参考 `risk-review.md`，按实际项目动态裁剪、不机械套用。
+> 参考材料默认来自本仓库 `docs/11-requirement-to-plan.md`、`docs/12-plan-to-coding-bridge.md` 与 workflow-designer Skill；外部 Skill 只能通过 `args.skillDir` 显式接入。
 
 ---
 
@@ -56,7 +56,7 @@ Workflow({ scriptPath: ".../analyze-repo.js",
 # 深度分析 + 开启受限验证（命令由 JS 白名单硬校验）
 Workflow({ scriptPath: ".../analyze-repo.js",
            args: { target: "/path/to/repo", mode: "deep", runVerification: true,
-                   outDir: "/abs/path/workflow/evidence/runs" } })
+                   outDir: "/abs/path/evidence/runs" } })
 ```
 > 显式 `maxComponents` / `maxReworkRounds` 会覆盖 mode 预设。`outDir` 缺省 `evidence/runs`（相对子代理 cwd）；跨目录运行建议传绝对 `outDir`。产物落 `evidence/runs/<时间戳>/`，不覆盖历史。
 
@@ -101,10 +101,10 @@ Workflow({ scriptPath: ".../.claude/workflows/wf-docs-generation.js" })
 Workflow({ scriptPath: ".../.claude/workflows/analyze-repo.js",
            args: { target: "<目标目录>", taskDescription: "<任务>", maxComponents: 6 } })
 
-# 从 workflow/ 目录启动 Claude 时，可用命名形式： Workflow({ name: "analyze-repo", args: {...} })
+# 从仓库根目录启动 Claude 时，可用命名形式： Workflow({ name: "analyze-repo", args: {...} })
 ```
 
 ## 复用注意
 - 脚本是**纯 JS**、`meta` 纯字面量、禁 `Date.now()/Math.random()`、脚本体不直接读写文件（详见 `docs/03`、`evidence/01-workflow-api-ground-truth.md`）。
-- 研究/文档脚本中的子代理用**内置 agentType**（claude-code-guide/Explore/general-purpose），可在任意目录运行；它们引用的角色专长也对应 `.claude/agents/*.md`（从 `workflow/` 目录启动时可作自定义 agentType）。
+- 研究/文档脚本中的子代理用**内置 agentType**（claude-code-guide/Explore/general-purpose），可在任意目录运行；它们引用的角色专长也对应 `.claude/agents/*.md`（从仓库根目录启动时可作自定义 agentType）。
 - 断点恢复：`Workflow({ scriptPath, resumeFromRunId })`，未改动的 `agent()` 前缀命中缓存（详见 `docs/05`）。

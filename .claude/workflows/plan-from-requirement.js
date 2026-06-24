@@ -5,14 +5,14 @@
 //   · 需求模糊 → 澄清闸门：产出"待确认清单"，不猜着出方案（status=NEEDS_CLARIFICATION）。
 //   · 简单且无高风险 → 快路径（精简、省成本）。
 //   · 中等/复杂/触及高风险（支付/权限/状态机/数据迁移…）→ 完整流程。
-// 分级与"何时该问"参考 ai-engineering-delivery Skill（SKILL.md 任务分级 + references 维度），但按实际项目动态裁剪、不机械套用。
+// 分级与"何时该问"默认参考本仓库自带 docs/ 与 workflow-designer Skill；如本机另有工程交付 Skill，可用 args.skillDir 显式覆盖。
 //
 // 运行：
 //   Workflow({ scriptPath: ".../.claude/workflows/plan-from-requirement.js", args: {
 //     requirement: "<客户需求，必填>", target: "<目标代码仓库，必填>", constraints: ["<约束>"],
 //     mode: undefined,                  // 不传则按 Triage 复杂度自动选档(简单lite/中等standard/复杂deep)；传则覆盖
 //     outDir: "<输出根目录>",            // 缺省 "evidence/plans"
-//     skillDir: "liu/ai-engineering-delivery-zh",
+//     skillDir: ".claude/skills/workflow-designer",
 //     maxComponents, maxReworkRounds, useCustomAgents,
 //     forceComplexity: null,            // 'simple'|'medium'|'complex' 覆盖自动分级（测试/已知时用）
 //     skipClarificationGate: false,     // true 跳过澄清闸门（测试用）
@@ -58,7 +58,7 @@ const requirement = A.requirement ? String(A.requirement) : null
 const target = A.target ? String(A.target) : null
 const constraints = Array.isArray(A.constraints) ? A.constraints.map(String) : (A.constraints ? [String(A.constraints)] : [])
 const outDirBase = A.outDir ? String(A.outDir) : 'evidence/plans'
-const SKILL_DIR = A.skillDir ? String(A.skillDir) : 'liu/ai-engineering-delivery-zh'
+const SKILL_DIR = A.skillDir ? String(A.skillDir) : '.claude/skills/workflow-designer'
 const useCustom = !!A.useCustomAgents
 const userMode = MODE_PRESETS[String(A.mode || '').toLowerCase()] ? String(A.mode).toLowerCase() : null
 const forceComplexity = ['simple', 'medium', 'complex'].includes(String(A.forceComplexity)) ? String(A.forceComplexity) : null
@@ -78,12 +78,12 @@ function applyDepth(modeName) {
 applyDepth(userMode || 'standard')
 const complexityToMode = { simple: 'lite', medium: 'standard', complex: 'deep' }
 
-// 参考用 Skill 文件（仅作分析维度参考，按实际项目动态裁剪，不机械套用）
+// 参考文件（仅作分析维度参考，按实际项目动态裁剪，不机械套用；均为仓库内相对路径，可用 args 覆盖 skillDir）
 const REF = {
   skill: `${SKILL_DIR}/SKILL.md`,
-  requirement: `${SKILL_DIR}/references/requirement-analysis.md`,
-  delivery: `${SKILL_DIR}/references/delivery-checklist.md`,
-  risk: `${SKILL_DIR}/references/risk-review.md`,
+  requirement: 'docs/11-requirement-to-plan.md',
+  delivery: 'docs/12-plan-to-coding-bridge.md',
+  risk: 'docs/06-verification-and-retry.md',
 }
 
 // ===================== 角色 → agentType =====================

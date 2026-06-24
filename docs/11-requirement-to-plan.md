@@ -67,7 +67,7 @@ Preflight → Requirement(需求理解) → Triage(分级)
 Workflow({ scriptPath: ".../.claude/workflows/plan-from-requirement.js", args: {
   requirement: "<客户要实现什么>", target: "<目标仓库>",
   constraints: ["<约束>"], mode: "standard"（可省→自动选档）,
-  outDir: "/abs/path/workflow/evidence/plans"
+  outDir: "/abs/path/evidence/plans"
 }})
 ```
 详见 `.claude/workflows/README.md` 的 Quick Start。

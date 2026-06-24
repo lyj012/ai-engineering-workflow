@@ -134,9 +134,9 @@ DONE 写出后、写码前，必须证明它**不是水脚本也不是废脚本*
 
 ```text
 Workflow({ scriptPath: ".../.claude/workflows/deliver-from-plan.js", args: {
-  planDir: "/abs/.../workflow/evidence/plans/<ts>",   // 上游方案目录（必填，须 readinessForDev=ready）
+  planDir: "/abs/.../evidence/plans/<ts>",   // 上游方案目录（必填，须 readinessForDev=ready）
   targetRepo: "/abs/.../目标仓库",                      // 要落地的真实仓库（被复制进沙箱，原仓库不被写）
-  outDir: "/abs/.../workflow/evidence/deliveries",     // 缺省 evidence/deliveries
+  outDir: "/abs/.../evidence/deliveries",     // 缺省 evidence/deliveries
   maxImplRounds: 3, maxFixRounds: 2                     // 可省，有界循环上限
 }})
 ```

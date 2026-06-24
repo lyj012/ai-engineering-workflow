@@ -10,8 +10,8 @@
 //     targetRepo: "<要落地的真实仓库；省略则取方案 manifest.target>",
 //     outDir: "<落盘根目录>",                 // 缺省 "evidence/deliveries"
 //     mode: "lite|standard|deep",            // 可省→按方案复杂度/风险自动选档（缩复审视角/effort/返工轮，验证锚点不缩）
-//     vendorDir: "workflow/vendor/zhuliming-templates",
-//     bridgeDoc: "workflow/docs/12-plan-to-coding-bridge.md",
+//     vendorDir: "vendor/zhuliming-templates",
+//     bridgeDoc: "docs/12-plan-to-coding-bridge.md",
 //     maxImplRounds: 3, maxFixRounds: 2
 //   }})
 // 运行时事实：args 到脚本是 JSON 字符串需 parse；脚本体无文件系统访问，一切 IO 经子代理。
@@ -41,8 +41,8 @@ const A = (() => {
 const planDir = A.planDir ? String(A.planDir) : null
 const targetRepoArg = A.targetRepo ? String(A.targetRepo) : null
 const outDirBase = A.outDir ? String(A.outDir) : 'evidence/deliveries'
-const vendorDir = A.vendorDir ? String(A.vendorDir) : 'workflow/vendor/zhuliming-templates'
-const bridgeDoc = A.bridgeDoc ? String(A.bridgeDoc) : 'workflow/docs/12-plan-to-coding-bridge.md'
+const vendorDir = A.vendorDir ? String(A.vendorDir) : 'vendor/zhuliming-templates'
+const bridgeDoc = A.bridgeDoc ? String(A.bridgeDoc) : 'docs/12-plan-to-coding-bridge.md'
 // 有界循环兜底轮数（防无限循环）：Implement 最多 MAX_IMPL 轮、Review↔Fix 最多 MAX_FIX 轮
 const MAX_IMPL = (Number.isFinite(Number(A.maxImplRounds)) && Number(A.maxImplRounds) > 0) ? Number(A.maxImplRounds) : 3
 const argMaxFix = (Number.isFinite(Number(A.maxFixRounds)) && Number(A.maxFixRounds) >= 0) ? Number(A.maxFixRounds) : null
@@ -178,14 +178,14 @@ try {
       `你负责脚手架搭建。${SAFETY}\n` +
       `步骤(全部用 Bash/Write，绝不碰原仓库)：\n` +
       `1) ts=$(date +%Y%m%d-%H%M%S)；runDir="${outDirBase}/$ts"（相对你的 cwd）；mkdir -p "$runDir"；用 realpath 取绝对路径。\n` +
-      `2) 沙箱：把目标仓库复制进沙箱 —— mkdir -p "$runDir/sandbox" && cp -a "${targetRepo}/." "$runDir/sandbox/"（保留权限）。**复制后立即清除沙箱内版本历史与敏感物**（防客户机密被长期留存/误提交）：rm -rf 沙箱内的 .git；并用 find 删除沙箱内的 .env / .env.* / *.pem / *.key / id_rsa* / *.p12 / *.pfx 等密钥证书文件；只保留源码与构建必需文件。校验沙箱关键文件仍在、且 .git/.env/密钥已不在。\n` +
+      `2) 沙箱：把目标仓库复制进沙箱。优先使用 rsync -a --delete --exclude .git --exclude node_modules --exclude dist --exclude build --exclude .next --exclude coverage --exclude .env --exclude ".env.*" --exclude "*.pem" --exclude "*.key" --exclude "id_rsa*" --exclude "*.p12" --exclude "*.pfx" "${targetRepo}/" "$runDir/sandbox/"；无 rsync 时才用 mkdir -p "$runDir/sandbox" && cp -a "${targetRepo}/." "$runDir/sandbox/"。复制后立即清除沙箱内版本历史、构建产物与敏感物：rm -rf 沙箱内的 .git/node_modules/dist/build/.next/coverage，并用 find 删除 .env/.env.*/*.pem/*.key/id_rsa*/*.p12/*.pfx/.npmrc/.pypirc/*credentials*.json/*secret*.json/*.bak/*.dump/*.sql.gz/*.log。不要跟随符号链接到沙箱外；发现指向沙箱外的 symlink 要删除或停下报告。校验沙箱关键文件仍在、且 .git/.env/密钥/日志不在。\n` +
       `3) task 目录：mkdir -p "$runDir/task-workflow/"{input,output,tests,state}；mkdir -p "$runDir/task-workflow/state/scratch"。\n` +
       `4) 把方案产物（final-plan.md 若有、plan.json、test-plan.json、requirement.json、risks.json）从 ${planDir} 复制到 "$runDir/task-workflow/input/"。\n` +
       `5) 读 vendored 模板 ${vendorDir}/build-workflow.md，按其结构生成一份**填好的** "$runDir/task-workflow/coding-workflow.md"：\n` +
       `   - §1 GOAL=需求目标；§2 VARIABLES：INPUT=task-workflow/input/、OUTPUT=沙箱内被改文件、DONE=见 MaterializeTests 产出的命令（先写占位"见 tests/，由桥接物化"）、SCOPE=【只许改下列文件】、CONTRACT=保持 .sh/.ps1 行为一致与既有退出码语义；\n` +
       `   - §3 在通用红线外，追加本任务红线（来自 risks.json 高危项）；§4 LOOP 的 todo 用 plan.json.steps；\n` +
       `   - §7.1 复核视角写明四个：correctness / robustness / scope-conformance / risk-coverage（见 ${bridgeDoc} §5.5）。\n` +
-      `6) SCOPE 规整：把 plan.affected.files 与 plan.modify[].path/plan.add[].path 统一规整成【相对仓库根】的路径（去掉 ${targetRepo} 前缀；把带"(可选)/optional"标记的归入 optionalScopeFiles）。\n` +
+      `6) SCOPE 规整：把 plan.affected.files 与 plan.modify[].path/plan.add[].path 统一规整成【相对仓库根】的路径；拒绝绝对路径、../ 目录穿越、指向沙箱外的符号链接；去掉 ${targetRepo} 前缀；把带"(可选)/optional"标记的归入 optionalScopeFiles。\n` +
       `7) 生成 "$runDir/task-workflow/state/todo.md"（每条 step 一行未勾选）与空的 progress.md。\n` +
       `回报 ok/runDir(绝对)/sandboxDir/taskDir/codingWorkflowPath/scopeFiles(相对仓库根)/optionalScopeFiles/todoUnits/note。`,
       { schema: SCAFFOLD_SCHEMA, label: 'scaffold', phase: 'Scaffold', agentType: AT, effort: 'medium' }, true)
@@ -361,7 +361,7 @@ if (scaffold && scaffold.runDir) {
   const dl = await callAgent(
     `你负责交付落盘（只在 ${scaffold.runDir} 内写，绝不动原仓库、绝不 commit/push）。${SAFETY}\n` +
     `步骤：\n` +
-    `1) 生成 diff：用 diff -ruN "${targetRepoArg || (gate && gate.manifestTarget)}" "${scaffold.sandboxDir}" > "${scaffold.runDir}/changes.diff"（忽略 .git/ 等噪声；diff 退出码 1=有差异属正常）。统计改了哪些文件、给一句 diffStat（如 "2 files changed"）。\n` +
+    `1) 生成 diff：先进入原仓库父级或使用相对路径，生成可移植 diff，避免把作者机器绝对路径写进头部；推荐用 git diff --no-index --src-prefix=a/ --dst-prefix=b/ "${targetRepoArg || (gate && gate.manifestTarget)}" "${scaffold.sandboxDir}" > "${scaffold.runDir}/changes.diff"（忽略 .git/构建产物等噪声；退出码 1=有差异属正常）。统计改了哪些文件，确认 diff 头不含绝对路径，给一句 diffStat（如 "2 files changed"）。\n` +
     `2) 写 ${scaffold.runDir}/delivery-manifest.json（规范 JSON，内容用下方对象）。\n` +
     `3) 写 ${scaffold.runDir}/delivery-report.md（中文）：含 1 最终状态 2 来源方案 3 就绪闸门结果 4 DONE 命令与"先红后绿"可信证据 5 实现改动(filesChanged)与 SCOPE 合规 6 各视角审查结论 7 修复 8 开环人工核对项(逐条) 9 红线/越界停点(若有) 10 如何应用 diff(人工 patch 步骤) + 明确"桥接未 commit/merge"。\n` +
     `4) 写 ${scaffold.runDir}/execution-log.md（用下方日志数组）。\n` +

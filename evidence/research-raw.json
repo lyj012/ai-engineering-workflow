@@ -6,14 +6,14 @@
   ],
   "result": {
     "charter": {
-      "goal": "产出一套\"Claude Code Workflow 方法论\"知识资产 + 一个最小可运行示例，让团队成员能够：(1) 准确区分并正确选用 Claude Code 的五类编排原语——Skill(方法/规范/清单)、Subagent(隔离上下文的专业任务)、Workflow(阶段·循环·并行·分支·汇总·重试的 JS 编排脚本)、Hooks(确定性生命周期检查)、CLAUDE.md(项目固定约束/事实)；(2) 掌握 Workflow 的设计规范、协作方式与质量评价方法(对抗式证伪/多视角/评审团/独立复核/不静默截断)；(3) 复用 ai-engineering-delivery-zh 的\"业务优先、阶段化、按需加载、单一事实源、任务分级\"工程思想但不照搬其 8 阶段业务主干；(4) 用一个真实可跑的最小 Workflow 示例(放 /data/workspace/liuyuanjian/workflow/.claude/workflows/)演示编排原语与质量模式，并附可被负责人用于\"排名评估\"的质量评价标准。所有 Workflow API 结论以 /data/workspace/liuyuanjian/workflow/evidence/01-workflow-api-ground-truth.md 为唯一事实锚点，Claude Code 概念以 docs.claude.com 官方文档为准，不得凭训练记忆臆测。",
+      "goal": "产出一套\"Claude Code Workflow 方法论\"知识资产 + 一个最小可运行示例，让团队成员能够：(1) 准确区分并正确选用 Claude Code 的五类编排原语——Skill(方法/规范/清单)、Subagent(隔离上下文的专业任务)、Workflow(阶段·循环·并行·分支·汇总·重试的 JS 编排脚本)、Hooks(确定性生命周期检查)、CLAUDE.md(项目固定约束/事实)；(2) 掌握 Workflow 的设计规范、协作方式与质量评价方法(对抗式证伪/多视角/评审团/独立复核/不静默截断)；(3) 复用 ai-engineering-delivery-zh 的\"业务优先、阶段化、按需加载、单一事实源、任务分级\"工程思想但不照搬其 8 阶段业务主干；(4) 用一个真实可跑的最小 Workflow 示例(放 <repo-root>/.claude/workflows/)演示编排原语与质量模式，并附可被负责人用于\"排名评估\"的质量评价标准。所有 Workflow API 结论以 <repo-root>/evidence/01-workflow-api-ground-truth.md 为唯一事实锚点，Claude Code 概念以 docs.claude.com 官方文档为准，不得凭训练记忆臆测。",
       "scope": [
         "概念辨析层：以官方文档+本机产品规范为据，给出 Skill / Subagent / Workflow / Hooks / CLAUDE.md 的精确定义、各自适用边界、选型决策树，及'何时用哪个'对照表(含反例)。",
         "Workflow 设计规范层：基于 01-workflow-api-ground-truth.md 提炼脚本写法约束(纯 JS、meta 纯字面量、meta.phases[].title 与 phase() 逐字一致、禁用 Date.now()/Math.random()/无参 new Date())、编排原语用法(agent/pipeline/parallel/phase/log/workflow/budget/args)、并发与上限(min(16,CPU-2)、总数 1000、单次 4096)、默认偏好(默认 pipeline，仅需跨 item 全量结果才用 parallel 栅栏)、断点恢复(scriptPath+resumeFromRunId)。",
         "质量评价方法层：把官方推荐质量模式(对抗式证伪 skeptic、多视角 lens、评审团 N 方案+并行打分+综合、loop-until-dry、完备性批评者、不静默截断要 log())转成可操作的'质量评价 rubric/清单'，明确'不让实现者自评、重要结论独立复核、无法验证如实说明'三条硬规则如何在脚本中落地。",
         "协作与成本控制层：阶段化(每阶段输入/输出/完成标准)、先小范围再扩大、用 budget 控成本、用 Subagent 隔离上下文省 token、避免为展示规模堆 agent。",
         "复用映射层：把 ai-engineering-delivery-zh 的'任务三级分级、references 按需加载、单一事实源(何时该问只定义一次)、规则优先级链、presubmit 脚本=Hooks 角色'映射为 Workflow 方法论的对应机制，并标注'借鉴思想'与'不照搬业务 8 阶段'的边界。",
-        "最小可运行示例层：在 /data/workspace/liuyuanjian/workflow/.claude/workflows/ 落地 1 个最小 Workflow 脚本(选用内置 agentType 或省略以保证任意目录可跑)，演示 phase + pipeline + 至少一处质量模式(如对抗式证伪或评审团)+ budget 控制 + log() 不静默截断，并自带'完成标准'与'质量评价 rubric'。",
+        "最小可运行示例层：在 <repo-root>/.claude/workflows/ 落地 1 个最小 Workflow 脚本(选用内置 agentType 或省略以保证任意目录可跑)，演示 phase + pipeline + 至少一处质量模式(如对抗式证伪或评审团)+ budget 控制 + log() 不静默截断，并自带'完成标准'与'质量评价 rubric'。",
         "面向负责人的成果层：产出可展示、可复用的方法论文档结构(供团队分享)与一份'排名评估标准'(让负责人据此对不同 Workflow 设计打分)。"
       ],
       "nonGoals": [
@@ -30,7 +30,7 @@
         "概念辨析对照表与选型决策树：Skill vs Subagent vs Workflow vs Hooks vs CLAUDE.md，每项含'一句话定义(带官方出处)/适用场景/不适用反例/在本方法论中的角色'。",
         "Workflow 设计规范清单(checklist)：脚本硬约束 + 编排原语速查 + 并发上限 + 默认 pipeline/何时用 parallel + 断点恢复用法，全部对齐 01-workflow-api-ground-truth.md 并标注章节锚点。",
         "Workflow 质量评价 rubric：把对抗式证伪/多视角/评审团/loop-until-dry/完备性批评/不静默截断转为可打分维度(每维含'达标证据'与'反模式'),含'实现者不自评/独立复核/无法验证如实说明'三条硬规则的落地写法。",
-        "最小可运行 Workflow 示例脚本 1 个：放 /data/workspace/liuyuanjian/workflow/.claude/workflows/，演示 phase+pipeline+一处质量模式+budget+log()，每阶段标注输入/输出/完成标准；脚本可跑通或附明确未验证说明。",
+        "最小可运行 Workflow 示例脚本 1 个：放 <repo-root>/.claude/workflows/，演示 phase+pipeline+一处质量模式+budget+log()，每阶段标注输入/输出/完成标准；脚本可跑通或附明确未验证说明。",
         "复用映射表：ai-engineering-delivery-zh 机制 → 本 Workflow 方法论对应机制(分级/按需加载/单一事实源/优先级链/presubmit=Hooks),含'借鉴 vs 不照搬'边界标注。",
         "面向团队分享与负责人评估的成果包结构建议(文档骨架 + 排名评估标准),不在本阶段落盘,仅作为后续阶段交付物的定义。",
         "证据台账:每条关键结论标注 sourceType(official-doc/product-spec/live-env/inference)+confidence+出处路径或 URL,沿用 evidence/ 目录已建立的一手证据约定。"
@@ -59,7 +59,7 @@
         "示例的主题域选哪个最能展示编排原语又便于'排名评估'？建议候选:(a)'对一段需求做多视角风险评审并汇总'(凸显 parallel/评审团),(b)'对多个候选方案做评审团打分排序'(直接贴合排名场景),(c)'对一份文档做 loop-until-dry 完备性补全'。需负责人/用户拍板,因为它影响示例形态与评估标准设计。",
         "'排名评估'的评估对象是什么——是评估团队成员提交的不同 Workflow 设计,还是用 Workflow 去给某类产物(如方案/代码)打分排名？两种解读会导向不同的交付物(评估 rubric vs 评分型 Workflow 示例),需确认。",
         "最小示例是否必须本机实跑通过才算交付,还是允许'脚本就绪+静态自检+未实跑说明'？取决于是否要求我在本阶段后真正调用 Workflow 工具并验证(涉及后台运行与成本)。",
-        "方法论文档的最终落盘形式与位置:是放 workflow/docs/ 下的中文 Markdown,还是做成可被 Claude 自动加载的 Skill(workflow-designer,目录已建但为空)？两者复用方式不同(文档=人读,Skill=Claude 用)。",
+        "方法论文档的最终落盘形式与位置:是放 docs/ 下的中文 Markdown,还是做成可被 Claude 自动加载的 Skill(workflow-designer,目录已建但为空)？两者复用方式不同(文档=人读,Skill=Claude 用)。",
         "是否需要同时交付一个配套 Hooks 示例(如 settings.json 里的确定性检查)来完整演示五类原语,还是 Hooks 只在概念层讲清即可？涉及范围大小。",
         "团队当前 Claude Code 版本是否统一为 2.1.186 / 是否都已启用 Dynamic Workflows？若版本不一,方法论需标注最低版本要求与降级路径。"
       ]
@@ -374,7 +374,7 @@
         "citations": [
           {
             "title": "Claude Code Dynamic Workflow API —— 权威基线（一手）",
-            "url": "file:///data/workspace/liuyuanjian/workflow/evidence/01-workflow-api-ground-truth.md"
+            "url": "file://<repo-root>/evidence/01-workflow-api-ground-truth.md"
           },
           {
             "title": "Orchestrate subagents at scale with dynamic workflows",
@@ -382,7 +382,7 @@
           },
           {
             "title": "AI 工程化交付 Skill（ai-engineering-delivery-zh）",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/SKILL.md"
           },
           {
             "title": "Claude Code 文档总览",
@@ -525,7 +525,7 @@
         "citations": [
           {
             "title": "Claude Code Dynamic Workflow API — 权威基线",
-            "url": "file:///data/workspace/liuyuanjian/workflow/evidence/01-workflow-api-ground-truth.md"
+            "url": "file://<repo-root>/evidence/01-workflow-api-ground-truth.md"
           },
           {
             "title": "How Claude Code Works - Context Isolation and Session Management",
@@ -561,11 +561,11 @@
           },
           {
             "title": "ai-engineering-delivery-zh - 业务优先工程化交付 Skill",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/SKILL.md"
           },
           {
             "title": "Environment Scan - Workflow Project Evidence",
-            "url": "file:///data/workspace/liuyuanjian/workflow/evidence/00-environment-scan.md"
+            "url": "file://<repo-root>/evidence/00-environment-scan.md"
           }
         ]
       },
@@ -732,15 +732,15 @@
         "citations": [
           {
             "title": "Claude Code Dynamic Workflow API — 权威基线",
-            "url": "file:///data/workspace/liuyuanjian/workflow/evidence/01-workflow-api-ground-truth.md"
+            "url": "file://<repo-root>/evidence/01-workflow-api-ground-truth.md"
           },
           {
             "title": "AI 工程化交付 Skill — SKILL.md",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/SKILL.md"
           },
           {
             "title": "ai-engineering-delivery-zh 全局开发执行规则 — CLAUDE.md",
-            "url": "file:///data/workspace/liuyuanjian/CLAUDE.md"
+            "url": "file://<repo-root>/CLAUDE.md"
           },
           {
             "title": "Claude Code 官方文档 — Orchestrate subagents at scale with dynamic workflows",
@@ -764,15 +764,15 @@
           },
           {
             "title": "ai-engineering-delivery-zh 参考 — 风险审查清单",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/risk-review.md"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/references/risk-review.md"
           },
           {
             "title": "ai-engineering-delivery-zh 参考 — 交付清单",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/delivery-checklist.md"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/references/delivery-checklist.md"
           },
           {
             "title": "ai-engineering-delivery-zh 参考 — 完整示例(支付退款功能)",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/worked-example.md"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/references/worked-example.md"
           },
           {
             "title": "CLAUDE.md Best Practices: 9 Rules for 2026 | TECHSY",
@@ -790,7 +790,7 @@
         "keyFindings": [
           {
             "claim": "Workflow 脚本必须是纯 JavaScript，不支持 TypeScript 类型注解、interface、泛型",
-            "evidence": "/data/workspace/liuyuanjian/workflow/evidence/01-workflow-api-ground-truth.md 第 9 行：'Workflow 脚本是**纯 JavaScript**（非 TypeScript）。类型注解 / interface / 泛型会解析失败。'",
+            "evidence": "<repo-root>/evidence/01-workflow-api-ground-truth.md 第 9 行：'Workflow 脚本是**纯 JavaScript**（非 TypeScript）。类型注解 / interface / 泛型会解析失败。'",
             "confidence": "high",
             "sourceType": "product-spec"
           },
@@ -838,7 +838,7 @@
           },
           {
             "claim": "ai-engineering-delivery-zh Skill 采用 8 阶段交付主干，每阶段对应一个 references 文件，实现了'按需加载'的 Token 成本控制",
-            "evidence": "/data/workspace/liuyuanjian/workflow/evidence/00-environment-scan.md 第 44-52 行详细列举了 8 个阶段及其对应的 references 文件",
+            "evidence": "<repo-root>/evidence/00-environment-scan.md 第 44-52 行详细列举了 8 个阶段及其对应的 references 文件",
             "confidence": "high",
             "sourceType": "live-env"
           },
@@ -874,7 +874,7 @@
           },
           {
             "claim": "任务分级是'最重要的一步'：简单→直接处理；中等→按需读片段；复杂→读完整规则。分级决定了是否启动重流程",
-            "evidence": "/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md 第 12-20 行：'先给任务分级（最重要的一步）...本 Skill 的目标是：小任务**更轻**、风险任务**更严**'",
+            "evidence": "<repo-root>/<external-skill>/ai-engineering-delivery-zh/SKILL.md 第 12-20 行：'先给任务分级（最重要的一步）...本 Skill 的目标是：小任务**更轻**、风险任务**更严**'",
             "confidence": "high",
             "sourceType": "live-env"
           },
@@ -948,15 +948,15 @@
         "citations": [
           {
             "title": "Claude Code Dynamic Workflow API 权威基线（产品规范）",
-            "url": "file:///data/workspace/liuyuanjian/workflow/evidence/01-workflow-api-ground-truth.md"
+            "url": "file://<repo-root>/evidence/01-workflow-api-ground-truth.md"
           },
           {
             "title": "ai-engineering-delivery-zh Skill 主文档",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/SKILL.md"
           },
           {
             "title": "ai-engineering-delivery-zh 完整示例（worked-example.md）",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/worked-example.md"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/references/worked-example.md"
           },
           {
             "title": "Claude Code Workflows 官方文档",
@@ -980,11 +980,11 @@
           },
           {
             "title": "Claude Code 环境扫描报告（一手证据）",
-            "url": "file:///data/workspace/liuyuanjian/workflow/evidence/00-environment-scan.md"
+            "url": "file://<repo-root>/evidence/00-environment-scan.md"
           },
           {
             "title": "ai-engineering-delivery-zh 交付清单（阶段 5-6）",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/delivery-checklist.md"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/references/delivery-checklist.md"
           },
           {
             "title": "Claude Code Agents In 2026: Agent View, Subagents, Teams（社区实践）",
@@ -1050,7 +1050,7 @@
           },
           {
             "claim": "应进 CLAUDE.md/项目规则(始终生效的固定事实与硬约束)的:三级任务复杂度分级触发条件、提交三禁(未确认不 git add/commit/push)、禁止 force-push、禁止提交 CLAUDE.md/AGENTS.md/yml、高风险域需人工复核、最小侵入/不无关重构。这些是'每个 session 都要持有'的事实与红线,而非按需加载的流程。",
-            "evidence": "官方 memory 文档:Keep CLAUDE.md to facts Claude should hold in every session: build commands, conventions, 'always do X' rules;If an entry is a multi-step procedure, move it to a skill。/data/workspace/liuyuanjian/CLAUDE.md 已含三级分级、提交禁令(第6/8/9条)、高风险人工复核(第16条)、低侵入(第18条)。",
+            "evidence": "官方 memory 文档:Keep CLAUDE.md to facts Claude should hold in every session: build commands, conventions, 'always do X' rules;If an entry is a multi-step procedure, move it to a skill。<repo-root>/CLAUDE.md 已含三级分级、提交禁令(第6/8/9条)、高风险人工复核(第16条)、低侵入(第18条)。",
             "confidence": "high",
             "sourceType": "official-doc"
           },
@@ -1107,31 +1107,31 @@
         "citations": [
           {
             "title": "Claude Code Dynamic Workflow API 权威基线(本机 2.1.186 产品内规范)",
-            "url": "file:///data/workspace/liuyuanjian/workflow/evidence/01-workflow-api-ground-truth.md"
+            "url": "file://<repo-root>/evidence/01-workflow-api-ground-truth.md"
           },
           {
             "title": "ai-engineering-delivery-zh SKILL.md(现有 Skill 主体)",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/SKILL.md"
           },
           {
             "title": "ai-engineering-delivery-zh references/requirement-analysis.md(阶段1-4 清单)",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/requirement-analysis.md"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/references/requirement-analysis.md"
           },
           {
             "title": "ai-engineering-delivery-zh references/delivery-checklist.md(阶段5-6 清单)",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/delivery-checklist.md"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/references/delivery-checklist.md"
           },
           {
             "title": "ai-engineering-delivery-zh references/risk-review.md(阶段7 风险审查)",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/risk-review.md"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/references/risk-review.md"
           },
           {
             "title": "ai-engineering-delivery-zh references/retrospective-template.md(阶段8 复盘)",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/retrospective-template.md"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/references/retrospective-template.md"
           },
           {
             "title": "ai-engineering-delivery-zh scripts/presubmit-scan.sh(确定性提交前扫描)",
-            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/scripts/presubmit-scan.sh"
+            "url": "file://<repo-root>/<external-skill>/ai-engineering-delivery-zh/scripts/presubmit-scan.sh"
           },
           {
             "title": "Create custom subagents — Claude Code Docs",

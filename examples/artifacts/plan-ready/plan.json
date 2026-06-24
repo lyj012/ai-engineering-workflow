@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0",
+  "approach": "Extend the existing shell case statement and test script.",
+  "modify": [
+    {
+      "path": "examples/minimal-target/app.sh",
+      "change": "Add --greet <name> handling.",
+      "why": "Implements the requested CLI behavior."
+    },
+    {
+      "path": "examples/minimal-target/test.sh",
+      "change": "Add a new greeting assertion.",
+      "why": "Verifies the new behavior while preserving regressions."
+    }
+  ],
+  "add": [],
+  "affected": {
+    "files": [
+      "examples/minimal-target/app.sh",
+      "examples/minimal-target/test.sh"
+    ]
+  },
+  "steps": [
+    {
+      "order": 1,
+      "action": "Add --greet branch to app.sh.",
+      "touches": ["examples/minimal-target/app.sh"]
+    },
+    {
+      "order": 2,
+      "action": "Add shell test coverage.",
+      "touches": ["examples/minimal-target/test.sh"]
+    }
+  ]
+}
