@@ -1,0 +1,22 @@
+{
+  "goal": "Add a CLI flag --greet <name> that prints Hello, <name>! and keeps the current default output unchanged.",
+  "actors": ["CLI user"],
+  "normalFlow": [
+    "User runs bash ./app.sh --greet Alice.",
+    "The command prints Hello, Alice! and exits 0."
+  ],
+  "exceptionFlow": [
+    "User runs bash ./app.sh --greet without a name.",
+    "The command prints an error and exits non-zero."
+  ],
+  "coreOutcome": "The new greeting flag works without changing existing default or unknown-option behavior.",
+  "nonGoals": ["No new CLI framework", "No persistence", "No network behavior"],
+  "ambiguities": [],
+  "openQuestions": [],
+  "successCriteria": [
+    "bash ./app.sh --greet Alice prints Hello, Alice!",
+    "bash ./app.sh keeps printing Hello from minimal target",
+    "unknown flags still fail"
+  ],
+  "searchHints": ["app.sh", "test.sh", "--help", "unknown option"]
+}

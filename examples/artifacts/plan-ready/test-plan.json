@@ -1,20 +1,23 @@
 {
-  "schemaVersion": "1.0",
   "testStrategy": "Shell-level regression and new-feature checks.",
   "cases": [
     {
       "id": "TC-001",
       "priority": "P1",
+      "riskIds": [],
       "scenario": "Greeting flag prints the requested name.",
       "steps": ["Run bash ./app.sh --greet Alice"],
-      "expected": "Hello, Alice!"
+      "expected": "Hello, Alice!",
+      "verificationType": "automated-shell"
     },
     {
       "id": "TC-002",
       "priority": "P1",
+      "riskIds": [],
       "scenario": "Default output remains unchanged.",
       "steps": ["Run bash ./app.sh"],
-      "expected": "Hello from minimal target"
+      "expected": "Hello from minimal target",
+      "verificationType": "automated-shell"
     }
   ],
   "acceptanceCriteria": [

@@ -1,35 +1,59 @@
 {
-  "schemaVersion": "1.0",
   "approach": "Extend the existing shell case statement and test script.",
+  "reuse": [
+    {
+      "target": "app.sh case statement",
+      "what": "Reuse the existing CLI dispatch pattern."
+    },
+    {
+      "target": "test.sh shell assertions",
+      "what": "Reuse the current regression test style."
+    }
+  ],
   "modify": [
     {
-      "path": "examples/minimal-target/app.sh",
+      "path": "app.sh",
       "change": "Add --greet <name> handling.",
       "why": "Implements the requested CLI behavior."
     },
     {
-      "path": "examples/minimal-target/test.sh",
+      "path": "test.sh",
       "change": "Add a new greeting assertion.",
       "why": "Verifies the new behavior while preserving regressions."
     }
   ],
   "add": [],
   "affected": {
+    "modules": ["CLI shell entrypoint"],
     "files": [
-      "examples/minimal-target/app.sh",
-      "examples/minimal-target/test.sh"
-    ]
+      "app.sh",
+      "test.sh"
+    ],
+    "interfaces": ["Command-line flags"],
+    "data": [],
+    "state": [],
+    "permissions": [],
+    "frontend": [],
+    "backend": []
   },
   "steps": [
     {
       "order": 1,
       "action": "Add --greet branch to app.sh.",
-      "touches": ["examples/minimal-target/app.sh"]
+      "touches": ["app.sh"]
     },
     {
       "order": 2,
       "action": "Add shell test coverage.",
-      "touches": ["examples/minimal-target/test.sh"]
+      "touches": ["test.sh"]
+    }
+  ],
+  "architectureFit": "Matches the existing small shell case statement without adding new dependencies.",
+  "assumptions": ["The target repository root is examples/minimal-target."],
+  "alternatives": [
+    {
+      "option": "Rewrite the CLI parser.",
+      "whyNot": "Too much change for a single flag."
     }
   ]
 }

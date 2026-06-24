@@ -472,6 +472,7 @@ try {
 
 // ===================== Persist（落盘交子代理；脚本体无文件系统访问）=====================
 const manifest = {
+  schemaVersion: '1.0',
   workflow: 'analyze-repo', target, taskDescription, mode: MODE,
   params: { mode: MODE, maxComponents: MAX, maxReworkRounds: MAX_REWORK, effort: EFFORT, useCustomAgents: useCustom, runVerification, forceFirstVerdict, injectComponentFailureIndex: injectFailIdx, injectVerifyCommands: injectVerifyCommands || null },
   finalStatus, failedStages, failedComponents, droppedComponents: droppedComponents.map(d => d.name),

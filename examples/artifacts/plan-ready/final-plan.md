@@ -11,13 +11,13 @@ Add `./app.sh --greet <name>` so the app prints `Hello, <name>!`.
 
 ## Implementation
 
-Modify `examples/minimal-target/app.sh`:
+Modify `app.sh`:
 
 - Add a `--greet` branch.
 - Require a non-empty second argument.
 - Preserve current default, help, and unknown-option behavior.
 
-Modify `examples/minimal-target/test.sh`:
+Modify `test.sh`:
 
 - Add a new-feature assertion for `./app.sh --greet Alice`.
 - Keep regression checks for default output and unknown options.

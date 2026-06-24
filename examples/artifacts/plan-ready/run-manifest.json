@@ -2,6 +2,10 @@
   "schemaVersion": "1.0",
   "workflow": "plan-from-requirement",
   "target": "examples/minimal-target",
+  "requirement": "Add a CLI flag --greet <name> that prints Hello, <name>! and keeps the current default output unchanged.",
+  "constraints": ["Keep the change minimal", "Add a regression check for the default output"],
+  "mode": "lite",
+  "pathway": "fast",
   "finalStatus": "PASS",
   "readinessForDev": "ready",
   "triage": {
@@ -9,5 +13,13 @@
     "complexity": "simple",
     "riskFlags": ["none"]
   },
+  "coverage": {
+    "located": 2,
+    "analyzed": 0
+  },
+  "failedStages": [],
+  "failedComponents": [],
+  "blockingQuestions": [],
+  "openQuestions": [],
   "remainingGaps": []
 }

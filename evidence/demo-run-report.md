@@ -1,4 +1,4 @@
-# 最小示例 analyze-repo —— 真实运行报告（一手运行记录）
+﻿# 最小示例 analyze-repo —— 真实运行报告（一手运行记录）
 
 > 这是 `.claude/workflows/analyze-repo.js` 的一次**真实运行**记录（非模拟）。
 > 运行方式：`Workflow({ scriptPath: ".../analyze-repo.js", args: { target, taskDescription, maxComponents: 6 } })`
@@ -232,8 +232,8 @@ bash "$SCRIPTDIR/presubmit-scan.sh" --help; echo "EXIT=$?"
 W=$(mktemp -d); ( cd "$W" && bash "$SCRIPTDIR/presubmit-scan.sh"; echo "EXIT=$?" )
 # TC-01/02 高危回归
 G=$(mktemp -d); git -C "$G" init -q
-printf 'k=AKIAIOSFODNN7EXAMPLE\n' > "$G/leak.txt"; git -C "$G" add -A && git -C "$G" -c user.email=t@t -c user.name=t commit -qm a
-printf 'k=sk_live_zzzzzzzzzzzzzzzzzzzz\n' > "$G/leak.txt"; git -C "$G" add -A && git -C "$G" -c user.email=t@t -c user.name=t commit -qm b
+printf 'k=AKIA_EXAMPLE_REDACTED\n' > "$G/leak.txt"; git -C "$G" add -A && git -C "$G" -c user.email=t@t -c user.name=t commit -qm a
+printf 'k=sk_live_REDACTED\n' > "$G/leak.txt"; git -C "$G" add -A && git -C "$G" -c user.email=t@t -c user.name=t commit -qm b
 ( cd "$G" && bash "$SCRIPTDIR/presubmit-scan.sh" --base origin/nope; echo "EXIT=$?" )   # 期望 EXIT 0=R1
 ( cd "$G" && bash "$SCRIPTDIR/presubmit-scan.sh" --base HEAD~1; echo "EXIT=$?" )         # 期望 EXIT 2
 # TC-03/04 退出码语义

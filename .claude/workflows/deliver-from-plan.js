@@ -138,8 +138,9 @@ const VERIFY_SCHEMA = { type: 'object', additionalProperties: false, properties:
 
 const DELIVER_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   ok: { type: 'boolean' }, absOutDir: { type: 'string' }, written: { type: 'array', items: { type: 'string' } },
-  diffStat: { type: 'string' }, filesChanged: { type: 'array', items: { type: 'string' } }, note: { type: 'string' },
-}, required: ['ok', 'absOutDir', 'written', 'diffStat', 'filesChanged', 'note'] }
+  diffStat: { type: 'string' }, filesChanged: { type: 'array', items: { type: 'string' } },
+  diffApplyCheckPassed: { type: 'boolean' }, note: { type: 'string' },
+}, required: ['ok', 'absOutDir', 'written', 'diffStat', 'filesChanged', 'diffApplyCheckPassed', 'note'] }
 
 // ===================== 状态收集 =====================
 let finalStatus = 'FAILED'
@@ -330,6 +331,7 @@ try {
 
 // ===================== Deliver（出 diff + 报告 + manifest）=====================
 const deliverManifest = {
+  schemaVersion: '1.0',
   workflow: 'deliver-from-plan', planDir, targetRepo: targetRepoArg || (gate && gate.manifestTarget) || null,
   finalStatus, mode, modeLenses: CFG.lenses,
   gate: gate ? { finalStatus: gate.finalStatus, readinessForDev: gate.readinessForDev, requirementGoal: gate.requirementGoal } : null,
@@ -361,15 +363,16 @@ if (scaffold && scaffold.runDir) {
   const dl = await callAgent(
     `你负责交付落盘（只在 ${scaffold.runDir} 内写，绝不动原仓库、绝不 commit/push）。${SAFETY}\n` +
     `步骤：\n` +
-    `1) 生成 diff：先进入原仓库父级或使用相对路径，生成可移植 diff，避免把作者机器绝对路径写进头部；推荐用 git diff --no-index --src-prefix=a/ --dst-prefix=b/ "${targetRepoArg || (gate && gate.manifestTarget)}" "${scaffold.sandboxDir}" > "${scaffold.runDir}/changes.diff"（忽略 .git/构建产物等噪声；退出码 1=有差异属正常）。统计改了哪些文件，确认 diff 头不含绝对路径，给一句 diffStat（如 "2 files changed"）。\n` +
-    `2) 写 ${scaffold.runDir}/delivery-manifest.json（规范 JSON，内容用下方对象）。\n` +
-    `3) 写 ${scaffold.runDir}/delivery-report.md（中文）：含 1 最终状态 2 来源方案 3 就绪闸门结果 4 DONE 命令与"先红后绿"可信证据 5 实现改动(filesChanged)与 SCOPE 合规 6 各视角审查结论 7 修复 8 开环人工核对项(逐条) 9 红线/越界停点(若有) 10 如何应用 diff(人工 patch 步骤) + 明确"桥接未 commit/merge"。\n` +
-    `4) 写 ${scaffold.runDir}/execution-log.md（用下方日志数组）。\n` +
-    `5) 写 ${scaffold.runDir}/residual-verification.md（建议5）：把 manifest.openItems 每个开环/未验证项整理成"换到具备相应环境的机器上照着做即可闭环"的【可执行清单】——如：无 pwsh 的 .ps1 项 → 给在装 pwsh 机器上要跑的具体命令/对拍步骤；需编译/特定运行时的用例 → 给环境与命令；待客户拍板的语义歧义 → 列成待确认问题。让"未验证"从备注变成可交接的行动项。\n` +
-    `回报 ok/absOutDir/written(文件名列表)/diffStat/filesChanged/note。\n` +
+    `1) 生成 target-root-relative diff：以 ${targetRepoArg || (gate && gate.manifestTarget)} 为 target root，仅基于独立验证得到的 changedFiles/scopeFiles 收集相对路径；为每个相对路径从原仓库和沙箱复制到临时 diff-root/old/<rel> 与 diff-root/new/<rel>，然后在 diff-root 内执行 git diff --no-index --src-prefix=a/ --dst-prefix=b/ old new > "${scaffold.runDir}/changes.diff"（退出码 1=有差异属正常），再把 diff 头中的 a/old/、b/new/ 规范化为 a/、b/。禁止 diff 头出现绝对路径、sandbox、targetRepo、old/ 或 new/ 前缀；filesChanged 必须全部是 target-root-relative 路径。\n` +
+    `2) 交付前检查 diff 可应用：复制一份干净 target root 到临时 apply-check 目录，在该目录执行 git apply --check "${scaffold.runDir}/changes.diff"；未通过则 ok=false，diffApplyCheckPassed=false，最终报告必须写明阻断原因。\n` +
+    `3) 写 ${scaffold.runDir}/delivery-manifest.json（规范 JSON，内容用下方对象，并补入 diffApplyCheckPassed）。\n` +
+    `4) 写 ${scaffold.runDir}/delivery-report.md（中文）：含 1 最终状态 2 来源方案 3 就绪闸门结果 4 DONE 命令与"先红后绿"可信证据 5 实现改动(filesChanged)与 SCOPE 合规 6 diff apply check 结果 7 各视角审查结论 8 修复 9 开环人工核对项(逐条) 10 红线/越界停点(若有) 11 如何应用 diff(人工 patch 步骤) + 明确"桥接未 commit/merge"。\n` +
+    `5) 写 ${scaffold.runDir}/execution-log.md（用下方日志数组）。\n` +
+    `6) 写 ${scaffold.runDir}/residual-verification.md（建议5）：把 manifest.openItems 每个开环/未验证项整理成"换到具备相应环境的机器上照着做即可闭环"的【可执行清单】——如：无 pwsh 的 .ps1 项 → 给在装 pwsh 机器上要跑的具体命令/对拍步骤；需编译/特定运行时的用例 → 给环境与命令；待客户拍板的语义歧义 → 列成待确认问题。让"未验证"从备注变成可交接的行动项。\n` +
+    `回报 ok/absOutDir/written(文件名列表)/diffStat/filesChanged/diffApplyCheckPassed/note。\n` +
     `delivery-manifest(JSON):\n${JSON.stringify(deliverManifest)}\nexecution-log(JSON):\n${JSON.stringify(execLog)}`,
     { schema: DELIVER_SCHEMA, label: 'deliver', phase: 'Deliver', agentType: AT, effort: 'medium' }, true)
-  deliver = dl.ok ? dl.value : { ok: false, absOutDir: scaffold.runDir, written: [], diffStat: '', filesChanged: [], note: dl.error }
+  deliver = dl.ok ? dl.value : { ok: false, absOutDir: scaffold.runDir, written: [], diffStat: '', filesChanged: [], diffApplyCheckPassed: false, note: dl.error }
   note(`Deliver：${deliver.ok ? '已写入 ' + deliver.absOutDir + '（' + deliver.written.length + ' 文件，' + deliver.diffStat + '）' : '失败：' + deliver.note}`)
 } else {
   note('未建立 runDir（就绪闸门或前置失败），无产物可落盘。')

@@ -8,8 +8,8 @@
 
 | 审计曾指出的缺口 | 当前状态 | 证据 |
 |---|---|---|
-| **deep/复杂档零实跑** | ✅ **已关闭** | `evidence/runs/20260624-094019/`（analyze-repo deep × labplot 21 万行 C++/Qt6，PASS，8/8 组件）；`evidence/plans/20260624-094205/`（plan deep，PASS/ready） |
-| **standard 完整路径未干净覆盖** | ✅ **已关闭** | `evidence/plans/20260624-094108/`（plan standard + full pathway，PARTIAL/ready，located=13/analyzed=5） |
+| **deep/复杂档零实跑** | ✅ **已关闭** | 历史本地运行记录已覆盖 analyze-repo deep 与 plan deep；动态运行目录不随公开仓库发布，公开可复现材料见 `examples/` 与 `scripts/self-check.mjs` |
+| **standard 完整路径未干净覆盖** | ✅ **已关闭** | 历史本地运行记录已覆盖 plan standard + full pathway；动态运行目录不随公开仓库发布，公开可复现材料见 `examples/` 与 `scripts/self-check.mjs` |
 | **评分刻度门禁盲区（9.2 越界漏过）** | ✅ **已修复并生效** | 两引擎 `REVIEW_SCHEMA.score` 改 `integer` + `runConsistencyChecks` 新增「评分刻度」确定性校验；新跑产物中该校验通过（如 `094108` score=88、`094205` score=90，verdict=PASS） |
 | **真实 FAILED_WITH_FINDINGS 无端到端样本** | ⚠️ **仍为已知边界（非缺陷）** | Run `094205` 用 `maxReworkRounds=0` + 高危任务 + 零注入，评审仍**真判 PASS** → 该硬终态**按设计无法在不注入的情况下确定性触发**（这正是质量门禁应有的性质）。控制流已被注入演练覆盖，真实样本依赖偶发的真实评审不通过 |
 
@@ -22,7 +22,7 @@
 
 ## 二、展示前需对齐
 - **评分口径（8→4 折叠）**：方法论把工程交付 Skill 的 8 阶段折叠为 4 个 phase。对外"排名评估"时是否仍要求按 8 阶段逐项打分，需与负责人确认（见 `docs/09`、`03-decision-log.md` 未确认第 7 条）。属口径选择、非缺陷。
-- **复用同事成果署名**：`vendor/zhuliming-templates/`（朱立明模板）已取得授权并署名（见其 `ATTRIBUTION.md`）；**GitHub 公开前再确认其授权与署名要求**。
+- **复用同事成果署名**：`vendor/zhuliming-templates/`（朱立明模板）已取得授权并署名（见其 `ATTRIBUTION.md`）；后续如同步上游模板，应继续保留授权与署名要求。
 
 ## 三、复用前需核实（环境/版本相关）
 1. **版本依赖**：本套基于 Claude Code `2.1.186` + Dynamic Workflows。团队成员若版本不一或未启用 Workflow，需先核对（见 `evidence/00-environment-scan.md`）。

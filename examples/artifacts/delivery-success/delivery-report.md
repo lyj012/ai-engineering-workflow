@@ -17,8 +17,12 @@ The completed implementation should print `ALL PASSED`.
 
 ## Changed Files
 
-- `examples/minimal-target/app.sh`
-- `examples/minimal-target/test.sh`
+- `app.sh`
+- `test.sh`
+
+## Diff Apply Check
+
+`git apply --check examples/artifacts/delivery-success/changes.diff` passes when run from `examples/minimal-target`.
 
 ## Open Items
 

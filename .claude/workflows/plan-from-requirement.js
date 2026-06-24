@@ -515,6 +515,7 @@ try {
 
 // ===================== Persist =====================
 const manifest = {
+  schemaVersion: '1.0',
   workflow: 'plan-from-requirement', requirement, target, constraints, mode: MODE, pathway,
   triage: triage ? { clarity: triage.clarity, complexity: forceComplexity || triage.complexity, riskFlags: triage.riskFlags, recommendedDepth: triage.recommendedDepth } : null,
   params: { mode: userMode || `auto:${MODE}`, maxComponents: MAX, maxReworkRounds: MAX_REWORK, effort: EFFORT, skillDir: SKILL_DIR, useCustomAgents: useCustom, forceComplexity, skipClarificationGate: skipClarify, forceFirstVerdict, injectComponentFailureIndex: injectFailIdx },

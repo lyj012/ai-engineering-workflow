@@ -4,11 +4,50 @@
   "sourcePlan": "examples/artifacts/plan-ready",
   "targetRepo": "examples/minimal-target",
   "finalStatus": "DELIVERED",
+  "gate": {
+    "finalStatus": "PASS",
+    "readinessForDev": "ready",
+    "requirementGoal": "Add --greet <name> while preserving existing CLI behavior."
+  },
+  "scope": {
+    "scopeFiles": ["app.sh", "test.sh"],
+    "optionalScopeFiles": []
+  },
   "doneCommand": "cd examples/minimal-target && bash ./test.sh",
   "doneTrustworthy": true,
+  "doneTrustEvidence": {
+    "newFeatureTestsFailOnCurrent": true,
+    "regressionTestsPassOnCurrent": true,
+    "redExitCode": 1
+  },
+  "implementPassed": true,
   "filesChanged": [
-    "examples/minimal-target/app.sh",
-    "examples/minimal-target/test.sh"
+    "app.sh",
+    "test.sh"
   ],
+  "scopeViolations": [],
+  "redLine": null,
+  "reviewVerdicts": [
+    {
+      "lens": "correctness",
+      "verdict": "ok",
+      "blocking": false
+    },
+    {
+      "lens": "scope-conformance",
+      "verdict": "ok",
+      "blocking": false
+    }
+  ],
+  "fix": null,
+  "fixHistory": [],
+  "reviewComplete": true,
+  "independentVerify": {
+    "donePassedVerified": true,
+    "doneExitCodeVerified": 0,
+    "redGreenVerified": true,
+    "scopeCleanVerified": true
+  },
+  "diffApplyCheckPassed": true,
   "openItems": []
 }

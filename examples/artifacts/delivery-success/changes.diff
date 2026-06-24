@@ -1,8 +1,8 @@
-diff --git a/examples/minimal-target/app.sh b/examples/minimal-target/app.sh
---- a/examples/minimal-target/app.sh
-+++ b/examples/minimal-target/app.sh
-@@ -3,6 +3,13 @@
- case "${1:-}" in
+diff --git a/app.sh b/app.sh
+index 20c27af..e44ffcb 100644
+--- a/app.sh
++++ b/app.sh
+@@ -5,8 +5,15 @@ case "${1:-}" in
    "")
      echo "Hello from minimal target"
      ;;
@@ -18,10 +18,13 @@ diff --git a/examples/minimal-target/app.sh b/examples/minimal-target/app.sh
 +    echo "Usage: ./app.sh [--help] [--greet <name>]"
      ;;
    *)
-diff --git a/examples/minimal-target/test.sh b/examples/minimal-target/test.sh
---- a/examples/minimal-target/test.sh
-+++ b/examples/minimal-target/test.sh
-@@ -2,6 +2,9 @@
+     echo "unknown option: $1" >&2
+diff --git a/test.sh b/test.sh
+index 5b74db1..a15430f 100644
+--- a/test.sh
++++ b/test.sh
+@@ -1,5 +1,8 @@
+ #!/usr/bin/env bash
  set -euo pipefail
  
 +greeting="$(bash ./app.sh --greet Alice)"
