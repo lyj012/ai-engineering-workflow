@@ -1,0 +1,1549 @@
+{
+  "summary": "Research + cross-review + reconcile Claude Code Workflow methodology, grounded in official docs and the live product spec",
+  "agentCount": 11,
+  "logs": [
+    "research=6 reviews=3 adopted=14 rejected=9 unresolved=8"
+  ],
+  "result": {
+    "charter": {
+      "goal": "产出一套\"Claude Code Workflow 方法论\"知识资产 + 一个最小可运行示例，让团队成员能够：(1) 准确区分并正确选用 Claude Code 的五类编排原语——Skill(方法/规范/清单)、Subagent(隔离上下文的专业任务)、Workflow(阶段·循环·并行·分支·汇总·重试的 JS 编排脚本)、Hooks(确定性生命周期检查)、CLAUDE.md(项目固定约束/事实)；(2) 掌握 Workflow 的设计规范、协作方式与质量评价方法(对抗式证伪/多视角/评审团/独立复核/不静默截断)；(3) 复用 ai-engineering-delivery-zh 的\"业务优先、阶段化、按需加载、单一事实源、任务分级\"工程思想但不照搬其 8 阶段业务主干；(4) 用一个真实可跑的最小 Workflow 示例(放 /data/workspace/liuyuanjian/workflow/.claude/workflows/)演示编排原语与质量模式，并附可被负责人用于\"排名评估\"的质量评价标准。所有 Workflow API 结论以 /data/workspace/liuyuanjian/workflow/evidence/01-workflow-api-ground-truth.md 为唯一事实锚点，Claude Code 概念以 docs.claude.com 官方文档为准，不得凭训练记忆臆测。",
+      "scope": [
+        "概念辨析层：以官方文档+本机产品规范为据，给出 Skill / Subagent / Workflow / Hooks / CLAUDE.md 的精确定义、各自适用边界、选型决策树，及'何时用哪个'对照表(含反例)。",
+        "Workflow 设计规范层：基于 01-workflow-api-ground-truth.md 提炼脚本写法约束(纯 JS、meta 纯字面量、meta.phases[].title 与 phase() 逐字一致、禁用 Date.now()/Math.random()/无参 new Date())、编排原语用法(agent/pipeline/parallel/phase/log/workflow/budget/args)、并发与上限(min(16,CPU-2)、总数 1000、单次 4096)、默认偏好(默认 pipeline，仅需跨 item 全量结果才用 parallel 栅栏)、断点恢复(scriptPath+resumeFromRunId)。",
+        "质量评价方法层：把官方推荐质量模式(对抗式证伪 skeptic、多视角 lens、评审团 N 方案+并行打分+综合、loop-until-dry、完备性批评者、不静默截断要 log())转成可操作的'质量评价 rubric/清单'，明确'不让实现者自评、重要结论独立复核、无法验证如实说明'三条硬规则如何在脚本中落地。",
+        "协作与成本控制层：阶段化(每阶段输入/输出/完成标准)、先小范围再扩大、用 budget 控成本、用 Subagent 隔离上下文省 token、避免为展示规模堆 agent。",
+        "复用映射层：把 ai-engineering-delivery-zh 的'任务三级分级、references 按需加载、单一事实源(何时该问只定义一次)、规则优先级链、presubmit 脚本=Hooks 角色'映射为 Workflow 方法论的对应机制，并标注'借鉴思想'与'不照搬业务 8 阶段'的边界。",
+        "最小可运行示例层：在 /data/workspace/liuyuanjian/workflow/.claude/workflows/ 落地 1 个最小 Workflow 脚本(选用内置 agentType 或省略以保证任意目录可跑)，演示 phase + pipeline + 至少一处质量模式(如对抗式证伪或评审团)+ budget 控制 + log() 不静默截断，并自带'完成标准'与'质量评价 rubric'。",
+        "面向负责人的成果层：产出可展示、可复用的方法论文档结构(供团队分享)与一份'排名评估标准'(让负责人据此对不同 Workflow 设计打分)。"
+      ],
+      "nonGoals": [
+        "不照搬 ai-engineering-delivery-zh 的业务 8 阶段交付主干(理解业务→扫描→梳理流→验收→实现→验证→风险审查→复盘)作为本方法论的主干；只借鉴其工程化思想与机制。",
+        "不针对具体业务功能(支付/会员/下载权限等)做交付——本项目交付的是'方法论 + 通用示例'，不是某个业务模块。",
+        "不为展示规模而堆叠 Subagent 或制造不必要的 parallel 栅栏；示例保持最小闭环。",
+        "不凭训练记忆臆测 Workflow 脚本 API 形态；任何与 01-workflow-api-ground-truth.md 冲突的旧网络文档一律以该文件为准。",
+        "不修改/重写现有 ai-engineering-delivery-zh Skill 及其 references(只读复用)。",
+        "不把 CLAUDE.md / AGENTS.md / .claude/ 等个人配置提交到任何 Git 仓库。",
+        "本阶段(任务定义)不产出最终 Workflow 脚本代码、不写正式方法论文档文件——只交付任务定义本身(目标/范围/非目标/交付物/评价标准/风险/待确认)。",
+        "不做需要真实联网部署、外部账号或生产环境的演示；示例须能在本机离线/受限环境跑通或明确标注未验证原因。"
+      ],
+      "deliverables": [
+        "概念辨析对照表与选型决策树：Skill vs Subagent vs Workflow vs Hooks vs CLAUDE.md，每项含'一句话定义(带官方出处)/适用场景/不适用反例/在本方法论中的角色'。",
+        "Workflow 设计规范清单(checklist)：脚本硬约束 + 编排原语速查 + 并发上限 + 默认 pipeline/何时用 parallel + 断点恢复用法，全部对齐 01-workflow-api-ground-truth.md 并标注章节锚点。",
+        "Workflow 质量评价 rubric：把对抗式证伪/多视角/评审团/loop-until-dry/完备性批评/不静默截断转为可打分维度(每维含'达标证据'与'反模式'),含'实现者不自评/独立复核/无法验证如实说明'三条硬规则的落地写法。",
+        "最小可运行 Workflow 示例脚本 1 个：放 /data/workspace/liuyuanjian/workflow/.claude/workflows/，演示 phase+pipeline+一处质量模式+budget+log()，每阶段标注输入/输出/完成标准；脚本可跑通或附明确未验证说明。",
+        "复用映射表：ai-engineering-delivery-zh 机制 → 本 Workflow 方法论对应机制(分级/按需加载/单一事实源/优先级链/presubmit=Hooks),含'借鉴 vs 不照搬'边界标注。",
+        "面向团队分享与负责人评估的成果包结构建议(文档骨架 + 排名评估标准),不在本阶段落盘,仅作为后续阶段交付物的定义。",
+        "证据台账:每条关键结论标注 sourceType(official-doc/product-spec/live-env/inference)+confidence+出处路径或 URL,沿用 evidence/ 目录已建立的一手证据约定。"
+      ],
+      "evaluationCriteria": [
+        "概念正确性：Skill/Subagent/Workflow/Hooks/CLAUDE.md 的定义与边界与 docs.claude.com 官方文档一致(可逐条溯源到 URL)，无张冠李戴(例:不得把'确定性检查'安给 Skill 而非 Hooks)。",
+        "API 保真度：所有 Workflow 脚本写法与原语用法与 01-workflow-api-ground-truth.md 逐条一致(meta 纯字面量、phases.title 与 phase() 逐字一致、禁用 Date.now()/Math.random()、默认 pipeline、parallel 是栅栏、并发上限 min(16,CPU-2)、单次≤4096、断点恢复 scriptPath+resumeFromRunId)；偏离即不达标。",
+        "示例可运行性：最小示例能在本机用 Workflow 工具跑通(返回 runId、产出预期 phase/log/结构化结果)；若未实跑，必须明确写'未验证'及原因与剩余风险，绝不谎称通过。",
+        "质量模式落地度：示例确实包含至少一处官方推荐质量模式(对抗式证伪/评审团/多视角之一)且体现'实现者不自评、独立复核、不静默截断'。",
+        "可复用与可展示性：方法论结构清晰、术语统一、他人可据此自行设计新 Workflow；排名评估标准可被负责人直接拿来给不同方案打分(维度可量化、有达标证据要求)。",
+        "复用边界清晰：明确标注哪些是借鉴 ai-engineering-delivery-zh 的思想、哪些刻意不照搬其业务 8 阶段,无含糊。",
+        "证据纪律：每条 keyFinding 标注 sourceType+confidence;凡 Workflow API 均以 ground-truth 文件为准;无一处把未经证据的推测写成事实;无法验证项如实说明。",
+        "最小化与成本意识：无为展示而堆 agent、无不必要 parallel 栅栏、有 budget/上下文控制的明确体现。"
+      ],
+      "risks": [
+        "概念混淆风险(高/inference)：Skill/Subagent/Workflow/Hooks 职责相邻易被写串(如把 Workflow 当成'更大的 Skill'、把 Hooks 的确定性检查混入 Subagent)。缓解:每条定义强制溯源官方 URL,并给反例。",
+        "API 臆测风险(高/product-spec)：Dynamic Workflow 是较新能力,训练记忆与产品现状可能不符;旧网络文档可能与本机 2.1.186 行为冲突。缓解:严格以 01-workflow-api-ground-truth.md 为唯一锚点,网络资料仅用于'概念'而非'API 形态'。",
+        "示例跑不通风险(中/live-env)：脚本受'纯 JS、meta 纯字面量、禁 Date.now()/Math.random()、phases.title 逐字一致、单层嵌套'等约束限制,易因细节报错;自定义 agentType 仅在项目目录启动时进注册表,跨目录会失效。缓解:用内置 agentType 或省略,先最小闭环跑通再扩展;未实跑则如实标注。",
+        "成本/上下文失控风险(中/product-spec)：质量模式(评审团 N 方案+并行打分)和 parallel 栅栏会放大 agent 数与 token。缓解:用 budget 硬上限、默认 pipeline、控制 N、Subagent 隔离上下文,避免为展示堆规模。",
+        "复用越界风险(中/inference)：照搬 ai-engineering-delivery-zh 的业务 8 阶段会让方法论变成'业务交付流程'而非'Workflow 方法论'。缓解:显式划定'借鉴思想 vs 不照搬主干'边界。",
+        "自评偏差风险(中/product-spec)：若让实现示例的同一 agent 自评质量,会违背'实现者不自评/独立复核'硬规则、影响排名评估公正。缓解:质量评价由独立 skeptic/评审团 agent 完成。",
+        "配置泄露风险(中/live-env)：.claude/、CLAUDE.md、AGENTS.md 为个人配置,误入 Git 会影响共享 laibo 账号其他同事。缓解:遵守全局规则第15条,提交前排除。",
+        "环境约束风险(低/live-env)：本机为 Ubuntu 16.04 旧内核、共享账号;若示例依赖新工具链或联网可能受限。缓解:示例尽量不依赖外部环境,联网用于研究阶段而非示例运行。"
+      ],
+      "openQuestions": [
+        "示例的主题域选哪个最能展示编排原语又便于'排名评估'？建议候选:(a)'对一段需求做多视角风险评审并汇总'(凸显 parallel/评审团),(b)'对多个候选方案做评审团打分排序'(直接贴合排名场景),(c)'对一份文档做 loop-until-dry 完备性补全'。需负责人/用户拍板,因为它影响示例形态与评估标准设计。",
+        "'排名评估'的评估对象是什么——是评估团队成员提交的不同 Workflow 设计,还是用 Workflow 去给某类产物(如方案/代码)打分排名？两种解读会导向不同的交付物(评估 rubric vs 评分型 Workflow 示例),需确认。",
+        "最小示例是否必须本机实跑通过才算交付,还是允许'脚本就绪+静态自检+未实跑说明'？取决于是否要求我在本阶段后真正调用 Workflow 工具并验证(涉及后台运行与成本)。",
+        "方法论文档的最终落盘形式与位置:是放 workflow/docs/ 下的中文 Markdown,还是做成可被 Claude 自动加载的 Skill(workflow-designer,目录已建但为空)？两者复用方式不同(文档=人读,Skill=Claude 用)。",
+        "是否需要同时交付一个配套 Hooks 示例(如 settings.json 里的确定性检查)来完整演示五类原语,还是 Hooks 只在概念层讲清即可？涉及范围大小。",
+        "团队当前 Claude Code 版本是否统一为 2.1.186 / 是否都已启用 Dynamic Workflows？若版本不一,方法论需标注最低版本要求与降级路径。"
+      ]
+    },
+    "research": [
+      {
+        "stream": "Claude Code Workflow 方法论研究 — 系统设计与分类指南",
+        "summary": "本研究通过对比官方文档和权威规范，建立了 Claude Code 五个核心概念（Skill / Subagent / Dynamic Workflow / Hooks / CLAUDE.md）的精确区分模型。每个概念都有明确的定位、能力边界、适用场景和与其他组件的配合关系。关键发现：Skill 是模型级知识库（按需加载），Subagent 是独立任务执行者（独立上下文），Workflow 是确定性编排脚本（阶段/并行/循环），Hooks 是自动化检查点（harness 执行非模型决策），CLAUDE.md 是项目级固定约束。团队可基于此建立\"判定矩阵\"快速选型，并设计最小可运行示例展示分层协作模式。",
+        "keyFindings": [
+          {
+            "claim": "Skill 的本质是按需加载的知识库 + 可选执行脚本，模型感知其存在但仅在需要时加载内容",
+            "evidence": "官方文档明确：Claude sees skill descriptions at session start, but the full content only loads when a skill is used. Skills 可包含前言元数据、详细指令、参考文件，支持 Agent Skills 开放标准，也支持 Claude Code 扩展特性（invocation control、subagent execution、dynamic context injection）",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "Subagent 是独立上下文的专业任务执行者，拥有自己的系统提示、工具权限和 context 隔离",
+            "evidence": "官方 Subagent 文档：Each subagent runs in its own context window with a custom system prompt, specific tool access, and independent permissions. Subagent 通过自身描述被 Claude 自动委派或显式调用，完成后返回总结而不是堆积中间结果。作用：保护主会话 context、强制权限约束、复用跨项目配置、专化行为、控制成本（可用廉价模型）",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "Dynamic Workflow 是纯 JavaScript 脚本，运行在隔离的编排运行时中，持久化脚本、支持断点恢复、可协调数十到百个 subagent",
+            "evidence": "权威规范（01-workflow-api-ground-truth.md）明确：Workflow 脚本必须以 export const meta = {...} 开头（纯字面量），标准 JS 内置可用（JSON/Math/Array），但 Date.now() / Math.random() 会抛错以保证断点恢复。可用编排原语：agent()、pipeline()、parallel()、phase()、log()、args、budget、workflow()。并发上限：min(16, CPU核数-2) per 会话，全生命周期 agent 总数上限 1000",
+            "confidence": "high",
+            "sourceType": "live-env"
+          },
+          {
+            "claim": "Workflow 脚本中 pipeline() 是默认选择，允许 item 在各阶段错开进行（无栅栏）；parallel() 是栅栏，等全部完成",
+            "evidence": "规范：pipeline(items, stage1, stage2, ...) —— each item 独立穿过所有 stage，stage 间无栅栏。这是多阶段工作的默认选择。墙钟 = 最慢单条链，而非各 stage 最慢之和。parallel() 是栅栏，等全部完成。仅当确实需要全部结果一起才用。",
+            "confidence": "high",
+            "sourceType": "live-env"
+          },
+          {
+            "claim": "Hooks 是在生命周期特定点执行的确定性自动化（命令/HTTP/MCP工具/提示/子代理），由 harness 执行而非模型决策",
+            "evidence": "官方 Hooks 文档：Hooks 在三个层级触发（per-session、per-turn、per-tool-call）。配置在 JSON 中定义事件匹配器和钩子类型。常见用法：PreToolUse 拦截危险命令（exit 2），PostToolUse 注入上下文，SessionStart 设置动态环境。与 Skill 的关系：Hooks 是确定性（harness执行），Skill 是模型级指令（Claude 按需加载）",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "CLAUDE.md 是项目级固定约束和持久化指令，每会话启动时加载，优于 context 中的对话历史",
+            "evidence": "官方内存文档：CLAUDE.md 可在多个作用域存在（managed policy/user/project/local），加载顺序从文件系统根向工作目录递推。CLAUDE.md 是上下文而非强制配置，若要硬拦截需用 Hook。推荐 <200 行/文件。可使用 @path 导入其他文件。与 auto memory 互补：CLAUDE.md 由人编写持久指令，auto memory 由 Claude 积累学习",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "ai-engineering-delivery-zh 现有 Skill 采用 8 阶段交付主干，定位是工程化流程编排而非具体实现，可被其他 Workflow/Skill 复用而非照搬",
+            "evidence": "Skill 元数据和 8 阶段分析（理解业务、扫描系统、梳理数据流、定验收标准、实现、验证、风险审查、总结沉淀），每阶段链接详细参考文件。该 Skill 的角色是：当任务复杂度高且涉及业务风险时，强制走完整流程避免步骤被跳过。未来 Workflow 应复用其分层思想和质量检查点逻辑，但不需要在 Workflow 中把所有 8 个 stage 都显式编码",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "Skill / Subagent / Workflow / Hooks / CLAUDE.md 的本质区别在于：谁持有决策权、何时执行、是否按需加载、是否可重用",
+            "evidence": "综合对比官方文档：Skill（模型按需加载知识）/ Subagent（模型委派独立上下文）/ Workflow（脚本持久化编排、隔离运行）/ Hooks（harness 确定性拦截）/ CLAUDE.md（人工编写、全局约束）。它们相互补充而非竞争。例：Skill 可被 Workflow 中的 agent() 自动加载；Subagent 被 Workflow 脚本显式或隐式调用；Hooks 可在 SessionStart 时注入动态 context 补充 CLAUDE.md",
+            "confidence": "high",
+            "sourceType": "inference"
+          },
+          {
+            "claim": "Workflow 的质量模式包括：对抗式验证（多个 skeptic 各自证伪）、多视角验证、评审团模式、loop-until-dry、不静默截断",
+            "evidence": "规范第 5 节明确列出质量模式及反模式。推荐的质量模式说明 Workflow 不只是并行执行，而是可编程的多代理验证与决策流。例：/deep-research workflow 内置了 agent 对源进行交叉检验、多数投票，而不是简单汇总",
+            "confidence": "high",
+            "sourceType": "live-env"
+          },
+          {
+            "claim": "在 Claude Code 中什么场景用哪个有明确判定法则，不应混用或过度设计",
+            "evidence": "无论是官方工作流对比表还是现有 Skill 的任务分级都强调最小化选择。简单任务直接做，不加载规则；中等任务只读相关片段；复杂任务走完整流程。对应到组件选择：简单交互用 Skill 指令；独立专业工作用 Subagent；需要编排多 agent 和持久化逻辑用 Workflow；需要确定性拦截用 Hook；项目约束用 CLAUDE.md。不应该为了展示架构而在一个任务里堆 5 个 Subagent 或写无谓的 Workflow",
+            "confidence": "high",
+            "sourceType": "inference"
+          }
+        ],
+        "executableGuidance": [
+          "建立判定矩阵：基于任务复杂度（简/中/复）和协作需求快速选型。简单技术决策 不加载规则；单个专业子任务 Subagent；多 agent 编排+验证 Workflow；生命周期拦截 Hooks；项目级持久约束 CLAUDE.md",
+          "设计最小可运行示例展示分层协作模式：(1) 最简单版本：单个 Subagent 做一项专业工作（如代码审查）；(2) 中等版本：Workflow 编排 2-3 个 subagent（分析/实现/验证）；(3) 复杂版本：Workflow 引入质量检查（对抗验证、多投票），展示脚本如何控制 agent 决策流",
+          "复用 ai-engineering-delivery-zh 的分层思想但不照搬 8 阶段：Workflow 中可在关键点（plan/implement/verify）插入检查，而不需要显式编码全部阶段。动态 Workflow 应该是按需精简的，不是照搬重流程的",
+          "明确 Workflow 与 ai-engineering-delivery-zh Skill 的关系：Skill 是流程方法论和清单（需要人类交互的复杂决策）；Workflow 是脚本编排（可完全自动化的多代理验证）。两者可协作：人在 Skill 指导下做方案设计→自动化 Workflow 执行批量验证",
+          "建立质量评价四象限：(1) 成本 vs 效果（agent 数/token 消耗 vs 问题解决度）；(2) 实现复杂度 vs 可维护性（脚本行数、逻辑分支 vs 可被他人理解/扩展）；(3) 可重复性（跨项目重用程度、项目特定参数）；(4) 可观测性（日志、中间结果、失败点是否清晰）",
+          "避免反模式：不为展示规模而堆 agent；不让实现者自评（让独立验证者评）；不静默截断结果（被丢弃的部分要 log）；不过度工程化简单任务",
+          "落地分享方式：(1) 文档层：判定矩阵速查表、每个概念的 1 页核心定义；(2) 示例层：3 个递进式示例（简/中/复），每个有完整注释脚本、运行结果、成本分析；(3) 工具层：提供模板 Workflow 和 Hook 配置参考；(4) 评估层：给负责人看的 checklist（是否用对了工具、质量模式是否可验证）"
+        ],
+        "pitfalls": [
+          "把 Skill 和 Subagent 混淆：Skill 是知识库（模型加载），Subagent 是执行者（独立上下文）。不要为了复用指令就创建 Subagent，应该用 Skill",
+          "Workflow 中过度使用 parallel()：应该优先用 pipeline()，只在真的需要全量结果汇总时用 parallel()",
+          "在 Workflow 脚本中尝试访问文件系统或执行 shell：脚本本体无法直接 Read/Write/Bash，这些操作必须通过 agent() 调用委派给子代理",
+          "忘记 Hooks 是 harness 执行而非模型决策：Hooks 输出的 JSON 直接决定是否拦截。这使 Hooks 适合强制性检查，但过度使用会让系统死板",
+          "CLAUDE.md 过大导致 context 膨胀：>200 行的 CLAUDE.md 会浪费 token 并降低遵守率。应该分离成 @path 导入或 .claude/rules/ 路径特定规则",
+          "Workflow 中忘记处理 agent() 的 null 返回：如果 agent 被用户跳过或终态失败返回 null，脚本需要用 .filter(Boolean) 或显式检查",
+          "为简单任务设计过度复杂的 Workflow：只有当需要编排多个 agent 且任务可完全自动化时才值得。单个 Subagent 往往已够",
+          "忽视 Workflow 的成本：并发 agent 会导致 token 消耗快速增长。应该在小数据集上试跑估算",
+          "让 ai-engineering-delivery-zh Skill 与 Workflow 直接竞争而不是互补：Skill 适合需要人类介入的决策；Workflow 适合可自动化的工作",
+          "把 Hooks 当成 Skill/CLAUDE.md 的替代品：Hooks 只能在生命周期特定点执行。复杂策略应该写在 Skill 或 Workflow 中"
+        ],
+        "openQuestions": [
+          "如何设计 Workflow 中的质量投票机制，使得多个独立验证者的意见能够可靠地汇总，并清晰说明哪些声明被否决及原因？",
+          "在跨项目重用 Workflow 时，如何处理项目特定的配置、路径、模型选择等参数，保证脚本的可迁移性？官方是否提供了参数化的最佳实践？",
+          "Workflow 的断点恢复是否支持脚本中间的编辑，然后从修改点重新开始？还是必须从头开始运行？",
+          "ai-engineering-delivery-zh Skill 的风险审查(阶段 7) 中涉及的检查项（SQL、权限、支付等），如何转化为可在 Workflow 中自动化验证的具体检查点？",
+          "当 Workflow 中某个 agent 运行失败时，重试策略是什么？脚本中是否可以显式控制重试逻辑？",
+          "对于展示给负责人(如 tech lead/PM)的排名评估，应该衡量哪些维度？如何定义好的 Workflow？"
+        ],
+        "citations": [
+          {
+            "title": "Claude Code 官方文档 - 如何 Claude Code 工作",
+            "url": "https://code.claude.com/docs/en/how-claude-code-works.md"
+          },
+          {
+            "title": "Claude Code Skills 文档 - 扩展 Claude 的能力",
+            "url": "https://code.claude.com/docs/en/skills.md"
+          },
+          {
+            "title": "Claude Code Subagents 文档 - 创建自定义子代理",
+            "url": "https://code.claude.com/docs/en/subagents.md"
+          },
+          {
+            "title": "Claude Code Dynamic Workflows 文档 - 大规模编排子代理",
+            "url": "https://code.claude.com/docs/en/workflows.md"
+          },
+          {
+            "title": "Claude Code Hooks 文档 - 自动化和生命周期拦截",
+            "url": "https://code.claude.com/docs/en/hooks.md"
+          },
+          {
+            "title": "Claude Code 内存文档 - CLAUDE.md 和 Auto memory",
+            "url": "https://code.claude.com/docs/en/memory.md"
+          },
+          {
+            "title": "Claude Code 官方博客 - 介绍动态工作流",
+            "url": "https://claude.com/blog/introducing-dynamic-workflows-in-claude-code"
+          },
+          {
+            "title": "InfoQ - Claude Code 添加并行代理协调的动态工作流",
+            "url": "https://www.infoq.com/news/2026/06/dynamic-workflows-claude-code/"
+          },
+          {
+            "title": "Claude Skills 解释文章 - Claude 博客",
+            "url": "https://claude.com/blog/skills-explained"
+          },
+          {
+            "title": "Level Up Coding - Claude Code 的心智模型：Skills、Subagents 和插件",
+            "url": "https://levelup.gitconnected.com/a-mental-model-for-claude-code-skills-subagents-and-plugins-3dea9924bf05"
+          }
+        ]
+      },
+      {
+        "stream": "Claude Code Workflow 方法论研究完成",
+        "summary": "基于 Claude Code 2.1.186 一手规范和官方文档，研究了 Workflow 编排方法论、阶段拆分、控制流技巧、质量模式和反模式。核心结论：(1) Workflow 是编排脚本，持久化且可重复执行；(2) Pipeline 是默认选择（无栅栏），Parallel 仅在需要\"全量汇总\"时用；(3) 每阶段需定义清晰的输入/输出/完成标准；(4) 推荐质量模式是对抗式验证和多视角验证，避免自评和静默截断；(5) 并发上限 min(16, CPU-2)，总计 1000 agent，单次 4096 item；(6) Skill 负责流程规范，Workflow 负责编排执行，需协同分工。提供了 3 套可直接复制的代码骨架（简单管道、多阶段验证、条件分支）。",
+        "keyFindings": [
+          {
+            "claim": "Workflow 是纯 JavaScript 脚本，必须以纯字面量 meta 开头，无 TypeScript/类型注解",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 1 节：'必须以 export const meta = { ... } 开头，且 meta 必须是纯字面量（不能有变量、函数调用、展开运算、模板插值）'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Pipeline 是多阶段工作的默认选择，stage 间无栅栏，允许不同 item 处于不同 stage 并发",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 2 节：'每个 item 独立穿过所有 stage，stage 间无栅栏（item A 可在 stage3，item B 还在 stage1）...这是多阶段工作的默认选择'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Parallel 是栅栏，等全部 thunk 完成；仅在需要跨 item 全量结果（去重/合并/相互比较）时用",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 2 节：'并发执行一组 () => Promise，是栅栏（等全部完成）...仅当确实需要\"全部结果一起\"才用'和第 3 节：'只有当 stage N 真的需要 stage N-1 的全量跨 item 结果（去重/合并/全集早退/相互比较）时才用 parallel() 栅栏'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "并发上限 min(16, CPU核数-2)，全生命周期 agent 总数 1000，单次 pipeline/parallel 最多 4096 item",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 3 节：'单 workflow 内并发 agent() 上限 = min(16, CPU核数-2)...全生命周期 agent 总数上限 = 1000...单次 parallel()/pipeline() 最多 4096 个 item'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Agent 返回 null 当用户跳过或 API 终态失败；pipeline stage 抛错则该 item 落 null，用 .filter(Boolean) 过滤",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 2 节：'若用户中途跳过该 agent，或终态 API 错误重试后死亡，返回 null'、'stage 抛错则该 item 落 null 并跳过其余 stage'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Agent 可传 schema 参数，强制子代理调用 StructuredOutput，返回已校验对象（不匹配自动重试）",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 2 节：'有 schema（JSON Schema）时，强制子代理调用 StructuredOutput 工具，返回已校验对象（无需自行解析；不匹配会自动重试）'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Pipeline stage 回调签名 (prevResult, originalItem, index)，stage 间无显式通信，仅链式传递",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 2 节：'stage 回调签名 (prevResult, originalItem, index)'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Budget 是硬上限：spent() 达到 total 后再调 agent() 会抛错；可用 remaining() 查余额",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 2 节：'budget...是硬上限：spent() 达到 total 后再调 agent() 会抛错'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Workflow 立即返回 runId 并在后台运行，用 /workflows 看实时进度，支持断点恢复（同脚本同 args 100% 命中）",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 4 节 + official-doc workflows.md：'立即返回 runId 并在后台运行...断点恢复：未改动的最长 agent() 前缀瞬时返回缓存结果'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "推荐质量模式是对抗式验证（多个独立批评者各自证伪，多数证伪则否决）和多视角验证（每验证者一个 lens）",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 5 节：'推荐质量模式：对抗式验证（多个独立 skeptic 各自尝试证伪，多数证伪则否决）、多视角验证（每个验证者一个不同 lens）、评审团'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "反模式：不必要的栅栏、为展示规模堆 agent、让实现者自评、静默截断 top-N、简单计数器漏掉长尾",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 5 节：'反模式：不必要的栅栏、为展示规模堆 agent、让实现者自评、静默截断 top-N/采样、简单计数器漏掉长尾'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Skill（指令+清单）负责流程规范，Subagent（转包工作）负责单任务，Workflow（编排脚本）负责多代理编排和重复执行",
+            "evidence": "official-doc workflows.md 对比表：'Subagents...Who decides what runs next：Claude...Workflows...Who decides what runs next：The script' + ai-engineering-delivery-zh SKILL.md 职责划分",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "Workflow 内最多嵌套一层 workflow()，子里再调会抛错",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 2 节：'仅一层嵌套（子里再调 workflow 会抛错）'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Date.now()/Math.random()/无参 new Date() 会抛错（破坏断点恢复），需时间戳从 args 传或事后打戳，需随机性用 index 变化 prompt",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 1 节：'Date.now() / Math.random() / 无参 new Date() 会抛错（会破坏断点恢复）...需要时间戳就从 args 传入或在 workflow 返回后再打戳；需要随机性就用 index 变化 prompt/label'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Agent 可传 isolation:'worktree' 参数获得独立 git 工作树，成本高，仅当并行改文件会冲突时用",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 2 节 agent opts：'isolation:\"worktree\"（独立 git worktree，成本高，仅当并行改文件会冲突时用）'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Pipeline 墙钟时间 = 最慢单条链，不是各 stage 最慢之和，因为 item 可并发跨 stage",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 2 节：'墙钟 = 最慢单条链，而非各 stage 最慢之和'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "内置 agentType 包括 claude / claude-code-guide / Explore / general-purpose / Plan / statusline-setup",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 6 节：'本会话可用的内置 agentType：claude（通配，全工具）、claude-code-guide（Claude Code/SDK/API 问答；工具 Bash/Read/WebFetch/WebSearch）、Explore（只读广搜，读摘要而非整文件）...'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "pipeline() 中间纯 transform（flatten/map/filter）应放进某个 stage，而不是用栅栏 parallel() 断开",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 3 节：'中间的纯 transform（flatten/map/filter，无跨 item 依赖）应放进 pipeline 的某个 stage，而不是用栅栏断开'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "ai-engineering-delivery-zh Skill 的 8 阶段（理解→扫描→梳理→验收标准→规划实现→验证→风险审查→沉淀）是业务优先工程化交付主干，可复用思想但不照搬",
+            "evidence": "ai-engineering-delivery-zh SKILL.md 交付主干段落列出 8 个阶段，每阶段链接到参考文件（requirement-analysis/delivery-checklist/risk-review/retrospective-template）",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "Workflow 脚本持久化到会话目录，可编辑后用 {scriptPath} 重跑，支持断点恢复",
+            "evidence": "product-spec 01-workflow-api-ground-truth.md 第 4 节：'每次调用都会把脚本持久化到会话目录并在结果中返回路径；迭代时编辑该文件再以 {scriptPath} 重跑'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          }
+        ],
+        "executableGuidance": [
+          "Pipeline 是默认选择：用 await pipeline(items, stage1, stage2, ...) 处理多 item 多阶段，stage 间无栅栏，允许并发。墙钟时间 = 最慢单条链，不是各 stage 累加。",
+          "Parallel 仅用于需要全量汇总的场景：const [r1, r2, r3] = await parallel([() => agent(...), () => agent(...), ...])。栅栏后才继续下一步。避免无谓的栅栏。",
+          "每阶段定义清晰的输入/输出/完成标准：(1) 输入：来自前阶段的 artifact 或 args 参数；(2) 操作：pipeline/parallel、agent 类型/effort、完成条件；(3) 输出：结构化 schema 或文本报告；(4) 完成标准：可观测的成功指标，非主观 checklist。",
+          "用 agent 的 schema 参数强制结构化输出：schema: { type: 'object', properties: {...} }，返回已校验对象，无需自行解析，不匹配自动重试。",
+          "处理失败时用 .filter(Boolean) 过滤 null 结果，明确记录被丢弃的 item 和原因（用 log()），避免静默截断。",
+          "推荐质量模式：对抗式验证（多个独立批评者各自证伪，多数证伪则否决）+ 多视角验证（安全/性能/兼容性 lens）。避免让实现者自评。",
+          "不要在 Workflow 脚本内调用 Date.now()/Math.random()，会破坏断点恢复。需时间戳从 args 传或事后打戳；需随机性用 index 变化 prompt/label。",
+          "设置 budget 并检查 budget.remaining()，当预算不足时降级 effort 或跳过某些 agent。spent() 达到 total 后 agent() 会抛错。",
+          "用 phase('Stage Title') 开启新阶段，后续 agent() 自动归入该组，用户可在 /workflows 看进度。meta.phases[].title 要与代码里 phase() 调用逐字一致。",
+          "Agent 支持 label（显示名）、effort（'low'/'medium'/'high'/'xhigh'/'max'）、model（覆盖模型）、isolation:'worktree'（独立工作树，仅并行改文件冲突时用）、agentType（'claude'/'Explore'/'general-purpose' 等）。",
+          "Pipeline stage 回调签名 (prevResult, originalItem, index)：prevResult 是前 stage 对该 item 的结果，originalItem 是原始 item，index 是 item 在数组中的位置。",
+          "避免反模式：(1) 无谓栅栏破坏 pipeline 流；(2) 为展示规模堆 agent；(3) 让实现者自评；(4) 静默截断结果；(5) Pipeline 后纯 transform 用栅栏。",
+          "使用 Explore agentType 做只读广搜（读摘要而非整文件），用 claude-code-guide 做 Claude Code/API 问答，省 token。",
+          "Workflow 立即返回 runId 并后台运行，用 /workflows 看进度，支持断点恢复：同脚本同 args → 100% 命中，未改动的 agent 前缀瞬时返回缓存。",
+          "Skill 负责流程规范和清单（.md），Workflow 负责编排执行（.js），CLAUDE.md 负责项目固定约束。分工协同：读 Skill 理解流程 → 生成 Workflow 脚本编排 → 运行时遵守 CLAUDE.md。"
+        ],
+        "pitfalls": [
+          "在 Workflow 脚本内使用 Date.now() 或 Math.random() 会抛错并破坏断点恢复机制，导致无法从中断点恢复。需时间戳时从 args 传入或在 Workflow 返回后再打戳。",
+          "无条件地使用 parallel() 栅栏，即使不需要全量汇总。这破坏了 pipeline 的流式并发优势，导致不必要的等待。仅在需要跨 item 去重/合并/相互比较时用栅栏。",
+          "在 pipeline stage 内放纯 transform（map/filter/flatten），而不是用 parallel() 栅栏断开。这浪费栅栏的并发能力。transform 应内联到某个 stage。",
+          "让实现者/代理自评完成情况，而不是用独立的批评者或对抗式验证。虚假信心导致漏掉关键问题。",
+          "静默截断结果（只留 top-10，悄悄丢弃其他），隐藏了长尾覆盖问题。必须用 log() 明确记录被丢弃的 item 和原因。",
+          "为了展示规模而堆砌 agent 数量，导致成本爆炸且无实质贡献。每个 agent 必须有明确的责任。",
+          "在 pipeline stage 间依赖跨 item 的全量结果，而不是栅栏。应该在栅栏内的 parallel() 中处理。",
+          "Workflow 内嵌套多层 workflow()，会抛错。Workflow 内最多调用一次 workflow()，嵌套应改用 agent() + 自定义 agentType。",
+          "不设置 budget，导致无限制地生成 agent，爆炸成本。应提前设置 budget.total，并检查 budget.remaining()。",
+          "Agent 不传 schema，返回纯文本，然后在 Workflow 脚本内自行 JSON.parse()，容易出错。应该传 schema，让子代理强制返回结构化对象，系统自动校验和重试。",
+          "Pipeline stage 抛错时不过滤，导致 null 混入结果，后续 stage 处理 undefined。应该每个 stage 都用 .filter(Boolean) 过滤，或在 stage 内处理 null。",
+          "Phase 和 meta.phases[].title 不一致，导致进度展示混乱。meta.phases[].title 必须与代码 phase() 调用逐字相同。",
+          "Agent 传错 agentType（如拼错或用不存在的），会默认降级为通用代理，可能缺少必要工具。应检查内置 agentType 列表。",
+          "不预估 agent 成本，导致大规模任务突然因 budget 耗尽而失败。应先在小样本上试跑，估算平均 token/item，再计划大规模。",
+          "Workflow 脚本中硬编码 model/effort，无法根据 args 适应不同场景。应该参数化，通过 args 传入配置。"
+        ],
+        "openQuestions": [
+          "除了官方内置 agentType（claude/claude-code-guide/Explore/general-purpose/Plan），项目 .claude/agents/ 自定义 agentType 在跨项目 Workflow 中如何加载？是否需要显式注册或路径解析？",
+          "Pipeline stage 中某个 item 抛错（返回 null）后，是否能在该 stage 内部 catch + retry，还是必须让错误传播到下一 stage 过滤？",
+          "Agent 的 schema 参数中能否支持条件性字段（oneOf/anyOf）？StructuredOutput 工具如何处理复杂 JSON Schema？",
+          "Workflow 中如何实现 loop-until-convergence（重复迭代直到干燥度达到）？是否有内置的循环控制或需手工 while()?",
+          "断点恢复（resumeFromRunId）如何处理 agent 的 isolation:'worktree' 场景？git worktree 的缓存是否也能恢复？",
+          "Workflow 中能否在运行时动态修改 meta.phases（如根据 args 增加阶段），还是必须静态声明？",
+          "Agent 返回 null 时（用户跳过/API 失败），是否能在 Workflow 中捕获失败原因（如错误信息/日志），用于诊断？",
+          "Budget 的预算共享是否包括子 Workflow（via workflow()）的成本？即 workflow() 内的 agent token 是否计入父 budget？"
+        ],
+        "citations": [
+          {
+            "title": "Claude Code Dynamic Workflow API —— 权威基线（一手）",
+            "url": "file:///data/workspace/liuyuanjian/workflow/evidence/01-workflow-api-ground-truth.md"
+          },
+          {
+            "title": "Orchestrate subagents at scale with dynamic workflows",
+            "url": "https://code.claude.com/docs/en/workflows.md"
+          },
+          {
+            "title": "AI 工程化交付 Skill（ai-engineering-delivery-zh）",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md"
+          },
+          {
+            "title": "Claude Code 文档总览",
+            "url": "https://code.claude.com/docs/en/claude_code_docs_map.md"
+          },
+          {
+            "title": "Claude Code 如何工作（核心概念）",
+            "url": "https://code.claude.com/docs/en/how-claude-code-works.md"
+          }
+        ]
+      },
+      {
+        "stream": "claude-code-workflow-methodology",
+        "summary": "Claude Code Workflow 方法论研究完成。基于产品 API 规范（ground-truth）、官方文档（2026 最新）及现有工程化资产（ai-engineering-delivery-zh），系统分析了状态管理、上下文隔离、断点恢复、质量评价四个核心域。关键发现：(1) 脚本持久化 + resumeFromRunId 机制实现确定性断点恢复；(2) 多层隔离设计（脚本/子代理/Skill/CLAUDE.md）防止上下文膨胀；(3) Schema + Structured Output 最小化解析负担；(4) evidence/ 外部化文件与脚本参考相结合实现完整追踪；(5) 产品规范明确禁止不必要栅栏、堆 agent、让实现者自评等反模式。建议落地最小可运行示例，展示状态保存、上下文隔离、断点恢复、Hooks 验证的端到端工作流。",
+        "keyFindings": [
+          {
+            "claim": "Workflow 脚本采用 async 上下文执行，立即返回 runId 后台运行，脚本和 args 一起持久化到会话目录",
+            "evidence": "01-workflow-api-ground-truth.md §4：'Workflow 工具调用立即返回 runId 并在后台运行；每次调用都把脚本持久化到会话目录并在结果中返回路径'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "断点恢复机制（resumeFromRunId）：未改动的最长 agent() 前缀瞬时返回缓存结果，从首个改动/新增调用起实跑；脚本+args 相同时 100% 命中缓存",
+            "evidence": "01-workflow-api-ground-truth.md §4：'断点恢复：resumeFromRunId + scriptPath，未改动的最长 agent() 前缀瞬时返回缓存结果...同脚本同 args → 100% 命中'；WebSearch '状态管理、中断恢复'：'Run can pick up from where it left off instead of starting over'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Workflow 脚本仅纯 JavaScript，不支持 TypeScript 类型、Date.now()、无参 new Date()、Math.random()，会破坏断点恢复的确定性",
+            "evidence": "01-workflow-api-ground-truth.md §1：'脚本是纯 JavaScript...Date.now() / Math.random() / 无参 new Date() 会抛错（会破坏断点恢复）'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "子代理 agent(prompt, opts) 运行在独立上下文窗口中，不污染主 Workflow；有 schema 时返回已校验对象并自动重试；isolation:'worktree' 选项创建独立 git 工作树用于并行改文件",
+            "evidence": "01-workflow-api-ground-truth.md §2：'agent(prompt, opts) 派生一个子代理...无 schema 返回 string，有 schema 返回已校验对象（不匹配会自动重试）...isolation:worktree 独立 git worktree（成本高，仅当并行改文件会冲突时用）'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "pipeline() 无栅栏（item 穿过各 stage 异步进度），用于多阶段流水缩短墙钟；parallel() 有栅栏（等全部完成），仅当真需全量结果对比时用",
+            "evidence": "01-workflow-api-ground-truth.md §2：'pipeline 每个 item 独立穿过所有 stage，stage 间无栅栏...并发默认选择。parallel 是栅栏，等全部完成。默认用 pipeline'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "budget 对象提供硬上限：spent() ≥ total 后再调 agent() 会抛错，脚本需主动检查 budget.remaining() 做降级",
+            "evidence": "01-workflow-api-ground-truth.md §2：'budget：{total, spent(), remaining()}。total 为本轮 Token 目标...是硬上限：spent() 达到 total 后再调 agent() 会抛错'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Skill 描述在会话启动加载，但全文仅在调用时加载（延迟成本）；disable-model-invocation: true 时完全出上下文直到被用户显式调用",
+            "evidence": "how-claude-code-works.md 'Manage context with skills and subagents'：'Skills load on demand. Claude sees skill descriptions at session start, but the full content only loads when a skill is used'；Claude Code docs 'skills.md'：'disable-model-invocation: true to keep descriptions out of context'",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "CLAUDE.md 首行 200 行或 25KB 在每次会话启动自动加载，存活周期跨 /clear、session 终止、机器重启；不被 auto-compaction 丢弃",
+            "evidence": "how-claude-code-works.md 'Work with sessions'：'Your CLAUDE.md...first 200 lines or 25KB...load at the start of each session'；memory.md：'CLAUDE.md survives /clear, survives session termination, survives machine restarts'",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "Hooks 支持 5 种类型（command/http/mcp_tool/prompt/agent），返回 JSON 上限 10KB，超出截断；exit 0 = 允许，exit 2 = 阻止（用户消息），其他 = 非阻止警告",
+            "evidence": "hooks.md 'Hook Types' 与 'Decision Control Patterns'：'Hook handlers: command/http/mcp_tool/prompt/agent；Exit 0=Success；Exit 2=Blocking error；JSON output capped at 10,000 characters'",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "Structured Output 用 JSON Schema 或 Zod 定义，编译成语法约束推理时的 token 生成，保证输出严格符合 schema；自动重试解决不匹配",
+            "evidence": "WebSearch Claude API 结构化输出：'compiling your JSON schema into a grammar and constraining Claude's output'；platform.claude.com 'Structured outputs'：'strict: true guarantees schema validation'",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "并发与队列限制：单 workflow 并发上限 = min(16, CPU核数-2)；全生命周期 agent 总数上限 = 1000；单次 pipeline/parallel 最多 4096 item",
+            "evidence": "01-workflow-api-ground-truth.md §3：'单 workflow 内并发 agent() 上限 = min(16, CPU核数-2)...全生命周期 agent 总数上限 = 1000...单次 pipeline/parallel 最多 4096 item'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "质量推荐模式：对抗式验证（多个独立 skeptic 证伪）、多视角验证、评审团（N 方案+并行打分）、loop-until-dry（K 轮无新增停）、不静默截断（被丢弃覆盖面 log）",
+            "evidence": "01-workflow-api-ground-truth.md §5：'推荐质量模式：对抗式验证...多视角验证...评审团...loop-until-dry...多模态扫描...完备性批评者...不静默截断'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "明确反模式：不必要栅栏、为展示规模堆 agent、让实现者自评、静默截断 top-N/采样、简单计数器漏长尾",
+            "evidence": "01-workflow-api-ground-truth.md §5：'反模式：不必要的栅栏、为展示规模堆 agent、让实现者自评、静默截断 top-N/采样、简单计数器漏掉长尾'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "ai-engineering-delivery-zh 的 8 阶段交付（理解→扫描→梳理→验收→规划实现→验证→风险审查→沉淀）对应 Workflow phases 设计，references 按需加载机制对应脚本运行时动态 Read",
+            "evidence": "ai-engineering-delivery-zh SKILL.md §交付主干 列出 8 个阶段，环境扫描文档注记'references 按需加载'与 'Workflow 上下文控制'的设计思想对应",
+            "confidence": "high",
+            "sourceType": "live-env"
+          },
+          {
+            "claim": "evidence/ 外部化文件机制：脚本可动态 Read 相对路径的 evidence 文件作为输入，完成后续产物也存入 evidence，形成完整追踪链，支持断点恢复时中间产物不丢失",
+            "evidence": "00-environment-scan.md 与 01-workflow-api-ground-truth.md 构成项目现状的追踪体系；脚本可 await Read('evidence/01-workflow-api-ground-truth.md') 作为事实源",
+            "confidence": "high",
+            "sourceType": "live-env"
+          }
+        ],
+        "executableGuidance": [
+          "构建最小可运行 Workflow 示例时，从单一 phase（如 ai-engineering-delivery-zh 的'需求分析'）入手，分解为 3-4 个子步骤，每步一个 agent() 调用；使用 pipeline 而非 parallel；定义每个子步骤的输出 schema，使用 JSON Schema 或 Zod 约束。",
+          "设计 Token 预算管理：在 Workflow 脚本入口计算 budget.remaining()，为后续 pipeline 各 stage 预分配额度（如 3 个 stage 各 30K），若 spent() 接近 total 则激活降级策略（用 haiku、缩小输入、提前结束）。",
+          "实现断点恢复验证：编写脚本后，故意修改 stage 3 的逻辑，调用 Workflow({scriptPath, resumeFromRunId}) 重跑，观察 stage 1-2 是否秒回（缓存命中），stage 3 是否重新执行。",
+          "配置 Hooks 进行确定性检查：在 .claude/settings.json 添加 PostToolUse hook（command 类型），检查是否有文件改动超出预期范围；SessionEnd hook 生成交付报告（改动文件、结论、验证状态）；Hooks 返回的 JSON 用结构化字段（permissionDecision、additionalContext、hookEventName）。",
+          "Evidence 文件与脚本绑定：在 evidence/ 中记录 00-environment-scan（启动前检查）、01-workflow-api-ground-truth（API 事实源），脚本运行时 await Read('evidence/01-*.md') 读取约束，完成后生成 02-design-methodology.md、03-quality-checklist.md 等产物，形成可追踪的完整链路。",
+          "复用 ai-engineering-delivery-zh 的扫描逻辑：不照搬 8 个 phase，而是在'扫描现有系统'阶段启动 subagent，用 agentType:'Explore' 专注广搜+读摘要（低成本），脚本仅接收结构化结论（schema 约束），避免大量日志/文件内容污染主脚本上下文。",
+          "为重要结论添加对抗验证：对于关键决策（如'该需求是否超出范围'），安排一个专用 skeptic agent（模型用 haiku 成本低），要求尝试证伪主 agent 的结论；若多数证伪则标记为'待人工确认'并 log()。",
+          "管理 Skill 的上下文成本：配置 disable-model-invocation: true（在 .claude/settings.json 的 skillOverrides），仅在脚本显式调用 ai-engineering-delivery-zh Skill 时加载；session 启动时仅看 Skill 描述，不加载全文。",
+          "避免上下文膨胀的分层设计：(1) 脚本层用 pipeline 分散 agent，不用 parallel 堆积；(2) 工具层用 Skill 延迟加载+subagent 隔离；(3) 会话层 CLAUDE.md 作固定约束；(4) 持久层 evidence/ 外部化中间产物；检查 /context 命令确认各层占比。",
+          "设计质量评价模式：不让实现者自评（反模式），而是由 2-3 个独立 agent 从不同视角（功能完整性、风险一致性、代码质量）各自打分，汇总时需要多数同意才能通过；所有截断或跳过的检查项都要 log()，不静默隐藏。"
+        ],
+        "pitfalls": [
+          "假设 Workflow 脚本可用 Date/Math.random()：会破坏断点恢复确定性；应从 args 传时间戳或用 index 变化 prompt。",
+          "过度使用 parallel()：容易峰值并发爆炸、上下文膨胀；仅当真需全量结果对比时用，默认用 pipeline()。",
+          "忽视 schema 的自动重试机制：手工在脚本中重复验证输出格式；应委托给工具层，脚本直接用校验后的对象。",
+          "在脚本中累积大对象（如完整扫描结果）：应 Read evidence 文件或让 subagent 外化结果，脚本仅保存引用路径。",
+          "配置 Hooks 返回超 10KB JSON：会被截断，影响决策逻辑；应拆分成多个小 Hook 或简化字段。",
+          "让实现者/subagent 自评质量：反模式；应用专用 skeptic agent 对抗验证，多数证伪则否决。",
+          "一次性加载所有 references 文件到 CLAUDE.md：上下文浪费；应由脚本在需要时动态 Read 对应阶段文件。",
+          "不配置 Token budget 降级策略：脚本会在 spent() ≥ total 时抛错中断；应预先计划备选方案（用更小的模型、缩小输入、分批处理）。",
+          "静默截断搜索结果、日志、对比列表：用户不知道丢弃了什么；应显式 log() 被舍弃的覆盖范围和原因。",
+          "混淆 Skill 与 Subagent 的隔离机制：Skill 是工具包（加载到主上下文），Subagent 是独立代理（自己的上下文窗口）；应按场景选择（小工具用 Skill，大量搜索用 Subagent）。"
+        ],
+        "openQuestions": [
+          "Workflow 脚本中调用另一个 Workflow（workflow() 函数）时，能否跨越 1 层嵌套限制？规范说'仅一层嵌套'，但实际项目中多层编排很常见；是否有后续的递归 Workflow 支持计划？",
+          "resumeFromRunId 缓存是否支持条件部分更新？如果只改 stage N，stage 1-N-1 缓存回放，stage N 后是否也能继续缓存复用，还是必须全部重跑？",
+          "evidence/ 文件的版本管理与冲突处理：多个 Workflow 并行修改同一个 evidence 文件时如何保证一致性？是否需要显式的文件锁或冲突解决机制？",
+          "Hooks 的 deduplication 机制：相同命令/URL 仅运行一次，但如果同一 Workflow 的不同 stage 都需要执行同一个 Hook（逻辑上需要多次），如何绕过去重？",
+          "budget.total 为 null 时，budget.remaining() 是否真的返回 Infinity，还是有隐性上限（如基于账号配额）？",
+          "subagent 与主 Workflow 的消息历史共享范围：subagent 能否看到主脚本之前的对话历史，还是完全隔离新 context？",
+          "Structured Output 的失败重试次数有无上限？如果一个 schema 特别复杂，模型连续重试多次仍失败，是否会触发断路器？"
+        ],
+        "citations": [
+          {
+            "title": "Claude Code Dynamic Workflow API — 权威基线",
+            "url": "file:///data/workspace/liuyuanjian/workflow/evidence/01-workflow-api-ground-truth.md"
+          },
+          {
+            "title": "How Claude Code Works - Context Isolation and Session Management",
+            "url": "https://code.claude.com/docs/en/how-claude-code-works.md"
+          },
+          {
+            "title": "Common Workflows - Claude Code",
+            "url": "https://code.claude.com/docs/en/common-workflows"
+          },
+          {
+            "title": "Extend Claude Code with Skills",
+            "url": "https://code.claude.com/docs/en/skills.md"
+          },
+          {
+            "title": "Create Custom Subagents - Claude Code",
+            "url": "https://code.claude.com/docs/en/sub-agents.md"
+          },
+          {
+            "title": "Hooks Reference - Claude Code",
+            "url": "https://code.claude.com/docs/en/hooks.md"
+          },
+          {
+            "title": "Claude Code Memory - CLAUDE.md and Auto Memory",
+            "url": "https://code.claude.com/docs/en/memory.md"
+          },
+          {
+            "title": "Structured Outputs - Claude API Docs",
+            "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+          },
+          {
+            "title": "Agent SDK Reference - TypeScript - Claude API",
+            "url": "https://platform.claude.com/docs/en/agent-sdk/typescript"
+          },
+          {
+            "title": "ai-engineering-delivery-zh - 业务优先工程化交付 Skill",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md"
+          },
+          {
+            "title": "Environment Scan - Workflow Project Evidence",
+            "url": "file:///data/workspace/liuyuanjian/workflow/evidence/00-environment-scan.md"
+          }
+        ]
+      },
+      {
+        "stream": "claude-guide-workflow-qa",
+        "summary": "\n基于Claude Code 2.1.186 Workflow API官方规范、ai-engineering-delivery-zh现有Skill资产、官方Claude Code文档（Workflows/Skills/Subagents/Hooks/CLAUDE.md），编制了\"Claude Code Workflow质量保障方法论\"。内容分为：(1)术语与架构分层——明确区分Skill(方法/规范)/Subagent(专业任务单元)/Workflow(编排脚本)/Hooks(确定性检查)/CLAUDE.md(项目约束)各自定位与协作关系；(2)质量编排设计要点——包括评审-返工-再评审的有界循环设计、独立交叉审查(实现者不自评)、对抗式多skeptic验证、多视角验证、明确的退出条件与最大轮次防护；(3)工程实践——成果物规范(输入/输出/完成标准)、验证模式、风险文化、可操作的质量检查清单；(4)最小可运行示例框架——说明如何复用ai-engineering-delivery-zh交付思想但轻装上阵，避免为展示规模堆砌agent。所有findings标注了权威来源(官方规范/产品spec/live-env)与置信度。\n",
+        "keyFindings": [
+          {
+            "claim": "Workflow脚本是纯JavaScript（非TypeScript），meta字段必须是纯字面量，不能有变量/函数调用/展开运算/模板插值",
+            "evidence": "01-workflow-api-ground-truth.md 第1节：'必须以 export const meta = { ... } 开头，且 meta 必须是纯字面量（不能有变量、函数调用、展开运算、模板插值）'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "pipeline()是多阶段工作的默认选择——stage间无栅栏，item独立穿过所有stage，各stage可异步推进；parallel()是栅栏，等全部item完成才继续",
+            "evidence": "01-workflow-api-ground-truth.md 第2节：'pipeline(items, stage1, stage2, ...) 每个 item 独立穿过所有 stage，**stage 间无栅栏**；parallel(thunks) 是栅栏（等全部完成）。只有当确实需要\"全部结果一起\"才用'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "单workflow内并发agent上限=min(16, CPU核数-2)；全生命周期agent总数上限=1000；单次pipeline/parallel最多4096个item",
+            "evidence": "01-workflow-api-ground-truth.md 第3节容量约束",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "agent()若有schema参数，强制子代理调用StructuredOutput，返回已校验对象（不匹配自动重试）；无schema时返回文本",
+            "evidence": "01-workflow-api-ground-truth.md 第2节：'有 schema（JSON Schema）时，强制子代理调用 StructuredOutput 工具，返回**已校验对象**（无需自行解析；不匹配会自动重试）'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "质量编排推荐模式包括：对抗式验证(多skeptic各自证伪，多数证伪则否决)、多视角验证(每个验证者一个不同lens)、评审团(N个独立方案+并行打分+综合)、loop-until-dry(连续K轮无新增才停)、多模态扫描、完备性批评者、不静默截断(被丢弃覆盖面要log)",
+            "evidence": "01-workflow-api-ground-truth.md 第5节：'推荐质量模式：对抗式验证...多视角验证...评审团...loop-until-dry...不静默截断'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "反模式：不必要的栅栏、为展示规模堆agent、让实现者自评、静默截断top-N/采样、简单计数器漏掉长尾",
+            "evidence": "01-workflow-api-ground-truth.md 第5节：'反模式：不必要的栅栏、为展示规模堆 agent、让实现者自评、静默截断 top-N/采样、简单计数器漏掉长尾'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Skill与Workflow分工：Skill承载方法/规范/清单/参考（按需加载），Workflow是编排脚本（循环/分支/并行）；Subagent是专业任务单元（独立context）；Hooks是确定性检查（自动执行）；CLAUDE.md是项目约束（目录作用域）",
+            "evidence": "Workflows官方文档：'A dynamic workflow is a JavaScript script that orchestrates subagents at scale'；Skills文档：'Skills extend what Claude can do...create a SKILL.md file with instructions'；Subagents文档：'Each subagent runs in its own context window'；Hooks文档：'Hooks...execute automatically at specific points'；how-claude-code-works.md：'Your CLAUDE.md...persistent instructions in CLAUDE.md'",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "evaluation-review-rework循环的有界设计：(1)需明确最大轮次(e.g. 3轮)和干燥条件(e.g. 连续K轮无新增问题)；(2)每轮输出明确的findings/actionItems；(3)返工方认领所有items，修复后明确标记modified-items；(4)再评审对比上轮结果，确认修复有效；(5)达到干燥或轮次上限则退出，残留风险明确说明",
+            "evidence": "ai-engineering-delivery-zh/SKILL.md 交付主干阶段6(验证)-阶段7(风险审查)-阶段8(复盘)，加上01-workflow-api-ground-truth.md反模式约束('不让实现者自评'、'明确的退出条件')",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "独立交叉审查原则：(1)评审者与实现者角色分离，实现者不能自评；(2)多个独立评审者各自尝试证伪(skeptic模式)；(3)评审者看相同代码但用不同视角(安全/性能/可维护性/业务逻辑)；(4)并行而非串行，结果在汇总点收敛",
+            "evidence": "01-workflow-api-ground-truth.md 第5节：'对抗式验证（多个独立 skeptic 各自尝试**证伪**，多数证伪则否决）、多视角验证（每个验证者一个不同 lens）'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "对抗式验证数量设置建议：低风险任务2-3个skeptic；中等风险4-5个；高风险(支付/权限/SQL)6-8个；采用多数表决(e.g. 3个中2个同意则通过)",
+            "evidence": "ai-engineering-delivery-zh/references/risk-review.md对高风险域的明确列表(支付/会员/权限/SQL/文件处理/回调/定时任务)，加上workflow推荐模式对'多数证伪'的定义",
+            "confidence": "medium",
+            "sourceType": "inference"
+          },
+          {
+            "claim": "成果物规范(每个阶段的输出)应包括：(1)输入定义(前置条件/约束/参考资料)；(2)输出形状(文档/数据结构/代码片段)；(3)完成标准(定性+可验证指标)；(4)验证方式(人工/自动)；(5)风险标记",
+            "evidence": "ai-engineering-delivery-zh SKILL.md交付主干阶段结构 + references/worked-example.md各阶段产物展示",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "验证模式优先级：(1)自动化测试(单测/集成测/E2E)；(2)静态检查(类型检查/lint/风险扫描脚本)；(3)人工关键路径测试；(4)权限和状态机推演(可无法运行环境时的必要替代)；(5)明确说明未验证原因与残留风险",
+            "evidence": "ai-engineering-delivery-zh/references/delivery-checklist.md 验证小节 + worked-example.md阶段6的'未运行'段落示范",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "高风险域(支付/会员/权限/SQL/文件处理/回调)必须人工复核，不允许只依赖AI生成代码或静态检查；需检查一致性(前端显示vs后端状态)、幂等性(重复操作安全)、权限强制、状态机合法性、回滚恢复能力",
+            "evidence": "ai-engineering-delivery-zh/CLAUDE.md全局规则第16、17条 + references/risk-review.md一致性检查/状态机检查/幂等与并发/回滚与恢复小节",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "控制成本与上下文的方法：(1)Skill按需加载(不用时零成本)；(2)Subagent独立context(大任务用专用worker)；(3)Workflow脚本变量而非主context(中间结果不进Claude)；(4)pipeline()无栅栏(最快完成)；(5)agent()用effort参数调整推理成本",
+            "evidence": "Workflows官方文档'Subagents...preserve context by keeping exploration...out of main conversation'、01-workflow-api-ground-truth.md第2、3节对pipeline vs parallel的成本对比",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "可被他人复用的成果规范：(1)Workflow脚本存在.claude/workflows/目录(随repo)或~/.claude/workflows/(个人)；(2)Skill存在.claude/skills/目录加SKILL.md(标准格式)；(3)检查清单和参考资料用markdown并明确链接；(4)README说明场景/用法/依赖/已知限制；(5)无hardcode路径或个人配置",
+            "evidence": "Workflows官方文档'命名 workflow 放 .claude/workflows/'、Skills文档'Create a SKILL.md file'",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "CLAUDE.md的质量约束作用：(1)文件大小<200行(超长则规则被忽略)；(2)每条规则必须改变行为(无观点性空话)；(3)分层结构——全局CLAUDE.md简洁，项目/目录规则详细；(4)禁止提交个人配置文件到Git(AGENTS.md/.claude/settings.local.json)",
+            "evidence": "how-claude-code-works.md'Put persistent rules in CLAUDE.md'、WebSearch结果'CLAUDE.md should stay under 200 lines'、ai-engineering-delivery-zh/CLAUDE.md全局规则第15条",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "Hooks用于确定性、可重复的检查——PreToolUse阶段阻止危险命令、PostToolUse阶段验证结果、UserPromptSubmit阶段校验输入；支持command/http/mcp_tool/prompt/agent五种handler类型；不适用于需要复杂推理的审查(用Subagent替代)",
+            "evidence": "Hooks官方文档定义与生命周期、反例'PreToolUse阻止rm -rf'；与推荐质量模式对比(推荐用agent做对抗式验证而非简单hooks)",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "最小示例框架应包括：(1)一个实际业务功能(非玩具)；(2)展示evaluation-rework-re-evaluation循环(2-3轮)；(3)至少2个独立skeptic审查者；(4)演示多视角验证(安全/业务逻辑)；(5)清晰的EXIT条件(干燥或轮数限)；(6)真实验证结果(不假设通过)；(7)<500 tokens总脚本；(8)可被团队成员在15分钟内理解并复用",
+            "evidence": "task背景'最小可运行示例'需求 + ai-engineering-delivery-zh/references/worked-example.md(支付退款功能)作为参考，加上01-workflow-api-ground-truth.md对反模式的约束",
+            "confidence": "high",
+            "sourceType": "inference"
+          },
+          {
+            "claim": "防止无限循环的设计：(1)显式最大轮次(N=3或5)；(2)干燥判据定义(K轮无新问题，或finding重复率<10%)；(3)评分基线(必须前进至少M%)；(4)每轮timeout(不超过预算)；(5)达任一条件即exit，残留问题明确说明",
+            "evidence": "01-workflow-api-ground-truth.md'防失控兜底'与'loop-until-dry'模式定义",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          }
+        ],
+        "executableGuidance": [
+          "第一步：确认团队质量目标——选择对应复杂度等级(简单/中等/复杂)，定下QA流程深度。简单任务无需workflow；中等用单阶段subagent；复杂用evaluation-rework循环。",
+          "第二步：设计评审-返工循环——(1)定最大轮次(建议3)和干燥条件(K=2轮无新增)；(2)明确每轮的评审者数(skeptics)和视角分工；(3)定输出规范(findings格式、actionItems模板)；(4)定exit条件与残留风险说明方式。",
+          "第三步：写Workflow脚本(纯JS，meta字面量)——(1)phase()分组(理解->扫描->设计->实现->评审1->返工->评审2->总结)；(2)pipeline()串联多个skeptic agent(并发跑，结果异步汇总)；(3)每轮汇总后并行跑下一轮或exit逻辑；(4)用log()输出进度，用agents的schema校验结构化结果。",
+          "第四步：定义Subagent角色——每个skeptic是独立subagent(agentType或自定义)，prompt明确其视角(安全审查官/业务逻辑官/性能官等)，工具权限受限(只读+WebFetch，无Edit/Write)，输出schema统一。",
+          "第五步：制定Skill(方法/规范)——整理成SKILL.md(markdown格式)，包括：(1)适用场景(何时用这个QA流程)；(2)关键阶段及产物(输入/输出/完成标准)；(3)参考清单(提交前检查)；(4)反模式警告(不要这样做)；(5)常见陷阱与恢复。",
+          "第六步：配置CLAUDE.md约束——(1)<200行简洁规则；(2)禁止项(e.g. '不允许自评')；(3)必须项(e.g. '高风险必须人工复核')；(4)参考文件链接(pointing to Skill)。不提交.claude/settings.local.json到Git。",
+          "第七步：可选Hooks(确定性检查)——PreToolUse阶段阻止危险命令(如git push --force)；PostToolUse验证metadata；不用Hooks做复杂推理(那用Subagent)。",
+          "第八步：最小示例——选一个真实中等风险功能(支付/权限/SQL相关)，走完整workflow演示：理解->扫描->3个skeptic并行评审->返工->再评审->总结。脚本<500tokens，可被同事15分钟内上手。",
+          "第九步：降级与扩展路径——简单任务直接skip workflow，用single-turn agent+Hooks；新增更多skeptic角度时用parallel(thunks)而非pipeline(避免上下文膨胀)；cost超预算时切到低effort agent或Haiku模型。",
+          "第十步：反复打磨——记录真实运行的token消耗、轮数分布、agent失败率；迭代调整skeptic数量、干燥判据、timeout、effort参数。目标：成本可控、质量稳定、他人可复用。"
+        ],
+        "pitfalls": [
+          "不设最大轮次限制或干燥条件——导致无限循环，烧token无谓。必须显式定义N_max和K_dry。",
+          "让实现者自评——自评的发现往往不信；必须严格分离实现者与评审者角色，采用多skeptic对抗模式。",
+          "堆砌太多agent展示规模——每个agent都有成本，低价值agent反而降低质量。新增agent前问'这个视角是否改变决策？'。",
+          "静默截断长尾问题——只报top-N findings而隐藏剩余；导致遗漏边界风险。必须log所有findings，即便篇幅长。",
+          "用parallel()当pipeline()就够了——错误地加栅栏(Wait for all)，无谓延长总时间。默认用pipeline()，只在确需全量结果对比时用parallel()。",
+          "Skill和Workflow混淆——Skill是永久规范(按需加载)，Workflow是一次性编排(脚本随session)。不要把编排逻辑写进Skill。",
+          "CLAUDE.md超过200行——过长规则被忽略；分层到项目/目录级.claude/AGENTS.md。",
+          "提交个人配置到Git——AGENTS.md/.claude/settings.local.json不应进仓库，导致同事冲突。用.gitignore隔离。",
+          "Hooks做复杂推理——Hooks只适合确定性检查(规则匹配)，复杂验证用Subagent。",
+          "验证没跑但声称'已验证'——误导后续决策；未验证项目必须明确说明原因(环境限制/超范围/成本)和残留风险。",
+          "信赖AI生成的高风险代码而无人复核——支付/权限/SQL不能只靠静态检查；必须人工理解业务含义。",
+          "忽视一致性检查——'前端显示成功但后端失败'这类BUG在支付/权限场景常见，循环检查单个件不够，必须跨层验证。",
+          "工程化过度——为遵守流程而扩大范围(本来简单任务强行走复杂流程)；分级是关键，简单任务直接做。",
+          "结果不可复用——脚本hardcode路径、个人config、临时文件；成果无法被他人运行。必须检查路径相对化和清晰的入参。",
+          "成本不可控——未设token预算、并发上限、timeout；导致单次运行烧费过多。Workflow初期应用narrow slice测成本再全量运行。"
+        ],
+        "openQuestions": [
+          "在多skeptic并行评审中，采用什么聚合策略(多数表决/权重投票/一票否决)最适合各风险等级？是否应根据领域(支付/UI/性能)动态调整？",
+          "干燥判据(loop-until-dry)除了'连续K轮无新增问题'外，还有哪些可量化的指标(e.g. findings重复率、修复有效率、score趋势)能更精准判定收敛？",
+          "当skeptic agents之间意见不一时，workflow应该怎么处理(自动升级为人工审查、并行多方案、轮次制投票)？现有文档未明确。",
+          "Subagent的tool权限(只读vs编辑)与质量的关系——只读评审者能否发现实现中的逻辑bug，还是必须能读整个系统context才行？",
+          "对于团队规模不同的组织，skeptic数量如何按比例调整(个人项目vs团队vs公司)？是否有标准化的mapping？",
+          "Workflow脚本的版本控制与复用——保存在.claude/workflows/后如何管理迭代(fork/patch/new version)？与CI/CD集成的最佳实践是什么？",
+          "高复杂度任务的多workflow串联——某个workflow的输出作为下一个workflow的输入时，schema如何定义和传递以避免破损？",
+          "成本预测与优化——给定业务复杂度和风险等级，如何预估最小可行的token预算和agent数(避免过度烧费也避免不足)？",
+          "Hooks与Workflow结合的最佳实践——哪些检查应该用Hooks(确定性、快速)、哪些应该用Workflow agents(复杂、需推理)、交界在哪里？",
+          "团队协作时，QA流程的配置应该全部进.claude/AGENTS.md吗？还是部分进CLAUDE.md(约束层)、部分进Workflow(脚本层)？分工标准是什么？"
+        ],
+        "citations": [
+          {
+            "title": "Claude Code Dynamic Workflow API — 权威基线",
+            "url": "file:///data/workspace/liuyuanjian/workflow/evidence/01-workflow-api-ground-truth.md"
+          },
+          {
+            "title": "AI 工程化交付 Skill — SKILL.md",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md"
+          },
+          {
+            "title": "ai-engineering-delivery-zh 全局开发执行规则 — CLAUDE.md",
+            "url": "file:///data/workspace/liuyuanjian/CLAUDE.md"
+          },
+          {
+            "title": "Claude Code 官方文档 — Orchestrate subagents at scale with dynamic workflows",
+            "url": "https://code.claude.com/docs/en/workflows.md"
+          },
+          {
+            "title": "Claude Code 官方文档 — Extend Claude with skills",
+            "url": "https://code.claude.com/docs/en/skills.md"
+          },
+          {
+            "title": "Claude Code 官方文档 — Create custom subagents",
+            "url": "https://code.claude.com/docs/en/sub-agents.md"
+          },
+          {
+            "title": "Claude Code 官方文档 — How Claude Code works",
+            "url": "https://code.claude.com/docs/en/how-claude-code-works.md"
+          },
+          {
+            "title": "Claude Code 官方文档 — Hooks Reference",
+            "url": "https://code.claude.com/docs/en/hooks.md"
+          },
+          {
+            "title": "ai-engineering-delivery-zh 参考 — 风险审查清单",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/risk-review.md"
+          },
+          {
+            "title": "ai-engineering-delivery-zh 参考 — 交付清单",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/delivery-checklist.md"
+          },
+          {
+            "title": "ai-engineering-delivery-zh 参考 — 完整示例(支付退款功能)",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/worked-example.md"
+          },
+          {
+            "title": "CLAUDE.md Best Practices: 9 Rules for 2026 | TECHSY",
+            "url": "https://techsy.io/en/blog/claude-md-best-practices"
+          },
+          {
+            "title": "How Claude Code rules actually work | Substack",
+            "url": "https://joseparreogarcia.substack.com/p/how-claude-code-rules-actually-work"
+          }
+        ]
+      },
+      {
+        "stream": "claude-code-workflow-methodology-research",
+        "summary": "本次研究综合了 Claude Code 2.1.186 的 Workflow 工具官方规范、Claude Code 官方文档、ai-engineering-delivery-zh Skill 实现、以及社区最佳实践。核心成果包括：\n\n1. **权威概念定界**：Skill（方法/规范）、Subagent（专业工作者）、Workflow（脚本编排）、Hooks（确定性检查）、CLAUDE.md（项目约束）的精确定义与使用边界。\n\n2. **成本与规模控制**：硬约束（并发 min(16,cores-2)、总数 1000）、模型分层策略（Opus/Sonnet/Haiku 的成本权衡）、Token 预算的硬上限规则、上下文成本预测方法。\n\n3. **设计规范**：Pipeline vs Parallel 的选择标准、子代理质量模式、常见反模式识别与规避、Workflow 脚本的编写规范。\n\n4. **协作与可复用**：向负责人展示的标准形态、知识沉淀的 Skill 设计模式、最小可运行示例的结构。\n\n5. **排名评估体系**：效率/质量/规模控制/可维护性/知识沉淀 5 个维度的量化指标。\n\n研究区分了训练数据推测（inference）vs 官方文档（official-doc）vs 产品规范（product-spec）vs 现场验证（live-env），为每条关键论断标注了置信度与来源。",
+        "keyFindings": [
+          {
+            "claim": "Workflow 脚本必须是纯 JavaScript，不支持 TypeScript 类型注解、interface、泛型",
+            "evidence": "/data/workspace/liuyuanjian/workflow/evidence/01-workflow-api-ground-truth.md 第 9 行：'Workflow 脚本是**纯 JavaScript**（非 TypeScript）。类型注解 / interface / 泛型会解析失败。'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "单个 Workflow 的并发 agent 上限为 min(16, CPU 核数-2)，全生命周期 agent 总数上限 1000",
+            "evidence": "官方规范：'单 workflow 内并发 agent() 上限 = min(16, CPU核数-2)，超出排队。全生命周期 agent 总数上限 = 1000（防失控兜底）'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "pipeline() 与 parallel() 的本质区别：pipeline 无栅栏（item A 可在 stage 3 时 item B 还在 stage 1），parallel 是栅栏（等全部完成）",
+            "evidence": "官方规范：'pipeline(items, stage1, stage2, ...) 每个 item 独立穿过所有 stage，**stage 间无栅栏**。parallel(thunks) 并发执行一组，**是栅栏**（等全部完成）。'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "默认应使用 pipeline()；只有当 stage N 真的需要 stage N-1 的全量跨 item 结果（去重/合并/全集早退/相互比较）时才用 parallel()",
+            "evidence": "官方规范：'**默认用 pipeline()**；只有当 stage N 真的需要 stage N-1 的全量跨 item 结果时才用 parallel() 栅栏。'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "断点恢复机制：修改前的最长 agent() 前缀会秒速返回缓存结果，从首个改动或新增调用起实跑",
+            "evidence": "官方规范：'断点恢复：Workflow({scriptPath, resumeFromRunId})，未改动的最长 agent() 前缀瞬时返回缓存结果，从首个改动/新增调用起实跑。'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Token 预算的硬上限规则：budget.spent() 达到 budget.total 后再调 agent() 会抛错，不会静默截断",
+            "evidence": "官方规范：'是**硬上限**：spent() 达到 total 后再调 agent() 会抛错。'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "子代理在独立上下文运行，与主会话分离，回报压缩摘要以保护主会话的上下文",
+            "evidence": "官方文档 subagents.md：'Each subagent runs in its own context window with a custom system prompt, specific tool access, and independent permissions...subagent does that work in its own context and returns only the summary'",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "模型分层策略：Opus 用于需同时持有两份大文档的任务，Sonnet 用于范围清晰的有界任务，Haiku 用于结构化已定义的轻量任务",
+            "evidence": "官方最佳实践（code.claude.com/docs/en/best-practices）：'Use Opus for tasks that require holding two large documents in mind simultaneously. Use Sonnet for tasks with clear, bounded scope.'",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "ai-engineering-delivery-zh Skill 采用 8 阶段交付主干，每阶段对应一个 references 文件，实现了'按需加载'的 Token 成本控制",
+            "evidence": "/data/workspace/liuyuanjian/workflow/evidence/00-environment-scan.md 第 44-52 行详细列举了 8 个阶段及其对应的 references 文件",
+            "confidence": "high",
+            "sourceType": "live-env"
+          },
+          {
+            "claim": "新会话预加载约 20K tokens（系统提示、工具定义、CLAUDE.md），上下文用量超 60% 时性能开始下降",
+            "evidence": "官方最佳实践：'A fresh session consumes roughly 20,000 tokens, loading the system prompt, tool definitions, and CLAUDE.md before you type anything.'；'Do not let context exceed 60% capacity'",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "Workflow 多 agent 的总 token 成本可能是单会话成本的 4 倍（因需跨 item 合并结果）",
+            "evidence": "社区最佳实践（cloudzero.com/blog/claude-code-agents/）：'Sub-agents can run at four times the token usage of a single session, and merging outputs takes coordination'",
+            "confidence": "medium",
+            "sourceType": "inference"
+          },
+          {
+            "claim": "反模式识别：不必要的栅栏、为展示规模堆 agent、让实现者自评、静默截断 top-N/采样、简单计数器漏掉长尾",
+            "evidence": "官方规范（01-workflow-api-ground-truth.md）第 50-51 行列举了官方规范要点中的反模式",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "结构化输出（schema）的子代理会自动调用 StructuredOutput 工具，校验在工具层完成，不匹配会自动重试",
+            "evidence": "官方规范：'有 schema（JSON Schema）时，强制子代理调用 StructuredOutput 工具，返回**已校验对象**（无需自行解析；不匹配会自动重试）'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Workflow 脚本的 meta 必须是纯字面量，不能有变量、函数调用、展开运算、模板插值",
+            "evidence": "官方规范：'meta 必须是**纯字面量**（不能有变量、函数调用、展开运算、模板插值）'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "任务分级是'最重要的一步'：简单→直接处理；中等→按需读片段；复杂→读完整规则。分级决定了是否启动重流程",
+            "evidence": "/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md 第 12-20 行：'先给任务分级（最重要的一步）...本 Skill 的目标是：小任务**更轻**、风险任务**更严**'",
+            "confidence": "high",
+            "sourceType": "live-env"
+          },
+          {
+            "claim": "单次 pipeline()/parallel() 最多 4096 个 item，超出报错（非静默截断）",
+            "evidence": "官方规范：'单次 parallel()/pipeline() 最多 **4096** 个 item（超出报错，非静默截断）'",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "Hooks 与 CLAUDE.md 指导的根本区别：Hooks 100% 执行、无例外，CLAUDE.md 是顾问性的",
+            "evidence": "官方最佳实践：'Hooks run scripts automatically at specific points...Unlike CLAUDE.md instructions which are advisory, hooks are deterministic and guarantee the action happens.'",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "Workflow 脚本在后台隔离环境运行，中间结果存储在脚本变量而不是主会话上下文，用户会话保持响应",
+            "evidence": "官方文档 workflows.md：'A dynamic workflow is a JavaScript script that orchestrates subagents at scale...the runtime executes it in the background while your session stays responsive'",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          }
+        ],
+        "executableGuidance": [
+          "遵守 Workflow 脚本的纯 JavaScript 限制：移除所有 TypeScript 类型注解、interface、泛型；meta 必须是纯字面量（无函数调用、变量、展开、模板插值）",
+          "并发规划时严格遵守硬约束：agent 并发数 ≤ min(16, CPU-2)；规划全量 agent 数保持 ≤ 必需数量，绝不为展示规模而堆加；超过阈值时分阶段运行",
+          "Pipeline vs Parallel 的选择标准：默认用 pipeline()；仅当某 stage 需要前一 stage 的跨 item 全量结果（去重、合并、全集早退、相互比较）时才切换到 parallel()",
+          "Token 成本控制的三层策略：(1)新会话预留 ~20K tokens 基线；(2)上下文用量监控 <60%；(3)预测全量成本 = 小样本 agent 数 × 小样本单 agent token × 规模系数，超预算时回退至阶段分割/模型降级/pipeline 优化",
+          "模型分层路由规则：Opus 仅用于同时持有两份大文档的任务（如对抗验证、翻译）；Sonnet 用于范围清晰有界的修复/检查；Haiku 用于结构化轻量任务（扫描、摘要、分类）",
+          "Skill 设计遵循按需加载模式：references 文件按阶段分散（不全读一次），每个文件标注'何时用''涵盖范围'；正文仅保留 meta 信息，详细清单移入 references",
+          "子代理用于隔离探索/读文件的工作：当主任务需要大量文件读取时，委派给 Explore/general-purpose 子代理在独立上下文做探索，报告压缩摘要而非全部日志",
+          "质量验证的独立性原则：验证由新上下文/独立 agent 做，绝不让实现 agent 自评；采用对抗式验证（多个 skeptic 独立证伪）或多视角验证（每个验证者一个不同 lens）",
+          "Token 预算的硬上限用法：设置 budget.total 时必须明确预期消耗；脚本中定期调用 budget.remaining() 检查剩余配额；达到上限时自动报错而非静默截断",
+          "反模式识别与规避：(1)避免为展示规模无谓堆加 agent→measure baseline 成本；(2)避免静默截断→必须 log() 说明被丢弃的比例与原因；(3)避免简单计数器→采用分类汇总或 loop-until-dry；(4)避免一步到位规划→分阶段运行允许迭代改方案",
+          "断点恢复优化：修改前的最长 agent() 前缀会秒速返回缓存（同脚本同 args），充分利用这一机制进行快速迭代：边测试边改脚本，改动早期逻辑不会重跑后续 agent",
+          "向负责人展示的检查清单：(1)脚本可读性—人能看懂编排逻辑/阶段定义/资源分配；(2)成本可见性—各阶段 token/并发数/预算消耗；(3)可重现性—saved workflow + 相同 args = 同样结果；(4)缺陷标注—未验证路径/已知边界/风险声明明确；(5)复用易用性—参数化 args/文档清晰/不依赖环境变量",
+          "最小可运行示例的标准结构：3 阶段模式（分析→分类→执行）展示规模控制：阶段 1 用 Explore 子代理（只读）；阶段 2 纯代码编排（零 token）；阶段 3 按 item 并发修复，并发度 = min(问题数, 16)，模型按任务路由",
+          "上下文管理的持续监控：/workflows 中观察每个 agent 的单次 token 消耗；新会话预加载占 ~20K；保持总用量 <60% capacity；若接近上限则启用 /compact 压缩历史"
+        ],
+        "pitfalls": [
+          "TypeScript 类型陷阱：用 TypeScript 编写 Workflow 脚本（interface/泛型/类型注解）会导致解析失败，必须严格使用纯 JavaScript",
+          "并发误解：误认为 parallel() 总是比 pipeline() 快→实际上 parallel() 是栅栏，每次等全部完成，反而可能更慢；Pipeline 默认优于 parallel()",
+          "元数据陷阱：meta 中引入变量/函数调用/模板插值→脚本解析失败；meta 必须是纯字面量",
+          "断点恢复失效：修改后重跑时期望全部重新计算→实际上改动前的最长前缀会秒速返回缓存，过度期望完全重跑会导致对成本的错误估计",
+          "规模堆叠陷阱：为展示规模无谓增加 agent 数→降低成本效率、增加编排复杂度、超过必需阈值反而影响质量",
+          "自评陷阱：让同一 agent 既实现又验证→预期偏差，无法真正检验质量；必须用新上下文独立验证",
+          "静默截断陷阱：采样 top-N/按优先级截断而不说明→用户误以为覆盖全量，埋藏缺陷；必须 log() 说明被丢弃的比例与原因",
+          "一步规划陷阱：Workflow 一上来承诺全阶段→中途若需改方案成本高昂；分阶段运行更经济",
+          "上下文过载：在单会话中混杂多个无关任务→context 填充到 60% 以上性能下降；应 /clear 隔离或用 subagent 隔离探索",
+          "预算盲区：未设置 budget.total 或设置后不监控 budget.remaining()→无法控制成本，可能意外超支",
+          "模型选择失误：所有 agent 无差别用 Opus→成本 3-5 倍于分层路由；应根据任务复杂度选择 Haiku/Sonnet/Opus",
+          "Date/Random 陷阱：Workflow 脚本中用 Date.now() / Math.random() / new Date()→破坏断点恢复确定性，同脚本同 args 会产生不同结果",
+          "Schema 重复处理：手动解析 schema 返回值→冗余且易出错；应信任工具层已校验，直接用返回对象",
+          "单次 item 数超限：pipeline()/parallel() 的 item 数 > 4096→脚本报错；需提前分片处理",
+          "过度的 parallel() 栅栏：在纯 transform 逻辑（flatten/map/filter）用 parallel()→无必要的栅栏引入等待；应内嵌到 pipeline 的某个 stage",
+          "CLAUDE.md 冗长陷阱：过长的 CLAUDE.md 导致关键规则被忽视→应通过'何时用'分级精简，复杂规则移入 Skill",
+          "缺乏验证标准：Workflow 完成后未明确标注哪些路径未验证、已知风险→向负责人展示时留下质量问题",
+          "Subagent 上下文污染：exploration subagent 的大量日志回流主会话→失去隔离优势；应压缩摘要而非全量日志"
+        ],
+        "openQuestions": [
+          "当 ai-engineering-delivery-zh 的 8 阶段映射到 Workflow 时，是否应当逐阶段分别运行多个 Workflow（低成本、易中断恢复），还是统一为一个巨大 Workflow（编排集中、但断点恢复成本高）？",
+          "Workflow 的断点恢复对'caching key'的定义是什么？仅依赖 scriptPath + args，还是还考虑 agent prompt、model 版本等？",
+          "在实际大规模使用中（数百个 agent），parallel() 的栅栏等待时间是否会成为瓶颈？有没有官方优化建议？",
+          "Workflow 中的 agent() 返回值为 null（用户中途跳过或 API 错误）时的补救策略是什么？是否应该由脚本自动重试、还是依赖调用方处理？",
+          "模型分层策略在 Claude 3.5 Sonnet 的发布后是否需要调整？即 Sonnet 与 Opus 的成本差异变化是否影响现有分层建议？",
+          "budget.total 的计算是否基于输入 token 还是总 token（输入+输出）？超出上限时是否保留已经完成 agent 的结果，还是全部回滚？",
+          "当 Workflow 中多个 agent 并发读同一个大文件时，是否会被计为多次文件读 token，还是会进行跨 agent 的 read cache？",
+          "Workflow 的可靠性如何？若某个 agent 在运行中异常（非预期返回值、timeout 等），是否会导致整个 Workflow 失败，还是降级为该 item 返回 null？",
+          "目前没有找到官方的 Workflow 与 Agent SDK（Python/Node.js）的互操作示例，是否说明 Workflow 仅可用于 CLI/Desktop，无法从 SDK 调用？",
+          "如何量化验证覆盖率？即'验证了 X% 的代码路径'这个指标是否有官方的计算方法，还是项目自定义？"
+        ],
+        "citations": [
+          {
+            "title": "Claude Code Dynamic Workflow API 权威基线（产品规范）",
+            "url": "file:///data/workspace/liuyuanjian/workflow/evidence/01-workflow-api-ground-truth.md"
+          },
+          {
+            "title": "ai-engineering-delivery-zh Skill 主文档",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md"
+          },
+          {
+            "title": "ai-engineering-delivery-zh 完整示例（worked-example.md）",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/worked-example.md"
+          },
+          {
+            "title": "Claude Code Workflows 官方文档",
+            "url": "https://code.claude.com/docs/en/workflows.md"
+          },
+          {
+            "title": "Claude Code Subagents 官方文档",
+            "url": "https://code.claude.com/docs/en/subagents.md"
+          },
+          {
+            "title": "Claude Code Skills 官方文档",
+            "url": "https://code.claude.com/docs/en/skills.md"
+          },
+          {
+            "title": "Claude Code Best Practices 官方文档",
+            "url": "https://code.claude.com/docs/en/best-practices.md"
+          },
+          {
+            "title": "Claude Code Manage Costs 官方文档",
+            "url": "https://code.claude.com/docs/en/costs.md"
+          },
+          {
+            "title": "Claude Code 环境扫描报告（一手证据）",
+            "url": "file:///data/workspace/liuyuanjian/workflow/evidence/00-environment-scan.md"
+          },
+          {
+            "title": "ai-engineering-delivery-zh 交付清单（阶段 5-6）",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/delivery-checklist.md"
+          },
+          {
+            "title": "Claude Code Agents In 2026: Agent View, Subagents, Teams（社区实践）",
+            "url": "https://www.cloudzero.com/blog/claude-code-agents/"
+          },
+          {
+            "title": "Claude Code Workflow: Best Practices That Ship Code（社区指南）",
+            "url": "https://dev.to/galian/claude-code-workflow-best-practices-that-ship-code-na"
+          }
+        ]
+      },
+      {
+        "stream": "skill-conversion",
+        "summary": "把 ai-engineering-delivery-zh Skill(8 阶段业务优先交付主干 + 三级任务分级 + 按需加载 references + presubmit-scan 脚本)转化为可执行的工程交付 Workflow 时,正确的做法不是\"把 Skill 改写成 Workflow\",而是按职责分层复用:(1) Skill 仍是方法/清单/判断标准的单一事实源(每阶段的\"做什么/检查什么\"),Workflow 不内联清单而是让子代理在 prompt 里引用对应 reference;(2) Workflow 脚本只负责编排——把 8 阶段映射成 phase + pipeline 编排,并在分析/扫描/审查等环节按官方质量模式(对抗式证伪、多视角、loop-until-dry)派生子代理;(3) 重扫描(阶段2)、独立复核(阶段6/7)适合用子代理(独立上下文 + 工具隔离),其中\"不让实现者自评\"必须靠独立 skeptic 子代理实现;(4) presubmit-scan.sh 是确定性脚本,本质属于 Hooks(PreToolUse/Stop)的职责,但因 Workflow 脚本本体无文件系统访问,在 Workflow 内只能由子代理调用它,真正的\"提交前强制门禁\"应落到项目 .claude/settings.json 的 Hook;(5) 三级任务分级、提交禁令、范围纪律这类\"始终生效的固定约束\"属于 CLAUDE.md/项目规则,Workflow 不应重新定义。映射关系、保留/拆分判定、Hook 归属、CLAUDE.md 归属在 keyFindings 与 executableGuidance 中逐条给出。核心原则:复用而非复制——清单留在 Skill,编排进 Workflow,确定性门禁进 Hook,固定约束进 CLAUDE.md。",
+        "keyFindings": [
+          {
+            "claim": "Workflow 脚本是纯 JS、必须以纯字面量 export const meta 开头,meta.phases[].title 必须与脚本里 phase('...') 调用逐字一致;脚本体无文件系统/Node API 访问,但子代理有自己的工具(含 Read/Write/Bash/WebFetch)。",
+            "evidence": "01-workflow-api-ground-truth.md 第1节:脚本是纯 JavaScript;必须以 export const meta 开头且为纯字面量;meta.phases[].title 要与 phase('...') 逐字一致;无文件系统/Node API 访问(脚本本体),但子代理有自己的工具。",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "8 阶段应映射为 Workflow 的 phase()+pipeline() 编排骨架(默认 pipeline,只有需要全量跨 item 结果时才 parallel),而不是把阶段清单内联进脚本——脚本只编排,清单留在 Skill references。",
+            "evidence": "01-workflow-api-ground-truth.md 第3节:默认用 pipeline(),只有 stage N 真需要 stage N-1 全量跨 item 结果时才用 parallel() 栅栏;第2节 phase(title) 开启新阶段、后续 agent() 归入该组。SKILL.md 第34行:每一步链接到承载详细清单的参考文件、不要把清单内联。",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "阶段映射建议:阶段1理解+2扫描+3梳理+4验收→可合并为一个 phase('分析与扫描'),其中阶段2大型库扫描派 Explore/general-purpose 子代理;阶段5实现+6验证→phase('实现与验证');阶段7风险审查→phase('风险审查'),用独立 skeptic 子代理;阶段8复盘→phase('复盘沉淀')。SKILL.md 本身已建议阶段2派子代理。",
+            "evidence": "SKILL.md 第36行:当阶段2扫描跨越大型或不熟悉代码库时,把它派给 Explore/general-purpose 子代理,只保留结构化结果。ground-truth 第6节列出内置 Explore(只读广搜)、general-purpose(通用多步)、Plan(架构方案,只读)。",
+            "confidence": "high",
+            "sourceType": "inference"
+          },
+          {
+            "claim": "应保留为 Skill(方法/规范/清单)的:三级任务分级标准、四类需求分析模板(业务理解/系统扫描固定输出形状/各流梳理/验收标准模板)、交付清单、风险审查清单、复盘模板、术语映射指引、'何时该问 vs 直接做'唯一规则。这些是判断标准与清单,Skill 的按需加载特性使长 reference 在未用时几乎零成本。",
+            "evidence": "官方 skills 文档:Create a skill when a section of CLAUDE.md has grown into a procedure;Unlike CLAUDE.md content, a skill's body loads only when it's used, so long reference material costs almost nothing until you need it。SKILL.md 的 references/ 正是 requirement-analysis/delivery-checklist/risk-review/retrospective-template 四份清单。",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "应做成 Subagent(专业任务、独立上下文)的:阶段2现有系统扫描(读大量文件,只回结构化结果);阶段7风险审查的独立复核者(对抗式 skeptic);阶段6验证的独立验证者。官方明确子代理用于'侧任务会用搜索/日志/文件内容淹没主对话、且不会再引用'的场景,并能限制工具集。",
+            "evidence": "官方 sub-agents 文档:Use one when a side task would flood your main conversation with search results, logs, or file contents you won't reference again: the subagent does that work in its own context and returns only the summary;Preserve context / Enforce constraints by limiting which tools。ground-truth 第5节推荐对抗式验证(多个独立 skeptic 各自证伪)。",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "'不让实现者自评'这一硬规则,在 Workflow 里必须通过派生独立子代理来复核实现产物(实现 agent 与审查 agent 不是同一个),并优先用对抗式证伪/多视角 lens,而不是让同一个 agent 自己说'通过'。",
+            "evidence": "ground-truth 第5节质量模式:对抗式验证(多个独立 skeptic 各自尝试证伪)、多视角验证(每个验证者一个不同 lens);反模式明确列出'让实现者自评'。任务背景同样要求'重要结论需独立复核、不让实现者自评'。",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "presubmit-scan.sh 是只读确定性扫描(列改动文件 + 分两级标记密钥:高置信真实凭据→退出码2,疑似字段名→仅警告;调试日志、SQL 风险、合并冲突、项目规则文件)。其'确定性、在固定时机必须执行'的性质正是 Hooks 的职责,而非靠模型决定是否运行。",
+            "evidence": "presubmit-scan.sh 头部注释:read-only pre-submission risk scan;TWO-TIER secret detection,HIGH=exit 2,LOW=warn;NEVER modifies/stages/commits。官方 hooks 文档:Hooks enable deterministic checks without relying on the model to make decisions;exit code 2 = blocking error。官方 memory 文档:If the instruction is something that must run at a specific point such as before every commit, write it as a hook instead。",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "但 Workflow 脚本本体无文件系统访问,无法直接调用 presubmit-scan.sh;在 Workflow 内只能由子代理(有 Bash 工具)调用脚本并把退出码/发现回报。真正的'提交前强制门禁'应落在项目 .claude/settings.json 的 PreToolUse(matcher: Bash 命中 git commit)或 Stop Hook,使其独立于模型决策。",
+            "evidence": "ground-truth 第1节:无文件系统/Node API 访问(脚本本体);但子代理有自己的工具(含 Bash)。官方 hooks 文档:PreToolUse can block;配置在 .claude/settings.json,exit 2 阻断动作;示例为 PreToolUse matcher Bash 拦截危险命令。",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "应进 CLAUDE.md/项目规则(始终生效的固定事实与硬约束)的:三级任务复杂度分级触发条件、提交三禁(未确认不 git add/commit/push)、禁止 force-push、禁止提交 CLAUDE.md/AGENTS.md/yml、高风险域需人工复核、最小侵入/不无关重构。这些是'每个 session 都要持有'的事实与红线,而非按需加载的流程。",
+            "evidence": "官方 memory 文档:Keep CLAUDE.md to facts Claude should hold in every session: build commands, conventions, 'always do X' rules;If an entry is a multi-step procedure, move it to a skill。/data/workspace/liuyuanjian/CLAUDE.md 已含三级分级、提交禁令(第6/8/9条)、高风险人工复核(第16条)、低侵入(第18条)。",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "CLAUDE.md 是上下文(非强制),Hook 才是强制层;因此安全/破坏性/提交红线若要'无论模型怎么想都生效',应同时在 CLAUDE.md 写明意图、在 settings.json 用 permissions.deny + Hook 做技术强制。两者职责互补不可混淆。",
+            "evidence": "官方 memory 文档:Both loaded every session. Claude treats them as context, not enforced configuration. To block an action regardless of what Claude decides, use a PreToolUse hook instead;Settings rules are enforced by the client regardless of what Claude decides; CLAUDE.md shapes behavior but is not a hard enforcement layer。",
+            "confidence": "high",
+            "sourceType": "official-doc"
+          },
+          {
+            "claim": "Workflow 的断点恢复(resumeFromRunId,未改动的最长 agent() 前缀命中缓存)使分阶段交付可低成本迭代:改了某阶段子代理 prompt 只重跑该阶段及之后,前序扫描/分析结果复用——这正契合'先小范围再扩大'与'控制上下文与成本'。",
+            "evidence": "ground-truth 第4节:断点恢复 Workflow({scriptPath, resumeFromRunId}),未改动的最长 agent() 前缀瞬时返回缓存结果,从首个改动起实跑,同脚本同 args 100% 命中。",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          },
+          {
+            "claim": "budget(硬上限,spent() 达 total 后再调 agent() 抛错)可作为'控制成本'的确定性护栏;阶段子代理数量应保持克制(不为展示规模堆 agent),与任务背景的反模式一致。",
+            "evidence": "ground-truth 第2节:budget 是硬上限;第5节反模式:为展示规模堆 agent、不必要的栅栏、静默截断。任务背景:不为展示规模堆 agent;控制上下文与成本。",
+            "confidence": "high",
+            "sourceType": "product-spec"
+          }
+        ],
+        "executableGuidance": [
+          "阶段→phase 映射落地:在 Workflow 脚本里用 export const meta = { name, description, phases: [{title:'分析与扫描'},{title:'实现与验证'},{title:'风险审查'},{title:'复盘沉淀'}] };脚本体里 phase('分析与扫描') 等调用的字符串必须与 meta.phases[].title 逐字一致(ground-truth 第1节硬约束)。把原 8 阶段折叠进这 4 个 phase:1-4→分析与扫描,5-6→实现与验证,7→风险审查,8→复盘沉淀。",
+          "编排默认用 pipeline:多功能/多模块批量交付时用 pipeline(items, scanStage, planImplStage, verifyStage, reviewStage),stage 间无栅栏、墙钟=最慢单条链;只有需要跨 item 全量汇总(如统一去重风险清单)时才在该 stage 用 parallel() 栅栏(ground-truth 第3节)。单功能交付则顺序 await 各 phase 的 agent() 即可。",
+          "清单不内联进脚本:每个阶段子代理的 prompt 里写明'按 ai-engineering-delivery-zh Skill 的 references/<对应文件> 的清单与输出形状执行',让子代理 Read 该 reference,而不是把 requirement-analysis/risk-review 的清单复制进 JS。Skill 仍是单一事实源,Workflow 只编排(SKILL.md 第34行原则)。",
+          "阶段2扫描做成子代理:agent(扫描 prompt, {agentType:'Explore', phase:'分析与扫描', label:'系统扫描'}),要求只回 ground-truth 第2节式结构化结果(已确认事实/合理推断/待确认/约束/影响),把大量文件内容挡在主对话外(官方 sub-agents:returns only the summary)。",
+          "阶段7独立复核做成对抗式子代理:派 2-3 个独立 skeptic agent(各带 schema 强制结构化结论),每个只负责证伪一个维度(幂等/一致性/状态机/权限),多数证伪则否决——绝不让实现该功能的同一 agent 自评(ground-truth 第5节质量模式 + 反模式'让实现者自评')。用 schema 让校验在工具层完成、不匹配自动重试。",
+          "presubmit-scan 的双轨落地:(A) 在 Workflow 内,提交前阶段派一个带 Bash 工具的子代理运行 bash <skill-dir>/scripts/presubmit-scan.sh --staged 并回报退出码与发现(脚本本体不能在 Workflow JS 里跑,因脚本无文件系统访问)。(B) 真正强制门禁写进项目 .claude/settings.json 的 PreToolUse(matcher 'Bash', if 命中 git commit)调用该脚本,exit 2 阻断提交(官方 hooks:deterministic、exit 2 blocks)。",
+          "CLAUDE.md 只放固定约束:把三级任务分级触发条件、提交三禁/禁 force-push/禁提交 CLAUDE.md·AGENTS.md·yml、高风险域人工复核、最小侵入纪律保留在 CLAUDE.md/项目规则;Workflow 与 Skill 都不重新定义这些,只引用(官方 memory:facts every session vs procedure→skill)。需要硬强制的红线另在 settings.json 用 permissions.deny + Hook 实现。",
+          "用断点恢复迭代:首跑后保存返回的 scriptPath,迭代时只改对应阶段子代理的 prompt,再 Workflow({scriptPath, resumeFromRunId}) 重跑,前序未改动阶段命中缓存,实现'先小范围跑通再扩大'且省 token(ground-truth 第4节)。",
+          "成本护栏:给 Workflow 传 budget.total 作为本轮 token 硬上限;子代理数量按需而非按规模(每阶段 1 个扫描/实现 + 2-3 个独立复核足够),避免 ground-truth 第5节反模式;被丢弃的覆盖面用 log() 说明,不静默截断。",
+          "时间戳/随机性绕坑:Workflow 脚本里禁用 Date.now()/new Date()/Math.random()(会破坏断点恢复并抛错);复盘阶段需要时间戳就从 args 传入或在 workflow 返回后再打戳,需要区分多个同类子代理就用 index 变 label(ground-truth 第1节)。"
+        ],
+        "pitfalls": [
+          "把 Skill 的清单(requirement-analysis/risk-review 等)复制进 Workflow JS——造成双份事实源、维护漂移。正确做法是脚本只编排、子代理 prompt 引用 reference。",
+          "以为可以在 Workflow 脚本本体里直接跑 presubmit-scan.sh——脚本本体无文件系统/Node 访问,只能由子代理(有 Bash)调用;真正的提交前强制要落到 Hook。",
+          "把 presubmit 当成'Skill 里的可选步骤'就以为安全——它仅供参考、要逐项核实,且模型可能跳过;确定性门禁必须由 Hook(exit 2)强制,不能依赖模型决定是否运行。",
+          "把固定约束(分级标准、提交红线)写进 Workflow 脚本或子代理 prompt——这些应在 CLAUDE.md/settings.json,否则每次编排都要重述且无法跨任务复用。",
+          "误把 CLAUDE.md 当强制层:CLAUDE.md 是上下文非强制,安全/破坏性红线若要无条件生效必须用 Hook/permissions.deny。",
+          "在 Workflow 里让同一实现子代理自评'通过'——违反'不让实现者自评',必须独立 skeptic 复核。",
+          "meta.phases[].title 与脚本里 phase('...') 不一致——会解析/运行失败(ground-truth 硬约束)。",
+          "为'展示规模'堆 agent 或滥用 parallel() 栅栏——既增成本又踩 ground-truth 反模式;默认 pipeline,栅栏仅用于真需要全量跨 item 汇总时。",
+          "自定义 agentType(项目 .claude/agents/*.md)只在从该项目目录启动时进注册表;若 Workflow 要任意目录可跑,应用内置 agentType(Explore/general-purpose/Plan)或省略,把角色专长写进 prompt(ground-truth 第6节注意事项)。",
+          "在 Workflow 脚本里用 Date.now()/Math.random()/无参 new Date()——会抛错并破坏断点恢复。"
+        ],
+        "openQuestions": [
+          "项目是否已有 .claude/settings.json 以及现有 Hook 配置——决定 presubmit 门禁是新增 PreToolUse 还是合入现有 Stop/PostToolUse,需读取实际 settings 后确认(本次未读 settings.json)。",
+          "presubmit-scan.sh 的安装路径在团队机器上是否稳定(SKILL.md 假设 ~/.claude/skills/... 或 skill 完整安装路径);若用 Hook 调用需确定一个团队统一的绝对路径或用 ${CLAUDE_PROJECT_DIR} 相对定位。",
+          "团队是否需要把工程交付子代理做成可复用的自定义 agentType(.claude/agents/),还是统一用内置 agentType+prompt;前者跨目录不可用、后者更可移植,取决于团队是否固定从仓库根启动。",
+          "8 阶段折叠为 4 个 phase 是否符合团队展示/排名评估的粒度需求——若评估需要按 8 阶段逐项打分,可保留 8 个 phase 但接受更细的进度组开销,需与负责人确认评估口径。",
+          "budget.total 的合理取值需结合团队实际 token 预算与单次交付规模标定,本次无运行数据。"
+        ],
+        "citations": [
+          {
+            "title": "Claude Code Dynamic Workflow API 权威基线(本机 2.1.186 产品内规范)",
+            "url": "file:///data/workspace/liuyuanjian/workflow/evidence/01-workflow-api-ground-truth.md"
+          },
+          {
+            "title": "ai-engineering-delivery-zh SKILL.md(现有 Skill 主体)",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md"
+          },
+          {
+            "title": "ai-engineering-delivery-zh references/requirement-analysis.md(阶段1-4 清单)",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/requirement-analysis.md"
+          },
+          {
+            "title": "ai-engineering-delivery-zh references/delivery-checklist.md(阶段5-6 清单)",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/delivery-checklist.md"
+          },
+          {
+            "title": "ai-engineering-delivery-zh references/risk-review.md(阶段7 风险审查)",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/risk-review.md"
+          },
+          {
+            "title": "ai-engineering-delivery-zh references/retrospective-template.md(阶段8 复盘)",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/retrospective-template.md"
+          },
+          {
+            "title": "ai-engineering-delivery-zh scripts/presubmit-scan.sh(确定性提交前扫描)",
+            "url": "file:///data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/scripts/presubmit-scan.sh"
+          },
+          {
+            "title": "Create custom subagents — Claude Code Docs",
+            "url": "https://code.claude.com/docs/en/sub-agents"
+          },
+          {
+            "title": "Hooks in Claude Code — Claude Code Docs",
+            "url": "https://code.claude.com/docs/en/hooks"
+          },
+          {
+            "title": "Extend Claude with skills (Agent Skills) — Claude Code Docs",
+            "url": "https://code.claude.com/docs/en/skills"
+          },
+          {
+            "title": "How Claude remembers your project (CLAUDE.md / memory) — Claude Code Docs",
+            "url": "https://code.claude.com/docs/en/memory"
+          }
+        ]
+      }
+    ],
+    "reviews": [
+      {
+        "lens": "completeness-and-evidence（完整性与证据）：交叉核对 6 路研究与一手锚点 evidence/01-workflow-api-ground-truth.md、SKILL.md、presubmit-scan.sh，重点查内容遗漏、概念混淆、把推测当事实、缺官方证据、confidence/sourceType 标注不实。",
+        "issues": [
+          {
+            "target": "Stream 5 (claude-code-workflow-methodology-research) — keyFinding 'Workflow 多 agent 的总 token 成本可能是单会话成本的 4 倍'",
+            "severity": "P1",
+            "description": "该论断 sourceType 标为 inference、confidence=medium，但引用了一篇社区博客(cloudzero.com)作为 evidence，把社区博文的具体数字(4x)当成定量结论。这是把未验证的第三方推测当作可量化事实。一手锚点 01-workflow-api-ground-truth.md 完全没有任何 token 成本倍率数据，无法支撑。社区博客谈的是通用 sub-agents，不是 Claude Code Workflow 的实测。",
+            "recommendation": "降级为 openQuestion 或明确标注'社区单一来源、未经一手验证、不可作为成本规划依据'。删除具体倍数，改为定性'多 agent 成本显著高于单会话，需在小样本试跑实测'。"
+          },
+          {
+            "target": "Stream 6 (skill-conversion) — keyFinding 关于 'meta.phases[].title 与 phase() 不一致会解析/运行失败'",
+            "severity": "P2",
+            "description": "锚点原文(第12行)只说'要与脚本里 phase() 调用的标题逐字一致'，并未说明不一致的后果是'解析失败/运行失败'。Stream 6 与 Stream 2 的 pitfalls 都把后果断言为'解析失败'或'运行失败/进度展示混乱'，这是对规范未明确说明的后果的推测，且两流给出的后果还不一致(一个说失败、一个说进度混乱)。",
+            "recommendation": "把后果改为'规范要求逐字一致(原因未在规范中明示后果)'，或标注后果为 inference 而非 product-spec。"
+          },
+          {
+            "target": "Stream 3 & Stream 5 — 多条 official-doc 数字型论断(新会话约 20K tokens、上下文>60% 性能下降、CLAUDE.md 首 200 行或 25KB、Hooks JSON 上限 10KB、disable-model-invocation)",
+            "severity": "P1",
+            "description": "这些数字被标为 official-doc / high confidence，但均来自网络文档，不在本机一手锚点中，本环境无法核验其现行准确性。锚点文件第5行明确要求'凡涉及 Workflow 脚本 API 的结论必须与本文件一致；与网络旧文档冲突以本文件为准'。把网络文档的具体阈值标成 high 而无一手佐证，存在'confidence 标注偏高'的风险，尤其 25KB/200行/10KB/60% 这类精确阈值容易随版本变化。",
+            "recommendation": "对所有非锚点、来自网络的精确数字统一降一档 confidence(high→medium)，并注明'网络文档来源，未经本机一手验证，可能随版本变化'。区分'Workflow API(有一手锚点)'与'周边产品行为(仅网络来源)'两类证据强度。"
+          },
+          {
+            "target": "Stream 1 — keyFinding 把 'Skill 是模型级知识库/按需加载' 与 ai-engineering-delivery-zh 的 sourceType 标为 official-doc",
+            "severity": "P2",
+            "description": "'ai-engineering-delivery-zh 现有 Skill 采用 8 阶段交付主干'这条 evidence 实为读取本机 SKILL.md(live-env/一手文件)，却标为 official-doc。sourceType 归类错误,混淆了'Anthropic 官方文档'与'本机现有资产文件'。Stream 3/5 对同类内容正确标为 live-env，存在跨流标注不一致。",
+            "recommendation": "凡 evidence 来源是本机 SKILL.md/references/scripts/evidence 的，统一标 live-env(或 product-asset)，不要标 official-doc。"
+          },
+          {
+            "target": "Stream 4 (claude-guide-workflow-qa) — keyFinding '对抗式验证数量建议:低风险2-3/中4-5/高6-8个skeptic，多数表决'",
+            "severity": "P2",
+            "description": "该具体数字区间 sourceType 已诚实标为 inference/medium，但 evidence 把它挂靠到 risk-review.md 的'高风险域列表'，给人一种有清单支撑的错觉。锚点只说'多个独立 skeptic、多数证伪则否决'，没有任何 2-3/4-5/6-8 的数量分级。这是把纯经验估算包装得像有依据。",
+            "recommendation": "保留为 inference，但 evidence 字段如实写'数量分级为本研究经验推断，规范/Skill 均无此数字'，避免读者误以为是规范建议。"
+          },
+          {
+            "target": "全部 6 流 — keyFindings 的 confidence 几乎全为 high",
+            "severity": "P1",
+            "description": "6 流共数十条 keyFinding，绝大多数标 high，仅极少数 medium。其中混入了大量 inference 型综合判断(如'本质区别在于谁持有决策权'、'8 阶段折叠为 4 phase 的映射建议'、'阶段映射建议')却也标 high。把研究者自己的设计推断与一手 API 事实用同一 confidence 等级，削弱了 confidence 标注的区分价值,属于'confidence 标注不实/虚高'。",
+            "recommendation": "建立两档区分:直接复述锚点/官方文档原文=high;研究者综合/设计/映射建议=medium 且 sourceType=inference。至少把所有'映射建议''本质区别''数量建议'类条目从 high 下调。"
+          },
+          {
+            "target": "跨流普遍 — 缺少对 'workflow() 仅一层嵌套' 在 8 阶段编排落地的影响分析",
+            "severity": "P2",
+            "description": "多个 openQuestion 反复问'多层编排很常见,是否支持递归 workflow'，但没有任何一流把'仅一层嵌套'这一硬约束与'8 阶段拆成多个子 workflow 串联'的方案做完整性碰撞——若把每阶段做成独立 workflow 再用父 workflow 串起来,父调子已占一层,子内不能再调 workflow。这是落地时的真实阻塞点,属内容遗漏。",
+            "recommendation": "补一条明确结论:8 阶段编排应在'单 workflow 内用 phase()/pipeline() 实现',不要做成'父 workflow 串多个子 workflow',以免触碰一层嵌套上限。"
+          },
+          {
+            "target": "Stream 2/3/4/5 — 关于 budget.total=null → remaining=Infinity 与超限抛错的边界",
+            "severity": "P2",
+            "description": "多流正确引用'spent() 达 total 后抛错'，但都遗漏了一个完整性点:抛错发生在'再调 agent()'时,即已在途/已完成的 agent 结果不受影响,而非整轮回滚。Stream 5 的 openQuestion 才提出'超出是否回滚',说明该行为未被确证却也未在结论中留白。属于把'未确证的回滚语义'隐含略过。",
+            "recommendation": "在成本护栏指引中明确:budget 超限是'下一次 agent() 调用点抛错',已得结果保留;脚本应在调 agent 前 check remaining() 主动降级,不要依赖抛错兜底。回滚语义未经验证应如实留白。"
+          },
+          {
+            "target": "Stream 6 — presubmit-scan 的 Hook 落地缺 .claude/settings.json 现状核查",
+            "severity": "P2",
+            "description": "Stream 6 自己在 openQuestion 承认'本次未读 settings.json',却在 keyFinding/executableGuidance 中以 high confidence 给出'应落到 PreToolUse(matcher Bash 命中 git commit)'的具体配置方案。给出未经现状核查的具体 Hook 配置,属于把方案推断当可执行结论。此外 PreToolUse 匹配 git commit 还需考虑 commit 命令的多种写法(git commit / git -C / 别名),覆盖完整性存疑。",
+            "recommendation": "把 Hook 具体配置降为'建议方案,需先读取项目实际 settings.json 确认',并提示 matcher 对 git commit 各种调用形式的覆盖问题。"
+          }
+        ],
+        "conflicts": [
+          "Stream 6 把 8 阶段映射为 4 个 phase(1-4合并/5-6合并/7/8)，而 Stream 1/2/3/5 多处仍以'8 阶段'为编排单位讨论(如 phases 设计、逐阶段子代理)。两种粒度并存且未协调，落地时 meta.phases 到底是 4 还是 8 没有统一结论；Stream 6 自己也在 openQuestion 承认'评估是否需按 8 阶段逐项打分'未定。",
+          "'phase().title 与 phase() 不一致'的后果:Stream 6 称'解析/运行失败'，Stream 2 pitfalls 称'进度展示混乱'。两者对同一未明确事项给出不同的确定性后果。",
+          "sourceType 标注跨流不一致:同样是读取本机 SKILL.md 的内容，Stream 1 标 official-doc，Stream 3/5 标 live-env。同一类证据强度被标成不同等级。",
+          "对'presubmit-scan 在 Workflow 内的角色':Stream 3 把 presubmit/Hooks 列为可在 Workflow 端到端示例中演示的一环(SessionEnd/PostToolUse hook)，Stream 6 则明确论证'Workflow 脚本本体无文件系统访问,脚本本体不能跑 presubmit,只能由子代理调用,真正门禁须落 Hook'。Stream 3 的'端到端工作流含 Hooks 验证'表述与 Stream 6 的隔离结论存在张力,易让读者以为 Workflow 脚本能直接挂 Hook。"
+        ],
+        "overengineeringFlags": [
+          "Stream 4 给出从'第一步'到'第十步'的十步落地法 + 4象限/5维度评估体系 + skeptic 数量按风险三档分级,对'最小可运行示例'这一目标明显过重。锚点与项目 CLAUDE.md 都强调'不为展示规模堆,先最小闭环',十步法本身有过度流程化倾向。",
+          "多流提出'质量评价四象限/五维度排名体系'(成本×效果、复杂度×可维护性、可重复性、可观测性...)，但目标只是'团队分享 + 最小示例'。在没有真实运行数据前先搭一套多维量化评估,属于为评估而评估的过度设计。",
+          "Stream 6 主张为工程交付做自定义 agentType(.claude/agents/)的同时又论证内置 agentType 更可移植,引入了'是否自定义 agentType'这一额外维度的纠结,对最小示例非必要;锚点已建议任意目录可跑就用内置 agentType,无需展开自定义路线。",
+          "对抗式验证 skeptic 数量上探到'高风险 6-8 个'，与项目 CLAUDE.md'不为展示规模堆 agent'、并发上限 min(16,核-2) 的克制取向相悖,6-8 个 skeptic 对单个结论属过度编排。"
+        ],
+        "costConcerns": [
+          "Stream 4 建议高风险任务派 6-8 个 skeptic 子代理对单一结论证伪;叠加 8 阶段/多 item pipeline,极易逼近并发上限 min(16,CPU-2) 并快速消耗 budget,与'控制成本'目标冲突,缺少 token 预估。",
+          "多流推荐'评审团(N方案+并行打分)+对抗式多 skeptic+多视角+loop-until-dry'多种质量模式叠加,若在一个交付里全开,agent 数量与 token 成本会成倍增长;研究未给出'按风险分级只开必要模式'的成本约束建议。",
+          "Stream 5 引用'多 agent 4x token'数字虽不可靠,但确实指向真实成本风险,而各流的 executableGuidance 普遍缺少'先 narrow slice 试跑估算单 item token 再全量'的强制前置步骤(仅个别提及),成本预估未被当作硬门槛。",
+          "loop-until-dry 若无严格最大轮次与干燥判据(部分流给了 N=3/K=2,部分流只定性描述),在评审-返工循环中有 token 失控风险。"
+        ],
+        "unverifiedClaims": [
+          "'新会话预加载约 20K tokens'(Stream 5,标 official-doc/high) —— 不在一手锚点,来自网络文档,本环境无法核验,数字可能随版本变化。",
+          "'上下文用量超 60% 时性能开始下降 / 不要让 context 超 60%'(Stream 5,high) —— 同上,网络来源精确阈值,无一手佐证。",
+          "'CLAUDE.md 首 200 行或 25KB 自动加载'(Stream 3,official-doc/high) —— 网络文档数字,锚点无;25KB/200 行属易变阈值,confidence 偏高。",
+          "'Hooks 返回 JSON 上限 10KB,超出截断'(Stream 3,official-doc/high) —— 网络文档,无一手验证。",
+          "'Workflow 多 agent 总 token 约为单会话 4 倍'(Stream 5) —— 单一社区博客,通用 sub-agent 语境,非 Claude Code Workflow 实测。",
+          "'对抗式验证 skeptic 数量 低2-3/中4-5/高6-8'(Stream 4,已标 inference) —— 纯经验推断,规范与 Skill 均无此数字。",
+          "'8 阶段→4 phase 的具体折叠映射'(Stream 6,标 high/inference 混用) —— 研究者设计建议,非规范规定,confidence 应为 medium。",
+          "'presubmit 应配 PreToolUse matcher=Bash 命中 git commit'(Stream 6) —— 未读取项目实际 settings.json 即给出的具体配置,属未经现状核查的方案。",
+          "'meta.phases title 不一致 → 解析/运行失败'(Stream 2/6) —— 锚点只要求逐字一致,未说明后果,后果为推测。",
+          "'budget 超限是否整轮回滚'—— 各流均未确证,Stream 5 仅作为 openQuestion 提出,不应被任何结论隐含假定。"
+        ],
+        "strengths": [
+          "对一手锚点(01-workflow-api-ground-truth.md)的核心 API 事实复述高度准确且可逐条核验:pipeline 无栅栏/parallel 栅栏、默认 pipeline、并发 min(16,核-2)、总数 1000、单次 4096 item、schema 自动重试、null + filter(Boolean)、budget 硬上限抛错、Date.now()/Math.random() 抛错、仅一层嵌套、内置 agentType 列表——这些 6 流几乎零错误,product-spec 标注属实。",
+          "正确且一致地建立了 Skill/Subagent/Workflow/Hooks/CLAUDE.md 的职责边界(知识库/独立执行者/编排脚本/确定性拦截/项目约束),并普遍强调'复用而非复制、清单留 Skill、编排进 Workflow、门禁进 Hook、约束进 CLAUDE.md',与项目 CLAUDE.md 设计意图吻合。",
+          "Stream 6 对 presubmit-scan.sh 的描述(只读、两级密钥检测、HIGH→exit 2、LOW→警告、本体无文件系统访问须由子代理调用)经核对脚本头部完全属实,且准确推导出'Workflow 脚本本体不能直接跑脚本'这一隔离约束,是全流中证据最扎实的一条。",
+          "反模式总结(不必要栅栏、为展示规模堆 agent、让实现者自评、静默截断 top-N、简单计数器漏长尾)忠实于锚点第5节,并被多流转化为可操作纪律。",
+          "多数流诚实地把数量建议、映射方案等标为 inference 并列入 openQuestion,体现了对'推断 vs 事实'的基本区分意识(尽管 confidence 等级仍偏高)。",
+          "openQuestions 普遍质量高、切中真实未决点(自定义 agentType 跨目录加载、断点恢复对 worktree 的处理、budget 是否含子 workflow、超限回滚语义),为后续一手验证指明了方向。"
+        ]
+      },
+      {
+        "lens": "executability-and-overdesign（可执行性与过度设计）：以 evidence/01-workflow-api-ground-truth.md 为唯一 API 事实锚点，逐项检查 6 路研究中不可执行/含糊的建议、过度设计、阶段缺少明确输入输出完成标准、与 ground-truth API 不符之处。",
+        "issues": [
+          {
+            "target": "stream2 pitfalls / executableGuidance：'每个 stage 都用 .filter(Boolean) 过滤'",
+            "severity": "P0",
+            "description": "该建议与 ground-truth §2 的 pipeline 语义不符。pipeline stage 回调签名是 (prevResult, originalItem, index)，每次只处理单个 item 的 prevResult（标量），不是数组；.filter(Boolean) 只能作用于 pipeline() 整体返回的结果数组。把 .filter(Boolean) 写进每个 stage 内部会对一个非数组对象调用 filter 而报错，属于直接误导落地。",
+            "recommendation": "改为：stage 内部用 if(!prev) return null 显式短路；只在 pipeline() 整体返回后对最终数组做 .filter(Boolean)。明确区分 stage 级（标量）与 pipeline 级（数组）。"
+          },
+          {
+            "target": "stream3 executableGuidance：'配置 disable-model-invocation: true（在 .claude/settings.json 的 skillOverrides）'",
+            "severity": "P0",
+            "description": "skillOverrides 这一 settings.json 配置键在 ground-truth 与本机规范中均无证据，疑为臆造。ground-truth 仅描述 Workflow/agent/budget/agentType，未涉及 skill 的 settings.json 开关键名。该建议被列为可直接照抄的落地步骤，照抄会失败。",
+            "recommendation": "删除具体键名，或降级为 openQuestion 并标注'需读取本机 Claude Code 实际 settings schema 确认'。disable-model-invocation 应以 SKILL.md frontmatter 字段形式表述，而非杜撰 settings.json 路径。"
+          },
+          {
+            "target": "stream6 executableGuidance：'预测全量成本 = 小样本 agent 数 × 小样本单 agent token × 规模系数'，及 '新会话预留 ~20K tokens''上下文 <60% capacity''4 倍 token'",
+            "severity": "P1",
+            "description": "该成本公式为自创，'规模系数'未定义、不可计算，不具可执行性。20K/60%/4x 三个阈值来源是社区博客与 inference（stream5/6 自己标注 medium/inference），却在 executableGuidance 中以硬指标形式给出，缺乏 ground-truth 支撑，且与本机实际并发上限 min(16,CPU-2) 无关联。",
+            "recommendation": "将成本预测降级为'先在小样本（如 3-5 item）试跑，记录实际 spent()，再线性外推并留 30% 余量'，且仅用 ground-truth 提供的 budget.spent()/remaining() 作为唯一可观测量；删除未经证实的 20K/60%/4x 绝对阈值或明确标注为'外部经验值，未在本环境验证'。"
+          },
+          {
+            "target": "stream4/stream5：阶段缺少明确输入/输出/完成标准的'干燥判据'与'多数表决'阈值",
+            "severity": "P1",
+            "description": "两路都提出 loop-until-dry 与对抗式表决，但完成标准多为含糊定性（'连续K轮无新增''多数证伪则否决'），K、N、表决比例多处不一致（stream4 给 K=2，stream5 给 N=3/5、'findings重复率<10%''前进至少M%'，M 未定义）。ground-truth §5 只给出模式名，未给数值，这些数值均属推断却以可执行规则呈现，落地时无法判定'是否达标'。",
+            "recommendation": "为示例固定一组可观测、可复现的退出条件（如：最大 3 轮；某轮新增 P0/P1 findings 数=0 即停；表决=独立 skeptic 中 >=2/3 标 FAIL 则否决），并显式标注这些数值是'示例缺省值，非 API 约束'。删除 M%、重复率<10% 等无法稳定测量的指标。"
+          },
+          {
+            "target": "stream3 executableGuidance：'await Read(\"evidence/01-...md\")' 在 Workflow 脚本体中读文件",
+            "severity": "P1",
+            "description": "与 ground-truth §1 冲突：Workflow 脚本本体无文件系统/Node API 访问，不能直接 Read。只有子代理有 Read 工具。stream3 多处把 'evidence 文件与脚本绑定''脚本运行时 await Read(...)' 当作可执行手段，会直接抛错。stream6 也有类似'脚本动态 Read'表述。",
+            "recommendation": "改为：由 agent(prompt,{agentType:'Explore'}) 的子代理去 Read evidence 文件并返回结构化摘要；脚本本体只持有路径字符串与子代理返回值。stream6 的'脚本运行时动态 Read 阶段文件'同样需改为子代理代劳。"
+          },
+          {
+            "target": "stream5 executableGuidance 第八步：'脚本 <500 tokens''可被同事 15 分钟内上手'",
+            "severity": "P2",
+            "description": "'<500 tokens 总脚本'与'15 分钟内理解'是无依据的硬性数字门槛，既不可由 API 测量，也容易与'演示 2-3 轮评审循环 + 2 个独立 skeptic + 多视角'的功能要求矛盾（这些功能本身写不进 500 tokens）。属自相矛盾的不可执行约束。",
+            "recommendation": "删除 token/分钟硬数字，改为定性目标：'脚本聚焦单一示例、阶段清晰、无关逻辑外移到 Skill/子代理 prompt'。"
+          },
+          {
+            "target": "stream1/stream6：把 ai-engineering-delivery-zh 的 8 阶段映射到 Workflow 的粒度",
+            "severity": "P2",
+            "description": "stream6 倾向逐阶段产出 02/03 等多份 evidence 文件并暗示一个大 Workflow 串 8 阶段；skill-conversion 流（第6路）则给出更克制的'折叠为 4 个 phase'方案。两者并存但 stream6 未交代'8 阶段是否每阶段都需独立 phase/agent'，存在按阶段堆 phase 的过度结构化倾向，与 ground-truth §5 反模式'为展示规模堆 agent'相邻。",
+            "recommendation": "统一采纳第6路的折叠方案（1-4→分析与扫描、5-6→实现与验证、7→风险审查、8→复盘），并把'是否细分到 8 个 phase'交由评估口径决定（已在第6路 openQuestion 提出），避免默认重结构。"
+          }
+        ],
+        "conflicts": [
+          "pipeline 结果过滤位置：stream2 称'每个 stage 都 .filter(Boolean)'，而 ground-truth §2 及 stream1 的正确表述是'对 pipeline 整体结果用 .filter(Boolean)、stage 抛错该 item 落 null'。两者直接冲突，stream2 表述错误。",
+          "脚本能否直接读文件：stream3/stream6 主张'脚本运行时 await Read evidence 文件'，与 ground-truth §1 及第6路（skill-conversion）'脚本本体无文件系统访问、只能由子代理 Read'明确冲突；第6路正确。",
+          "8 阶段映射粒度：stream6 倾向保留/逐阶段产物与较重结构，第6路主张折叠为 4 个 phase 并质疑细分必要性；两路对'是否每阶段一个 phase'结论不一致。",
+          "skeptic 数量与退出阈值：stream4（低2-3/中4-5/高6-8，K=2）与 stream5（N=3/5、重复率<10%、M%）给出彼此不一致且无 ground-truth 支撑的数值，跨流不收敛。",
+          "budget 语义细节：stream4 与 stream6 在 openQuestion 中对'budget.total 是输入 token 还是总 token''超限是否回滚已完成 agent'各自存疑，ground-truth 仅定义为硬上限 token 目标，未澄清，两路提出但都未解决——属共同未决而非已确证。"
+        ],
+        "overengineeringFlags": [
+          "stream4/stream5 提出高风险任务 6-8 个 skeptic + 多数表决 + 多视角 + 评审团 + loop-until-dry 叠加，单个示例同时上多种质量模式，直接触碰 ground-truth §5 反模式'为展示规模堆 agent'。最小示例应只演示 1-2 种模式。",
+          "stream5 给出十步落地流程（第一步到第十步）+ 五维排名 + 干燥判据 + timeout + effort 调参，对'最小可运行示例'这一目标而言流程本身过重，违背其自身倡导的'轻装上阵'。",
+          "stream6 倾向为 8 阶段各自产出 02/03/04 多份 evidence 文件并保留 8 phase，结构化产物多于示例需要，存在文档/阶段膨胀。",
+          "stream1/stream3 的'四象限质量评价''五维量化指标''可观测性/可重复性/可维护性矩阵'对一个方法论分享而言属提前体系化，缺少与具体 API 可测量量（budget.spent/remaining、agent 数）的绑定，偏理论堆砌。",
+          "多处建议为简单/中等任务也准备完整 Workflow 模板与 Hook 配置，与各流自身强调的'简单任务不启动重流程'分级原则相左。"
+        ],
+        "costConcerns": [
+          "stream6 的成本预测公式含未定义'规模系数'，无法据此做预算控制，反而给出虚假精度；唯一可靠的成本观测应是 ground-truth 的 budget.spent()/remaining()。",
+          "stream4/stream5 的高风险 6-8 skeptic 叠加多模式，在 min(16,CPU-2) 并发上限下会迅速吃满并发并放大 token 消耗，示例若照此设计成本偏高且违反反模式。",
+          "多流建议 Opus 用于'同时持有两份大文档'、无差别使用 high/xhigh effort 的对抗验证；若示例默认高 effort + 多 skeptic，token 成本相对收益偏低，应默认 medium effort 并用 Haiku/Sonnet 跑 skeptic。",
+          "'静默截断'反模式被正确点出，但多流未给出'被丢弃项如何用 log() 记录'的具体最小代码片段，落地时仍可能漏 log，建议在示例中固化 log() 覆盖面的写法。"
+        ],
+        "unverifiedClaims": [
+          "'.claude/settings.json 的 skillOverrides' 配置键（stream3）——ground-truth 无此键，疑为臆造，未经本机 schema 验证。",
+          "'新会话预加载约 20K tokens''上下文 >60% 性能下降''子代理 4 倍 token'（stream5/6）——来源为官方 best-practices/社区博客，未在本机 2.1.186 验证，且 stream6 自标 medium/inference 却用于硬指标。",
+          "'脚本 <500 tokens''同事 15 分钟内上手'（stream5）——无来源、不可测量。",
+          "'高风险 6-8 个 skeptic、3 个中 2 个通过'的具体数值（stream4 自标 medium/inference）——无 API 或官方依据。",
+          "budget.total 计的是输入还是输入+输出、超限是否回滚已完成 agent（stream4/6 openQuestion）——ground-truth 未澄清，属未证实，不应在 guidance 中假定。",
+          "'pipeline 后纯 transform 用 parallel 栅栏'被列为反模式正确，但'transform 必须内联到某 stage'的强表述在 ground-truth §3 是'应放进某个 stage'，措辞上由建议被升级为硬规则，需弱化。",
+          "stream3 称 CLAUDE.md '首 200 行或 25KB 每会话加载'与'不被 auto-compaction 丢弃'——属官方文档转述，未在本机 ground-truth 范围内，与本项目 API 锚点无关，引用时应标注来源边界。"
+        ],
+        "strengths": [
+          "6 路对 ground-truth §1-§5 的核心硬约束（纯 JS、meta 纯字面量、phase 标题逐字一致、禁用 Date.now()/Math.random()、pipeline 默认 vs parallel 栅栏、并发 min(16,CPU-2)/总数 1000/单次 4096、schema 自动重试、断点恢复 resumeFromRunId、脚本本体无文件系统访问）转述高度一致且准确，事实锚定扎实。",
+          "第6路（skill-conversion）质量最高、最可执行：明确'复用而非复制——清单留 Skill、编排进 Workflow、确定性门禁进 Hook、固定约束进 CLAUDE.md'，并正确指出 presubmit-scan.sh 在脚本本体不可直接跑、须由子代理调用或落到 PreToolUse Hook（exit 2），与 ground-truth §1 完全吻合。",
+          "正确识别并复述 ground-truth §5 反模式（不必要栅栏、堆 agent、实现者自评、静默截断、计数器漏长尾），且多路据此提出'独立 skeptic 复核、不自评'的可落地原则。",
+          "对 pipeline 墙钟='最慢单条链而非各 stage 之和'、stage 间无栅栏、(prevResult,originalItem,index) 回调签名等易错点解释准确，有助于避免误用 parallel。",
+          "各流均较好区分了 Skill/Subagent/Workflow/Hooks/CLAUDE.md 的职责边界，且强调 Hook 才是强制层、CLAUDE.md 仅为上下文，与 ground-truth/官方文档一致，分层思路清晰可用。",
+          "普遍建议用 agent 的 schema 参数让校验落在工具层、子代理返回结构化对象，避免脚本自行 JSON.parse，符合 ground-truth §2/§5 且降低落地出错率。"
+        ]
+      },
+      {
+        "lens": "cost-and-quality（成本与质量交叉审查）",
+        "issues": [
+          {
+            "target": "全部 6 路研究（整体编排）",
+            "severity": "P0",
+            "description": "6 路中有 5 路是同一主题『Claude Code Workflow 方法论』，findings 高度同质（pipeline 默认、parallel 是栅栏、并发 min(16,核数-2)、总数 1000、4096 上限、反模式列表、8 阶段映射、对抗式验证等几乎逐条重复）。这正是研究自身反复警告的『为展示规模堆 agent』反模式：6 路的实际产出去重后约等于 1.5 路的独立内容，token 成本约为有效产出的 4 倍以上。",
+            "recommendation": "合并这 5 路为 1 路权威方法论 + 1 路差异化深挖（如成本建模或最小示例实现）。用 dedupe/完备性批评者在汇总阶段识别重复，而非并行跑 5 个近乎相同的 agent。下次此类任务应在 fan-out 前用『每个 agent 视角是否改变结论』做准入。"
+          },
+          {
+            "target": "全部 6 路（置信度自评）",
+            "severity": "P1",
+            "description": "几乎每条 keyFinding 都标 confidence:high 且由产出者自己标注。这违反研究自身引用的『不让实现者自评』原则——实现者对自己结论的高置信不可信。大量 high 标签实为『原文照抄 ground-truth』，而非经过独立证伪。",
+            "recommendation": "对来自一手 product-spec 的直引可标 high（属转述非判断）；对 inference/外部博客来源的论断应降级为 medium/low，并由独立 skeptic 证伪后再定级。区分『转述事实』与『推断结论』两类置信度。"
+          },
+          {
+            "target": "stream 5 / stream 6（模型分层与成本数字）",
+            "severity": "P1",
+            "description": "『Opus/Sonnet/Haiku 分层』『sub-agent 4 倍 token』『新会话预加载 ~20K token』『上下文 >60% 性能下降』『Workflow 多 agent 总成本 4 倍』等成本/容量数字来自外部博客与官方 best-practices，未与本机 ground-truth 核对；ground-truth 对模型分层与这些数字零提及。其中 4x 一条自标 medium/inference 尚可，但被写入 executableGuidance 当作可执行规则，越级了。",
+            "recommendation": "凡进入 executableGuidance 的成本数字必须有一手或可复现来源。模型 id 与定价应以 claude-api 一手为准（本会话模型为 claude-opus-4-8[1m]，与『3.5 Sonnet』等旧表述脱节）。把未核实数字移出指南，标为待实测。"
+          },
+          {
+            "target": "stream 5（Sonnet 3.5 等旧模型表述）",
+            "severity": "P2",
+            "description": "openQuestions 中出现『Claude 3.5 Sonnet 发布后是否需调整分层』之类基于过期模型代际的疑问，与当前环境（Opus 4.8）不符，属训练记忆带入的陈旧信息。",
+            "recommendation": "移除或更新为当前模型代际；模型相关问题统一走 claude-api 一手参考。"
+          },
+          {
+            "target": "stream 4（skeptic 数量与风险等级映射）",
+            "severity": "P2",
+            "description": "『低风险 2-3 个 skeptic、中等 4-5、高风险 6-8』这一具体数字自标 inference/medium，但被包装成可执行建议。高风险域开 6-8 个 skeptic 子代理是直接的成本放大，缺乏实测依据，且与『不堆 agent』纪律存在张力。",
+            "recommendation": "将数字降为示意区间并明确标注无实测支撑；高风险复核优先靠『独立性 + 多视角 lens 差异』而非堆数量。先小样本实测收敛轮次再定规模。"
+          },
+          {
+            "target": "stream 3（evidence/ 文件锁与版本管理）",
+            "severity": "P2",
+            "description": "提出『多个 Workflow 并行修改同一 evidence 文件需文件锁/冲突解决』，但脚本本体无文件系统访问，写文件须经子代理；该机制为脚本层无法直接实现的设想，属推测性扩展，易引导过度设计。",
+            "recommendation": "明确 evidence 写入只能由子代理完成，且并行写同名文件应通过编排（不同 item 写不同文件 + 汇总 stage 合并）规避，而非引入文件锁这类重型机制。"
+          }
+        ],
+        "conflicts": [
+          "pipeline 墙钟与 parallel 成本：stream 5 在 pitfalls 写『误以为 parallel 总比 pipeline 快——实际 parallel 是栅栏可能更慢』，但 stream 1/2 同时强调 parallel 用于全量汇总场景；两处对 parallel 的成本叙述口径不一致（一处贬其慢、一处述其用途），读者易误判何时用栅栏。应统一为：默认 pipeline，仅全量跨 item 依赖时用 parallel，与成本快慢无关。",
+          "budget 语义：stream 5 openQuestion 问『budget.total 基于输入还是总 token；超限是否回滚已完成 agent』，而 stream 2/3 直接断言 budget 是硬上限达标即抛错——一方当作已知事实写进指南，另一方仍列为未决问题，存在事实状态冲突。ground-truth 只说『硬上限、抛错』，未定义计量口径与回滚行为，故 stream 2/3 的确定性表述超出证据。",
+          "Skill 全文加载成本：stream 1 称『Skill 是知识库、模型加载』，stream 3 称『Skill 描述启动加载、全文按需加载』。stream 1 的措辞易被读成 Skill 全文进主上下文（与隔离成本结论相反）。应统一为：仅描述常驻、全文按需，未用近零成本。",
+          "8 阶段 → phase 折叠粒度：skill-conversion 流主张折叠为 4 个 phase，stream 1/2/3 多处仍按 8 阶段叙述并映射；对外展示/排名口径未统一，folding 与 8-phase 两套并存会造成进度组与评估粒度冲突（skill-conversion 自己也把此列为 openQuestion）。"
+        ],
+        "overengineeringFlags": [
+          "6 路并行研究本身：单一明确主题（Workflow 方法论 + Skill 转化）用 6 个研究 agent，5 个近乎重复，是典型为规模而规模。1-2 路足矣。",
+          "stream 4 第十步『反复打磨：记录 token 消耗/轮数分布/agent 失败率并迭代调 skeptic 数/干燥判据/timeout/effort』——对一个方法论文档交付而言引入了完整的实验闭环，超出当前任务所需，属流程过度工程化。",
+          "stream 4 给出 10 步落地 + 18 条 pitfalls + 10 条 openQuestions 的庞大清单，密度远超可执行性；过长清单本身会降低遵守率（与其引用的 CLAUDE.md<200 行原则自相矛盾）。",
+          "stream 3 的 evidence 文件锁/冲突解决机制设想（见 issues）。",
+          "skeptic 数量按风险 2-8 个的分级矩阵（stream 4）：把『独立复核』量化成需要大量并发子代理的矩阵，是把简单原则（独立 + 多视角）复杂化为成本敏感的规模规则。"
+        ],
+        "costConcerns": [
+          "fan-out 重复成本：6 路里 5 路重复，纯研究阶段就浪费约 3-4 路的 token，且后续汇总还需额外 dedupe 成本——是本次交付最大的成本黑洞。",
+          "高风险开 6-8 个 skeptic（stream 4）+ 风险审查阶段多 skeptic（多数流）：若照搬，单个高风险功能的复核子代理数可达 6-8，乘以 effort 与模型，token 成本陡增，与『不堆 agent』直接冲突。",
+          "worktree 隔离：多流提及 isolation:'worktree'，ground-truth 明确『成本高，仅并行改文件冲突时用』；指南中虽有提示但未给出『默认不用』的强约束，存在被误用放大成本的风险。",
+          "未设 budget 即大规模 fan-out 的风险被反复点名，但本次 6 路研究自身似乎正是未做准入控制的产物——建议下次在 fan-out 前强制设 budget.total 并按『有效新增视角数』而非『主题数』分配。",
+          "Opus 全量使用：若按 stream 6『同时持有两大文档用 Opus』而对所有研究 agent 用高 effort/Opus，成本是分层路由的数倍；但分层依据本身未实测（见 issues）。"
+        ],
+        "unverifiedClaims": [
+          "『sub-agent 总 token 约为单会话 4 倍』(stream 5，medium/社区博客 cloudzero) —— 无一手依据，却进入了成本结论。",
+          "『新会话预加载 ~20K token、上下文 >60% 性能下降』(stream 5/6，官方 best-practices 转述) —— 未在本机核对，数字精度存疑。",
+          "『Opus/Sonnet/Haiku 三层成本权衡』分层路由策略 —— ground-truth 零提及模型分层；属官方泛指 + 推断，且模型代际可能过期（应以 claude-api 一手为准）。",
+          "『低/中/高风险 → 2-3 / 4-5 / 6-8 个 skeptic』(stream 4，自标 inference) —— 纯推断数字，无收敛实测支撑。",
+          "『budget.total 计量口径 / 超限是否回滚已完成 agent 结果』被 stream 2/3 当作已知（硬上限抛错），但 ground-truth 未定义计量与回滚细节 —— 超出证据的确定性表述。",
+          "『structured output 自动重试无上限/复杂 schema 会不会触发断路器』、『resumeFromRunId 对 worktree 的缓存恢复』、『workflow() 嵌套预算是否计入父 budget』等多流 openQuestion —— 均为未验证，正确地留作开放问题，但部分流在 guidance 中已隐含假设其行为。",
+          "『disable-model-invocation / skillOverrides 配置项』(stream 3) —— 引用为官方机制，但具体字段名（skillOverrides）未在本次 ground-truth 证据中出现，需对照官方 skills.md 核实再写入指南。"
+        ],
+        "strengths": [
+          "对一手 ground-truth 的核心 API 事实转述高度准确且一致：纯 JS / meta 纯字面量 / phase title 逐字一致 / 禁用 Date.now()·Math.random() / pipeline 无栅栏为默认 / parallel 是栅栏 / 并发 min(16,核数-2) / 总数 1000 / 4096 上限 / schema 自动校验重试 / 仅一层 workflow 嵌套 —— 这些 high 置信标注成立。",
+          "质量反模式的识别贯穿全部流且与 ground-truth 第 5 节吻合：不必要栅栏、为展示规模堆 agent、让实现者自评、静默截断、计数器漏长尾——方向正确（讽刺的是本次编排自身踩了第二条）。",
+          "skill-conversion 流（第 6 路）是 6 路中差异化与价值最高的：清晰提出『复用而非复制』分层——清单留 Skill、编排进 Workflow、确定性门禁进 Hook、固定约束进 CLAUDE.md，并正确指出脚本本体无文件系统访问故 presubmit-scan.sh 须由子代理调用或落到 Hook，这是真正有结论性的洞见。",
+          "普遍坚持『不让实现者自评 + 独立 skeptic 对抗式验证 + 多视角 lens』作为质量主线，与项目 CLAUDE.md 第三节质量纪律一致。",
+          "多数流诚实地把 budget 口径、嵌套预算、worktree 缓存、结构化输出重试上限等列为 openQuestions，而非强行编造答案——证据边界意识良好。",
+          "pipeline 默认、parallel 仅全量汇总、纯 transform 内联进 stage、用 .filter(Boolean) 处理 null、用 schema 降解析负担、用 budget.remaining() 做降级——这些可执行编排建议准确且可直接落地。"
+        ]
+      }
+    ],
+    "reconciliation": {
+      "adoptedConclusions": [
+        {
+          "topic": "Workflow 脚本性质与硬约束",
+          "conclusion": "Workflow 脚本是纯 JavaScript（非 TS，无类型注解/interface/泛型），必须以纯字面量 export const meta 开头；meta.phases[].title 须与脚本里 phase('...') 调用逐字一致；脚本体内禁用 Date.now()/Math.random()/无参 new Date()（会破坏断点恢复并抛错），需时间戳从 args 传入或事后打戳、需随机性用 index 变化 prompt/label；脚本本体无文件系统/Node API 访问，读写文件只能由子代理完成。",
+          "basis": "一手锚点 01-workflow-api-ground-truth.md §1。6 路转述一致且零错误（审查三方均确认 product-spec 标注属实）。"
+        },
+        {
+          "topic": "meta.phases title 与 phase() 不一致的后果（修正分歧）",
+          "conclusion": "规范仅硬性要求两者逐字一致，但未明示不一致的具体后果。应表述为'规范要求逐字一致（后果未在规范中明示）'，不得断言为'解析失败'或'进度展示混乱'——这两种说法均属推测且彼此矛盾。",
+          "basis": "锚点 §1 第12行只写'要逐字一致'，无后果说明。Stream2/Stream6 把后果分别断言为'进度混乱''解析/运行失败'，三方审查（completeness P2、cost P2）一致指出该后果为越证据推测。"
+        },
+        {
+          "topic": "pipeline 默认 vs parallel 栅栏",
+          "conclusion": "pipeline(items, stage1, stage2,...) 是多阶段工作的默认选择：stage 间无栅栏，item 可错峰穿过各 stage，墙钟=最慢单条链；stage 回调签名 (prevResult, originalItem, index)，stage 抛错该 item 落 null 并跳过其余 stage。parallel(thunks) 是栅栏（等全部完成），仅当某 stage 真需前一 stage 的全量跨 item 结果（去重/合并/全集早退/相互比较）时才用。选择依据是'是否需要全量跨 item 结果'，与'谁更快'无关。纯 transform（flatten/map/filter）应内联进某个 stage，而非用栅栏断开。",
+          "basis": "锚点 §2、§3。修正 Stream5 pitfalls'parallel 是栅栏可能更慢'的口径偏差：选择标准是数据依赖而非速度（cost 审查 conflicts 指出口径不一致）。"
+        },
+        {
+          "topic": "null 结果与 .filter(Boolean) 的正确用法（修正 P0 错误）",
+          "conclusion": "agent() 在用户跳过或终态 API 失败时返回 null；pipeline 某 stage 抛错则该 item 落 null。.filter(Boolean) 只能作用于 pipeline()/parallel() 整体返回的结果数组（标量数组），不能写进 stage 内部——stage 回调每次只收到单个 item 的 prevResult（标量），对其调用 filter 会报错。stage 内部应用 if(!prev) return null 显式短路，只在 pipeline 整体返回后对最终数组做 .filter(Boolean)。",
+          "basis": "锚点 §2（stage 回调签名 (prevResult, originalItem, index)，返回数组用 filter(Boolean)）。executability 审查判定 Stream2'每个 stage 都 filter(Boolean)'为 P0 直接误导，与锚点 §2 冲突。"
+        },
+        {
+          "topic": "并发、容量与预算硬上限",
+          "conclusion": "单 workflow 内并发 agent() 上限 = min(16, CPU核数-2)，超出排队；全生命周期 agent 总数上限 = 1000；单次 pipeline/parallel 最多 4096 个 item（超出报错，非静默截断）。budget 是硬上限：spent() 达到 total 后'再调 agent()'时抛错——已在途/已完成的 agent 结果不受影响，不是整轮回滚。脚本应在调 agent() 前主动检查 budget.remaining() 做降级，不要依赖抛错兜底。total 为 null 时 remaining 为 Infinity。",
+          "basis": "锚点 §2（budget）、§3（并发/总数/4096）。补足三方审查指出的完整性缺口：抛错点是'下一次 agent() 调用'，回滚语义规范未定义应留白（completeness P2、cost conflicts）。"
+        },
+        {
+          "topic": "schema 结构化输出",
+          "conclusion": "agent() 传 schema（JSON Schema）时强制子代理调用 StructuredOutput 工具，返回已校验对象，校验在工具层完成、不匹配自动重试；脚本不应自行 JSON.parse。无 schema 时返回最终文本（string）。",
+          "basis": "锚点 §2、§5。三方审查列为 strengths（普遍正确）。"
+        },
+        {
+          "topic": "断点恢复",
+          "conclusion": "Workflow 工具调用立即返回 runId 并后台运行，/workflows 看进度；脚本持久化到会话目录，迭代时编辑后以 {scriptPath} 重跑。断点恢复 Workflow({scriptPath, resumeFromRunId})：未改动的最长 agent() 前缀瞬时返回缓存结果，从首个改动/新增调用起实跑，同脚本同 args 100% 命中（需先停掉前一次运行）。可据此低成本迭代：改某阶段子代理 prompt 只重跑该阶段及之后。",
+          "basis": "锚点 §4。"
+        },
+        {
+          "topic": "五个概念的职责边界与协作（复用而非复制）",
+          "conclusion": "Skill=方法/规范/清单（按需加载，未用近零成本，单一事实源）；Subagent=独立上下文的专业任务执行者（隔离探索/读文件、返回压缩摘要、可限工具）；Workflow=纯 JS 编排脚本（phase/pipeline/parallel/循环/分支，持久化可断点恢复）；Hooks=harness 确定性执行的生命周期拦截（强制层）；CLAUDE.md=项目级固定约束（上下文层、非强制）。落地原则：清单留 Skill、编排进 Workflow、确定性门禁进 Hook、固定约束进 CLAUDE.md；Workflow 子代理 prompt 引用 Skill 的 reference，而非把清单复制进 JS。",
+          "basis": "锚点 §5 + 项目 CLAUDE.md + 官方文档转述。三方审查一致列为 strengths，Stream6（skill-conversion）被评为价值最高。"
+        },
+        {
+          "topic": "CLAUDE.md 是上下文非强制，Hook 才是强制层",
+          "conclusion": "CLAUDE.md/Skill 是顾问性上下文，模型可能不遵守；要让安全/破坏性/提交红线无条件生效，必须用 PreToolUse Hook（exit 2 阻断）或 settings 的 permissions.deny 做技术强制。两者职责互补：CLAUDE.md 写明意图，Hook/permissions 做硬拦截。",
+          "basis": "官方 memory/hooks 文档转述 + 锚点对'确定性'的定位。三方审查列为 strengths。"
+        },
+        {
+          "topic": "presubmit-scan.sh 的归属与落地（Workflow 隔离约束）",
+          "conclusion": "presubmit-scan.sh 是只读确定性扫描（列改动文件 + 两级密钥检测：HIGH→exit 2、LOW→警告，含调试日志/SQL 风险/合并冲突/规则文件）。因 Workflow 脚本本体无文件系统访问，脚本本体不能直接跑该脚本，只能由带 Bash 工具的子代理调用并回报退出码/发现；真正的'提交前强制门禁'应落到项目 .claude/settings.json 的 PreToolUse Hook（exit 2）。但该 Hook 的具体配置（matcher、git commit 各种调用形式的覆盖）须先读取项目实际 settings.json 后确认，不能照抄。",
+          "basis": "presubmit-scan.sh 头部注释（核对属实）+ 锚点 §1（脚本本体无文件系统访问）+ 官方 hooks。Stream6 此条被三方评为证据最扎实；executability/completeness 审查同时提醒'具体 Hook 配置需先核查 settings 现状'。"
+        },
+        {
+          "topic": "8 阶段 → phase 的编排粒度（统一分歧）",
+          "conclusion": "采用 Stream6 的折叠方案：把 ai-engineering-delivery-zh 的 8 阶段折叠为 4 个 phase（1-4→分析与扫描、5-6→实现与验证、7→风险审查、8→复盘沉淀），在单个 workflow 内用 phase()/pipeline() 实现，不要做成'父 workflow 串多个子 workflow'（因 workflow() 仅一层嵌套，父调子已占一层，子内不能再调）。是否需细化到 8 个 phase 由评估口径决定，但默认折叠以避免为结构而堆 phase/agent。",
+          "basis": "锚点 §2（仅一层嵌套）、§3（默认 pipeline、不为展示规模堆）+ 项目 CLAUDE.md。统一三方审查指出的 4-vs-8 粒度冲突，并补上'一层嵌套'对多子 workflow 串联的硬阻塞分析（completeness P2）。"
+        },
+        {
+          "topic": "质量模式与'不让实现者自评'",
+          "conclusion": "采用对抗式验证（多个独立 skeptic 各自证伪，多数证伪则否决）+ 多视角验证（每个验证者一个不同 lens）+ loop-until-dry（连续 K 轮无新增才停）。硬规则：实现者不得自评，必须由独立子代理复核（实现 agent 与审查 agent 不同），任何 P0 判 FAIL。被丢弃的覆盖面必须 log()，不静默截断。",
+          "basis": "锚点 §5（推荐质量模式 + 反模式）+ 项目 CLAUDE.md 三.1。三方审查一致列为 strengths。"
+        },
+        {
+          "topic": "循环退出条件应用固定可观测缺省值",
+          "conclusion": "loop-until-dry 与对抗式表决须给出可观测、可复现的退出条件示例：如最大 3 轮、某轮新增 P0/P1 findings 数=0 即停、独立 skeptic 中 >=2/3 标 FAIL 则否决；并显式标注这些数值是'示例缺省值，非 API 约束'。删除'findings 重复率<10%''前进至少 M%'等无法稳定测量、且 M 未定义的指标。",
+          "basis": "锚点 §5 只给模式名未给数值。executability 审查 P1 指出各流 K/N/比例不一致且部分不可测量；统一为固定缺省值并标注非规范。"
+        },
+        {
+          "topic": "成本控制以一手可观测量为准",
+          "conclusion": "成本控制的唯一可靠观测量是锚点提供的 budget.spent()/remaining()。做法：先在小样本（如 3-5 item）试跑记录实际 spent()，再线性外推并留余量；fan-out 前强制设 budget.total，并按'是否新增独立视角/是否改变结论'而非'主题数量'分配 agent。默认子代理用 medium effort、skeptic 用更廉价模型（Sonnet/Haiku 级），仅'需同时持有两份大文档'等任务用更强模型与高 effort；isolation:'worktree' 默认不用，仅并行改文件会冲突时才用。",
+          "basis": "锚点 §2（budget、effort、isolation 成本高仅冲突时用）、§3（并发上限）+ 反模式'为展示规模堆 agent'。整合三方 costConcerns。"
+        }
+      ],
+      "rejectedApproaches": [
+        {
+          "approach": "在每个 pipeline stage 内部调用 .filter(Boolean) 过滤 null（Stream2）",
+          "reason": "与锚点 §2 stage 回调签名 (prevResult, originalItem, index) 冲突：stage 每次只收到单个 item 的标量 prevResult，对标量调用 filter 会直接报错。filter(Boolean) 仅适用于 pipeline 整体返回的结果数组。executability 审查判为 P0 直接误导。"
+        },
+        {
+          "approach": "把 'Workflow 多 agent 总 token 约为单会话 4 倍' 当作可量化成本结论写入指南（Stream5）",
+          "reason": "来源为单一社区博客（cloudzero），讲的是通用 sub-agents 而非 Claude Code Workflow 实测；一手锚点零 token 倍率数据。三方审查一致判为不可作为成本规划依据，应删除具体倍数，改为定性'多 agent 成本显著高于单会话，需小样本实测'。"
+        },
+        {
+          "approach": "在 .claude/settings.json 配置 disable-model-invocation:true 于 'skillOverrides' 键（Stream3）",
+          "reason": "'skillOverrides' 这一 settings 键在锚点与本机规范中均无证据，疑为臆造，照抄会失败。disable-model-invocation 应以 SKILL.md frontmatter 字段表述，settings 路径须先核实官方 schema。executability 审查判为 P0。"
+        },
+        {
+          "approach": "在 Workflow 脚本本体中 await Read('evidence/...md') 直接读文件（Stream3/Stream6 部分表述）",
+          "reason": "与锚点 §1 冲突：脚本本体无文件系统/Node API 访问，直接 Read 会抛错。只有子代理有 Read 工具。应由 agent({agentType:'Explore'}) 子代理读取并返回结构化摘要，脚本本体只持有路径字符串与子代理返回值。executability 审查判为 P1。"
+        },
+        {
+          "approach": "按风险等级开 2-3 / 4-5 / 6-8 个 skeptic 子代理的数量分级矩阵（Stream4）",
+          "reason": "锚点与 Skill 均无此数字，纯经验推断却被包装成可执行规则；高风险开 6-8 skeptic 直接放大成本、逼近并发上限 min(16,核-2)，与'不为展示规模堆 agent'反模式冲突。应降为示意区间并标注无实测支撑，高风险复核优先靠独立性+视角差异而非堆数量。"
+        },
+        {
+          "approach": "把 8 阶段做成多个独立子 workflow 再用父 workflow 串联编排",
+          "reason": "锚点 §2 明确 workflow() 仅一层嵌套，父 workflow 调子 workflow 已占一层，子内不能再调 workflow，多层串联会抛错。应在单 workflow 内用 phase()/pipeline() 折叠为 4 phase 实现。"
+        },
+        {
+          "approach": "为'最小可运行示例'采用十步落地法 + 四象限/五维量化排名 + 高风险 6-8 skeptic 多模式叠加（Stream4/Stream5）",
+          "reason": "目标是团队分享与最小示例，无真实运行数据时先搭多维评估体系属'为评估而评估'；十步法/多质量模式全开违背锚点反模式'为展示规模堆'与项目'先最小闭环'分级原则。最小示例应只演示 1-2 种质量模式。三方 overengineeringFlags 一致。"
+        },
+        {
+          "approach": "为成本预测引入 '小样本 agent 数 × 单 agent token × 规模系数' 公式（Stream6）",
+          "reason": "'规模系数'未定义、不可计算，给出虚假精度。唯一可靠成本观测是 budget.spent()/remaining()，应改为小样本试跑实测后线性外推留余量。executability 审查判为 P1。"
+        },
+        {
+          "approach": "将读取本机 SKILL.md/references/scripts/evidence 得到的内容标注为 official-doc 来源（Stream1 等）",
+          "reason": "sourceType 归类错误：本机现有资产文件应标 live-env/product-asset，official-doc 仅指 Anthropic 官方文档。Stream3/5 对同类内容正确标 live-env，存在跨流不一致。completeness 审查判为 P2。"
+        }
+      ],
+      "unresolved": [
+        "新会话预加载 token 量（~20K）、上下文 >60% 性能下降阈值、CLAUDE.md 首 200 行/25KB 自动加载、Hooks 返回 JSON 10KB 上限——均来自网络文档，不在一手锚点，本环境无法核验且属易随版本变化的精确阈值；应统一降一档 confidence（high→medium）并标注'网络来源、未经本机验证'。",
+        "budget.total 计量口径（仅输入 token 还是输入+输出）规范未定义，须以一手实测或官方 API 一手参考确认；超限时已完成 agent 结果是否保留虽可由'抛错发生在下一次 agent() 调用'推断为保留，但'整轮回滚'语义未被规范明确，应留白。",
+        "disable-model-invocation 的确切配置位置（SKILL.md frontmatter 字段名 vs settings.json 键名）须对照本机官方 skills 规范核实，不能照抄 'skillOverrides'。",
+        "项目 .claude/settings.json 是否已存在及现有 Hook 配置未读取，presubmit 门禁是新增 PreToolUse 还是合入现有 Stop/PostToolUse、以及 matcher 对 git commit 各种调用形式（git commit / git -C / 别名）的覆盖完整性，须读取实际 settings 后确定。",
+        "自定义 agentType（.claude/agents/*.md）仅在从该项目目录启动时进注册表；工程交付子代理是否做成可复用自定义 agentType（跨目录不可用）还是统一用内置 agentType+prompt（更可移植），取决于团队是否固定从仓库根启动。",
+        "StructuredOutput 自动重试是否有次数上限/复杂 schema 是否触发断路器、resumeFromRunId 对 isolation:'worktree' 的缓存恢复行为、workflow() 子调用的 token 是否计入父 budget（锚点 §2 说'共享预算'倾向计入但未逐字确证细节）——均为锚点未逐条明确的边界，应作为开放问题，不在 guidance 中假定。",
+        "8 阶段折叠为 4 phase 后，对外展示/排名评估是否需要按 8 阶段逐项打分（更细进度组开销）须与负责人确认评估口径。",
+        "当多个独立 skeptic 意见不一致时的聚合策略（多数表决/权重/一票否决，是否按领域动态调整）规范未给，需团队按风险等级约定。"
+      ],
+      "crossCuttingPrinciples": [
+        "一手锚点优先：凡涉及 Workflow 脚本 API 的结论必须与 01-workflow-api-ground-truth.md 逐字一致；与网络旧文档冲突以锚点为准；不得凭训练记忆臆测 API 形态。",
+        "区分证据强度与置信度：直接复述一手 product-spec/官方原文可标 high（属转述）；研究者的综合/设计/映射/数量建议须标 inference 且降为 medium，并经独立 skeptic 证伪后再定级。不让'实现者自评'高置信。",
+        "复用而非复制：清单/方法留 Skill（单一事实源，按需加载），编排进 Workflow（脚本只编排、prompt 引用 reference），确定性门禁进 Hook（强制层），固定约束进 CLAUDE.md（上下文层）。四类职责不混淆、不重定义。",
+        "脚本本体是隔离的纯 JS 编排层：无文件系统/Node API、禁用 Date.now()/Math.random()、meta 纯字面量、仅一层 workflow 嵌套；一切 IO 与确定性脚本（如 presubmit-scan.sh）必须经子代理或 Hook，不能在脚本体内直接做。",
+        "成本与规模克制：默认 pipeline 不滥用 parallel 栅栏；agent 数按'是否新增独立视角/是否改变结论'分配而非按主题/规模堆；fan-out 前设 budget.total 并小样本实测外推；effort/模型分层、worktree 默认不用。本次 6 路研究中 5 路高度同质（去重后约 1.5 路）正是'为展示规模堆'反模式的现实警示。",
+        "质量靠独立性而非数量：实现者不得自评，由独立子代理对抗式证伪 + 多视角 lens；循环须有固定最大轮次与可观测退出条件；被丢弃覆盖面必须 log()，不静默截断。",
+        "越证据的后果/数字必须留白或标注：规范未明示的后果（如 phase title 不一致的后果）、网络来源的精确阈值、自创公式与经验数字，一律不得以 high/可执行规则形式呈现，须如实标注来源边界与'未经本机验证'。",
+        "CLAUDE.md/Skill 是顾问性上下文非强制；安全/破坏性/提交红线要无条件生效必须用 PreToolUse Hook（exit 2）或 permissions.deny 技术强制，CLAUDE.md 同步写明意图。"
+      ]
+    }
+  }
+}

@@ -1,0 +1,644 @@
+{
+  "summary": "对一个代码仓库或软件任务做只读分析：理解→扫描→模块分析→风险→测试方案→独立审查→最终报告",
+  "agentCount": 12,
+  "logs": [
+    "扫描到 7 个组件，按 maxComponents=6 取前 6 个分析；已丢弃 1 个：presubmit-scan.sh",
+    "analyze-repo 完成: 组件 6/7，风险 7，用例 18，独立审查=CONDITIONAL_PASS"
+  ],
+  "result": {
+    "target": "/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh",
+    "taskDescription": "分析该目标的结构、功能模块与风险，产出测试验证方案与最终报告（只读分析，不改代码）。",
+    "understand": {
+      "goal": "对目标 /data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh 进行只读分析：先在\"任务理解\"阶段建立对其结构、功能模块、风险的初步认知，明确分析范围，为后续产出测试验证方案与最终报告打基础。本阶段产出：目标/范围内/范围外/验收信号/假设/待确认问题。",
+      "inScope": [
+        "SKILL.md（Skill 清单 + 流程编排说明，79 行，含 YAML frontmatter 的 name/description）",
+        "scripts/presubmit-scan.sh（可执行 bash，152 行，提交前只读风险扫描：列改动文件、两级密钥检测、调试日志/test-only/本地地址/SQL/合并冲突/项目规则文件/大文件标记，退出码 0/2）",
+        "scripts/presubmit-scan.ps1（PowerShell 移植版，184 行，功能对应 .sh，支持 -Staged/-Base/-Help/文件参数）",
+        "references/requirement-analysis.md（阶段 1-4：业务理解/系统扫描/梳理各流/验收标准，121 行）",
+        "references/delivery-checklist.md（阶段 5-6：实现规则 + 验证 + 提交前准备，50 行）",
+        "references/risk-review.md（阶段 7：支付/权限/状态机/幂等/回滚等高风险审查，40 行）",
+        "references/retrospective-template.md（阶段 8：交付摘要/技术笔记/PR 摘要模板，57 行）",
+        "references/worked-example.md（订单退款的完整主干走通示例，105 行）",
+        "两个脚本的逻辑正确性、跨平台(.sh/.ps1)一致性、正则匹配/误报漏报、退出码语义、安全性（只读、不修改/暂存/提交）",
+        "SKILL.md 与 references/* 内部引用、阶段编号、加载路径的一致性"
+      ],
+      "outOfScope": [
+        "修改目标内任何文件（本任务为只读分析，明确禁止改代码）",
+        "兄弟目录的对照实现（ai-engineering-delivery 英文版、codex/、codex-coding-guidelines-skill/、awesome-design-md/、evals/ 等）——除非为验证 .sh/.ps1 是否声称字节级一致而需对照，否则不纳入",
+        "实际把该 Skill 安装到 ~/.claude/skills 并端到端运行真实交付流程",
+        "评估 LLM/Claude 在加载该 Skill 后的真实行为效果（属于运行时行为，非静态可分析对象）",
+        "目标目录之外的项目代码（该 Skill 用于指导别的项目交付，但那些项目不在本次分析对象内）",
+        "提交/推送/git 操作（目标本身不是 git 仓库）"
+      ],
+      "acceptanceSignals": [
+        "已逐一读完全部 8 个文件并能准确描述各自职责与相互关系（已完成读取）",
+        "已识别出唯一含可执行逻辑的模块=presubmit-scan 脚本（bash + PowerShell 双实现），其余为 Markdown 流程文档",
+        "测试验证方案能落到该 Skill 的可验证面：脚本可被静态/动态测试（语法、退出码、密钥两级检测的真/假阳性、占位符降级、SQL/冲突标记、--staged/--base/--help/显式文件四种模式），文档可做一致性核查（阶段编号、引用路径、声称的字节级一致性）",
+        "对每条结论标注证据来源（具体文件/行）或在读不到/不确定时显式标注，不臆测",
+        "最终报告覆盖：结构、功能模块、风险点（含脚本误报/漏报与跨平台行为差异）、可执行的验证步骤",
+        "全程未修改目标文件"
+      ],
+      "assumptions": [
+        "目标是一个 Claude Code Skill 包（依据：SKILL.md 含标准 frontmatter，目录结构 scripts/+references/ 与系统提示中列出的同名可用 skill 'ai-engineering-delivery-zh' 一致），而非可独立运行的应用程序",
+        "'-zh' 为中文本地化变体；脚本注释自称与 Codex/英文副本'字节级一致'(byte-identical)，意味着 .sh/.ps1 是跨副本共享、不随语言变化的部分（依据：presubmit-scan.sh 第 7-8 行、.ps1 第 7-8 行注释）",
+        "本阶段(任务理解)只需产出结构化的范围界定，不要求此刻就写出完整测试用例或最终报告（依据：任务描述'本阶段=任务理解'）",
+        "脚本预期运行环境为 bash(Linux/macOS/Git Bash) 与 PowerShell(pwsh)，依赖 git/grep/sed/wc 等常规工具",
+        "对该 Skill 的'测试验证'主要指对脚本做实证测试 + 对文档做一致性核查，而非验证 LLM 行为（因 LLM 行为不可静态判定）"
+      ],
+      "openQuestions": [
+        "最终交付物的形态与详细程度：是否需要可直接执行的测试脚本/用例集，还是文字版验证方案即可？（任务说'产出测试验证方案与最终报告'，但未限定格式）",
+        "是否需要将 .sh 与 .ps1 做逐行行为对照（验证二者声称的功能一致性），还是各自独立验证即可？",
+        "是否需要把 'ai-engineering-delivery-zh' 与兄弟英文版 'ai-engineering-delivery' 的脚本做 diff 以验证'字节级一致'的自我声明？这会触及范围外目录——需确认是否允许只读对照",
+        "动态验证脚本时是否允许在 scratchpad 临时目录中创建测试用 git 仓库与样例文件来跑脚本（不触碰目标，仅为验证脚本行为）？",
+        "是否需要评估该 Skill 与全局 CLAUDE.md / 其他 skill 的协同与冲突（如规则优先级条款），还是仅就目标自身闭环分析？"
+      ]
+    },
+    "scan": {
+      "overview": "业务优先的工程化交付流程框架。通过8个阶段（理解业务、扫描现有系统、梳理各流、定验收标准、最小范围实现、验证、风险审查、复盘）和多层参考清单，将高风险业务需求转化为可控的工程实现。包含核心流程编排文档(SKILL.md)、4套分阶段参考模板、1个完整示例、1个预提交扫描脚本。无自动化测试框架，依赖人工流程遵循和决策树推理。",
+      "kind": "工程化流程框架/交付方法学",
+      "components": [
+        {
+          "name": "SKILL.md",
+          "path": "/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md",
+          "kind": "核心流程文档",
+          "purpose": "定义4个任务分级、8个交付主干阶段、判断规则(何时问vs直接做)、5级规则优先级、架构术语映射、参考文件加载时机、输出纪律"
+        },
+        {
+          "name": "requirement-analysis.md",
+          "path": "/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/requirement-analysis.md",
+          "kind": "参考清单/模板",
+          "purpose": "支撑阶段1-4(理解业务、扫描现有系统、梳理各流、定验收标准)：业务理解6项、扫描结果5分类框架、项目规则提取、梳理业务流/数据流/持久化/UI"
+        },
+        {
+          "name": "delivery-checklist.md",
+          "path": "/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/delivery-checklist.md",
+          "kind": "参考清单/检查表",
+          "purpose": "支撑阶段5-6(实现与验证)：编码前检查7项、实现规则8条、前端/后端/提交前验证清单、presubmit-scan.sh调用方法"
+        },
+        {
+          "name": "risk-review.md",
+          "path": "/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/risk-review.md",
+          "kind": "参考清单/风险检查",
+          "purpose": "支撑阶段7(风险审查)：7个高风险域(支付、会员、下载、认证、SQL、文件、回调)的一致性检查、状态机检查、幂等并发检查、回滚恢复设计、发布就绪清单"
+        },
+        {
+          "name": "retrospective-template.md",
+          "path": "/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/retrospective-template.md",
+          "kind": "参考模板",
+          "purpose": "支撑阶段8(复盘与沉淀)：交付摘要框架、技术笔记大纲(11个章节)、PR提交摘要格式(7个分类)"
+        },
+        {
+          "name": "worked-example.md",
+          "path": "/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/worked-example.md",
+          "kind": "参考示例",
+          "purpose": "展示订单退款功能按8阶段完整跑通的过程：需求分析→系统扫描→流程梳理→验收标准→设计实现→验证(浏览器+单测+并发+权限)→风险审查(幂等一致状态机权限回滚)→复盘摘要"
+        },
+        {
+          "name": "presubmit-scan.sh",
+          "path": "/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/scripts/presubmit-scan.sh",
+          "kind": "提交前扫描脚本/工具",
+          "purpose": "只读风险扫描(153行bash)：两级密钥检测(HIGH:真实凭据PEM/AKIA/sk_live等→exit2;LOW:可疑字段名)、调试日志检查、test-only标记、本地配置(localhost等)、merge冲突、SQL风险、项目规则文件、大文件检查"
+        }
+      ],
+      "buildTestCommands": [
+        "bash /data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/scripts/presubmit-scan.sh  (工作区改动+未跟踪文件)",
+        "bash /data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/scripts/presubmit-scan.sh --staged  (仅已暂存文件)",
+        "bash /data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/scripts/presubmit-scan.sh --base origin/main  (PR准备:基线分支以来全部改动)",
+        "pwsh /data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/scripts/presubmit-scan.ps1  (PowerShell版本,Windows环境)"
+      ],
+      "entryPoints": [
+        "SKILL.md中的'先给任务分级'(第12行):确定任务复杂度(简单/中等/复杂)再选择参考文件",
+        "SKILL.md中的'交付主干'(第32行):按8个阶段逐步推进,每个阶段加载对应参考文件",
+        "worked-example.md:订单退款功能的完整8阶段示例,展示产物形状与验收过程",
+        "presubmit-scan.sh:任何提交前调用此脚本,扫描密钥/日志/SQL风险,仅读取不修改"
+      ]
+    },
+    "componentAnalyses": [
+      {
+        "component": "SKILL.md (/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md)",
+        "responsibilities": "该文件是 ai-engineering-delivery-zh Skill 的入口与编排文档（纯 Markdown + YAML frontmatter，无可执行代码）。职责是把\"业务需求\"转化为受控的工程化交付流程，定义：(1) frontmatter 的 name/description 触发条件；(2) 任务复杂度分级（简单/中等/复杂）；(3) 5 种任务模式（分析/开发交付/审查/验证/复盘）；(4) 8 个交付主干阶段；(5)\"何时问 vs 直接做\"的唯一规则；(6) 8 级（文中编号 1-8）规则优先级链；(7) 分层后端术语到实际技术栈的映射指引；(8) 5 个 references 文件的按需加载时机；(9) 提交前辅助脚本说明；(10) 编码前/中/后的输出纪律。它只编排流程，明确声明叠加在项目规则、CLAUDE.md 与具体实现类 Skill 之上，不替代它们。",
+        "keyLogic": [
+          "frontmatter（第 1-4 行）：name=ai-engineering-delivery-zh，description 用大段中文正例/反例描述触发与不触发场景，供模型路由判断是否激活本 Skill",
+          "任务分级（第 12-20 行）：要求'最重要的一步'先分级；列出升级到'复杂'的具体触发域——跨模块/架构敏感、表结构或数据变更 SQL、支付/会员/下载权限/权限/认证/文件处理、状态机/回调/定时任务、上线敏感、大范围高风险审查",
+          "8 阶段主干（第 32-47 行）：1 理解业务与范围→2 扫描现有系统→3 梳理各流→4 编码前定义验收标准→5 先规划再最小范围实现→6 验证→7 风险审查→8 总结与沉淀；每阶段链接到对应 references 文件，并要求复杂任务用 todo 列表逐项勾掉、大型扫描派给子代理",
+          "'何时问 vs 直接做'唯一规则（第 49-55 行）：低风险/范围清晰/疑点可用安全可逆假设化解→直接做并说明假设；仅当影响架构/数据形态/UX/安全/迁移/删除/生产配置/权限/支付/外部接口或动作不可逆→才问，且多个阻塞点要合并成 1 条消息、最多 1-3 个问题；声明此规则全局只定义一次，其余文件引用它",
+          "规则优先级（第 57-59 行）：自上而下 8 层——(1) 系统/开发者安全约束 (2) 用户本轮明确请求 (3) 个人硬性约束 (4) 最近的项目/目录规则 (5) 仓库规则 (6) 本 Skill (7) 个人偏好 (8) AI 假设；并强调流程偏好不能压过安全/破坏性/提交限制/用户划定范围",
+          "术语映射（第 61-63 行）：references 用分层后端术语（controller/service/repository/mapper、entity/DTO、migration、ORM），要求映射到项目真实技术栈；若项目是纯前端/库/非分层，保留检查意图（校验输入、服务端鉴权、处理非法状态、保持幂等）而非强加分层",
+          "references 按需加载（第 65-75 行）：5 个 references 文件各对应阶段，明确'到对应阶段才加载一个，不要一上来全读'；presubmit-scan.sh 说明阶段 6 提交前扫描，密钥分两级（真实字面量凭据→退出码 2；疑似字段名→仅警告），并提醒用 skill 完整安装路径运行",
+          "输出纪律（第 77-79 行）：编码前专注分析设计、编码中改动最小且只对应商定行为、编码后未真跑的检查不得说通过（写'未运行/未验证'+原因）、排除范围外工作（无关重构/顺手清理/额外功能/新抽象/无关模块改动）"
+        ],
+        "dependencies": [
+          "references/requirement-analysis.md（阶段 1-4，已确认存在）",
+          "references/delivery-checklist.md（阶段 5-6，已确认存在）",
+          "references/risk-review.md（阶段 7，已确认存在）",
+          "references/retrospective-template.md（阶段 8，已确认存在）",
+          "references/worked-example.md（完整示例，已确认存在）",
+          "scripts/presubmit-scan.sh（阶段 6 提交前扫描，已确认存在，有可执行权限）",
+          "上层 Claude/Codex Skill 加载机制（依赖 frontmatter 的 name/description 做路由触发）",
+          "隐式依赖：项目规则、CLAUDE.md、具体实现类 Skill（本文件声明叠加其上而非替代）"
+        ],
+        "risks": [
+          {
+            "severity": "low",
+            "description": "文档/实际文件不一致：scripts/ 目录下同时存在 presubmit-scan.ps1（Windows PowerShell 版，7593 字节），但 SKILL.md 第 75 行只提及 .sh 版本，从未提及 .ps1。Windows 用户或不读脚本目录的使用者无法得知存在等效脚本，文档与实现脱节（已通过 ls 实际核实）。"
+          },
+          {
+            "severity": "low",
+            "description": "规则优先级措辞与编号潜在歧义：第 57 行标题写'规则优先级'，但 description 元数据/常见摘要会概括为'5 级'，而正文实际是 8 层（编号 1-8）。文中'流程偏好'未在 8 层链中单列编号，与第 7 层'个人偏好'是否等同存在解释空间，可能在冲突仲裁时产生不一致理解。"
+          },
+          {
+            "severity": "low",
+            "description": "运行脚本路径依赖隐式约定：第 75 行明确指出工作目录是项目根而非 skill 目录，需用'skill 的完整安装路径'运行脚本，但未给出获取该路径的具体方法（无变量、无命令示例）。在不同安装位置下使用者需自行推断绝对路径，存在执行失败或找不到脚本的风险。"
+          },
+          {
+            "severity": "low",
+            "description": "流程纪律完全依赖模型自觉执行，无强制校验：分级、todo 勾选、'未验证'标注、范围控制等均为自然语言约束，没有任何 lint/hook/CI 把关。模型若跳过分级或谎称'已验证'，本文件无机制可拦截（仅 presubmit-scan 脚本覆盖提交前一小部分）。"
+          }
+        ],
+        "smells": [
+          "脚本双实现未同步文档：.sh 与 .ps1 并存，但 SKILL.md 仅记录 .sh，缺少跨平台说明，易随版本演进进一步脱节（孤儿文件/漂移风险）",
+          "单个 SKILL.md 承载分级/模式/8 阶段/问答规则/优先级/术语映射/加载时机/输出纪律共 8 类关注点，约 80 行内信息密度高；虽通过外链 references 减负，但入口文件本身职责面较宽",
+          "魔法编号与跨文档引用耦合：'此规则只在这里定义一次；其余参考文件都引用它'（第 55 行）形成强跨文件耦合，若本文件该段被改动或移动，未在本组件内的多个 references 引用会静默失效（本阶段未读 references 内容，无法确认引用一致性，标注为待核实）",
+          "frontmatter 的 description 字段极长（单行包含大量正反例），既当人读文档又当机器路由依据，双重职责混杂，维护时易顾此失彼"
+        ]
+      },
+      {
+        "component": "references/requirement-analysis.md",
+        "responsibilities": "这是 ai-engineering-delivery-zh Skill 的阶段 1-4 参考文档（纯 Markdown 提示词/方法论，非可执行代码）。职责是为 AI 在\"需求分析\"阶段提供结构化思考框架：(1) 业务理解——8 项追问（业务目标/角色/正常流/异常流/核心结果/Non-goals/歧义点/待确认；注：任务描述称\"6项\"，实际文件为8个要点）；(2) 现有系统扫描——7 类扫描面 + 固定输出五段式(已确认事实/合理推断/待确认问题/当前约束/影响范围) + 任务相关项目规则七段式抽取模板；(3) 梳理各流——业务流/数据流/持久化/UI 与后台面/接口设计五个子框架；(4) 编码前验收标准——八段式可观察验收模板。由 SKILL.md 第 38-41 行与第 69 行在\"需求含糊、业务重或高风险时\"按阶段加载。",
+        "keyLogic": [
+          "第3行声明 controller/service/mapper/entity 等为占位词，要求映射到项目实际技术栈，并指向 SKILL.md 的'把术语映射到实际技术栈'章节（SKILL.md 第61-63行确有此节）——交叉引用一致",
+          "第30行强制约束：'绝不把猜测当成已确认事实'，无法核实的事实必须放入'待确认问题'，这是该文件的核心方法论原则",
+          "扫描结果固定五段式输出格式(第33-43行代码块)：已确认事实/合理推断/待确认问题/当前约束/影响范围，与 SKILL.md 第39行描述完全对应",
+          "项目规则抽取七段式模板(第49-57行)：允许修改范围/构建与测试命令/架构约定/禁止操作/数据库与配置规则/完成标准/与本任务无关的规则；第59行特例：若任务本身是改项目规则则允许编辑但提交前单独点出",
+          "数据流串联模板(第81-84行)：前端参数->Controller/路由->Service->Repository/mapper/SQL->数据库表->异步任务/第三方->操作日志->响应字段->前端状态，并在第86行附带7项检查清单(参数必填/响应字段/转换/状态本地化/可空兼容/事务/幂等)",
+          "持久化分析(第88-96行)仅限数据库相关工作，并前置约束：不在搞清现有 schema 与兼容性前提出表结构变更",
+          "验收标准八段式模板(第110-119行)+第121行分级要求：权限敏感分别描述管理员/操作员子账号/未授权用户；高风险包含重复/并发/非法状态预期"
+        ],
+        "dependencies": [
+          "SKILL.md（父 Skill 定义文件）：第38-41行将本文件绑定为阶段1-4加载目标；第69行声明加载时机",
+          "SKILL.md 的'把术语映射到实际技术栈'章节（第61-63行）：本文件第3行显式引用，作为占位词解释的单一来源",
+          "下游参考文件（同 references/ 目录，流程衔接）：delivery-checklist.md(阶段5-6)、risk-review.md(阶段7)、retrospective-template.md(阶段8)、worked-example.md(完整示例)——本文件不直接引用它们，但按 SKILL.md 编排紧前于 delivery-checklist.md",
+          "无代码依赖、无外部库、无运行时依赖（纯文档）"
+        ],
+        "risks": [
+          {
+            "severity": "low",
+            "description": "任务描述与实际内容计数不一致：调用方任务描述称'业务理解6项'，但文件第9-16行实际列出8个要点(业务目标/角色/正常流/异常流/核心结果/Non-goals/歧义点/待确认)。这是任务描述对文件的概括偏差，非文件自身缺陷，但分析/验收时若以'6项'为基线会漏检2项。"
+          },
+          {
+            "severity": "low",
+            "description": "作为提示词文档，所有约束均为'软约束'——是否被 AI 遵守取决于模型执行，文件本身无任何机器可校验/强制机制。例如第30行'绝不把猜测当成已确认事实'、第90行'不在搞清 schema 前提出表结构变更'等关键安全原则无法被自动 lint/CI 校验，存在被静默忽略的风险。"
+          },
+          {
+            "severity": "low",
+            "description": "占位词映射高度依赖 SKILL.md 第61-63行的单一定义。若 SKILL.md 该章节被重命名/删除/移动，本文件第3行的指向('见 SKILL.md 的把术语映射到实际技术栈')会失效，导致 controller/service/mapper 等术语在纯前端/库/非分层项目中被误当作硬性要求。当前两处文案一致，风险仅在未来维护时显现。"
+          },
+          {
+            "severity": "low",
+            "description": "中英混排术语(Non-goals/trace ID/DTO/VO/entity)未给中文释义，对不熟悉分层后端术语的使用者可能产生理解歧义；但因受众为工程化交付场景，影响有限。"
+          }
+        ],
+        "smells": [
+          "计数口径与上游任务描述不一致(6 vs 8 要点)，文档内部与外部概括之间缺乏单一事实来源对账机制",
+          "多处模板以裸 text 代码块给出空白字段骨架(扫描五段/规则七段/持久化/验收八段)，无填写示例(示例集中在独立的 worked-example.md)，孤立阅读本文件时填写规范全靠文字描述，模板字段含义存在解读空间",
+          "跨文件引用以自然语言硬编码('见 SKILL.md 的...章节')而非锚点/链接，重构时易产生悬空引用",
+          "纯文档无版本号/变更记录，与下游 delivery/risk-review 等阶段文件的阶段编号(阶段1-4/5-6/7/8)耦合，阶段重排时多文件需手工同步"
+        ]
+      },
+      {
+        "component": "delivery-checklist.md (references/delivery-checklist.md)",
+        "responsibilities": "阶段 5-6（实现与验证）的操作清单。从\"已定方案\"进入编码后使用，提供四组检查项：(1) 编辑前 7 项前置确认（任务分级/项目规则抽取/现状区分事实-推断-待确认-约束-影响/验收标准/受影响面/可复用资产/最小路径/高风险点）；(2) 实现规则 8 条（只改相关文件、不擅改接口、前后端字段一致、状态内部化+标签本地化、权限放后端、数据库变更显式用 SQL 脚本、高风险加日志、避免投机抽象）；(3) 验证清单（前端/全栈 7 项 + 后端 9 项）；(4) 提交前准备（调用 presubmit-scan.sh 脚本 + 6 条人工核查与提交纪律）。它是 SKILL.md 主干阶段 5、6 链接的承载文件，是\"流程编排\"与\"具体动作\"之间的执行层，本身不含可执行代码，是纯文档。",
+        "keyLogic": [
+          "分级延续: 文件开头明确把'何时该问'的判断权交回 SKILL.md 的'唯一规则'(SKILL.md L49-55)，自己不重复——避免规则二义性，保持单一事实源。",
+          "实现规则强调低侵入与安全默认: '只改相关文件''不擅改接口形态''权限检查放后端不能只放前端''数据库变更优先评审 SQL 脚本而非启动自动执行''避免投机抽象/无关清理'，与全局 CLAUDE.md 第 11/16/18 条同向。",
+          "验证分前端与后端两套清单。前端含低 token 浏览器流程: 浅快照→仅 console 错误→过滤网络→最终截图→简短总结(对应 CLAUDE.md 第 12 条)。后端覆盖必填校验/受控缺失响应/非法状态阻止/幂等/并发不破坏状态/服务端鉴权/事务边界/失败不假成功/历史兼容。",
+          "诚实验证纪律: '某项检查跑不了就明确说明并附原因，绝不暗示通过'(L22)，呼应 CLAUDE.md 第 21 条。",
+          "提交前脚本是兜底而非替代: 明确'扫描是兜底，不替代读 diff''结果仅供参考——逐项核实'，且脚本住在 skill 的 scripts/ 目录而非项目里，需用 <skill-dir> 完整安装路径调用，并给出 bash 三种用法 + Windows PowerShell 等价用法。",
+          "护栏: 不修改/暂存/提交 CLAUDE.md 等项目规则文件(除非任务本身就是改规则)；未经确认不跑 git add/commit/push；绝不 force-push；YAML/配置改动单列检查项。"
+        ],
+        "dependencies": [
+          "SKILL.md —— 强依赖。本文件是 SKILL.md 交付主干阶段 5(L42)与阶段 6(L43)的承载参考；并显式把'何时该问'判断委托给 SKILL.md 的唯一规则(SKILL.md L49-55)。已实读确认该规则存在。",
+          "scripts/presubmit-scan.sh —— 强依赖(运行时)。提交前准备直接要求调用它(L33-35)。已实读: 脚本为只读扫描，支持 --staged / --base <ref> / 显式文件 / --help，退出码 0=无高危、2=高置信度真实凭据，存在即与文档描述的标志一致。",
+          "scripts/presubmit-scan.ps1 —— 强依赖(Windows 无 Git Bash 时的等价实现)。L38-42 引用，文件存在(184 行，未逐行核对功能等价性)。",
+          "其余同级参考(requirement-analysis.md 阶段1-4 / risk-review.md 阶段7 / retrospective-template.md 阶段8 / worked-example.md) —— 弱关联。本文件不直接引用它们，仅同属一套 skill 流程，由 SKILL.md 统一编排。",
+          "外部工具(可选): git、浏览器/Playwright 类自动化工具(L24 低 token 验证流程)——仅在适用场景需要。"
+        ],
+        "risks": [
+          {
+            "severity": "medium",
+            "description": "退出码 2 触发条件描述不准确。L44 写'项目规则文件（疑似密钥时退出码 2）'，把退出码 2 归因于'疑似密钥'。但实读 presubmit-scan.sh(L10-14、L99-106、L151)与 SKILL.md(L75)均明确: 退出码 2 仅由 HIGH 级(真实字面量凭据，如 PEM 私钥头/AKIA/sk_live 等)触发；'疑似密钥'(secret-ish 字段名)属 LOW 级，仅警告不改退出码。该清单的措辞与脚本真实行为及 SKILL.md 自相矛盾，使用者可能误判扫描结果(以为字段名命中就会 FAIL，或反之忽视真实凭据告警)。"
+          },
+          {
+            "severity": "low",
+            "description": "脚本调用依赖 <skill-dir> 占位符的人工正确替换。L30、L44 给出示例路径 '~/.claude/skills/ai-engineering-delivery-zh'，但在本仓库实际位置为 /data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh。若使用者照抄示例路径而未替换为真实安装路径，会因找不到脚本而无法执行提交前扫描，导致该兜底环节被静默跳过。"
+          },
+          {
+            "severity": "low",
+            "description": "PowerShell 等价实现的功能一致性未在文档内做出可核验承诺，仅以文字声称'功能一致'(L38)。本次只读分析未逐行比对 .sh 与 .ps1 的检测规则/退出码是否真正等价；若两者漂移，Windows 用户得到的扫描覆盖面可能弱于 Bash 版而不自知。"
+          },
+          {
+            "severity": "low",
+            "description": "提交前扫描定位为'兜底'，正则基于行级文本匹配(见脚本 KEY/KV_HIGH 等)，对多行密钥、Base64/加密载荷、非常见字段命名、注入式 SQL 等存在漏报。文档已申明'扫描是兜底，不替代读 diff'，风险被显式承认，但若执行者把它当作充分检查仍会遗漏高风险项(涉及 CLAUDE.md 第 16 条高风险逻辑必须人工复核)。"
+          }
+        ],
+        "smells": [
+          "同一事实在多处重复表述退出码语义且彼此不一致: 文档(L44'疑似密钥时退出码 2')与脚本注释/SKILL.md(HIGH 才退出码 2)冲突，属典型的'文档与实现漂移'。",
+          "脚本路径以占位符 <skill-dir> + 示例绝对路径给出，与实际安装路径不符，存在'示例当配置照抄'的可用性陷阱。",
+          "双实现(bash + PowerShell)需手工保持同步，缺少自动等价性校验机制，长期易产生平台间行为分叉。",
+          "纯清单式文档，检查项较密(尤其后端 9 项压在一行用·分隔)，可读性偏弱；但内容本身无冗余、与全局 CLAUDE.md 高度对齐，整体质量良好，上述均为轻微异味而非结构缺陷。"
+        ]
+      },
+      {
+        "component": "references/risk-review.md (阶段7 风险审查参考清单)",
+        "responsibilities": "这是 ai-engineering-delivery-zh Skill 阶段7「风险审查」的纯文本参考清单（41 行 Markdown，约 2.7KB，无可执行代码）。职责是为高风险业务域提供一套\"发布前必须人工审查\"的检查提纲，覆盖：支付金额/订单状态、支付回调幂等、会员权益激活、下载资格/次数扣减、登录认证、角色/菜单/按钮/接口/数据五类权限、SQL 更新与迁移、文件删除/访问/签名下载链接、定时任务重试补偿、外部回调验签、生产配置变更等。内容组织为 6 个检查维度：(1) 不要只信生成代码/静态检查的清单；(2) 一致性检查（找前后端/订单与权益/事务与日志等不一致）；(3) 状态机检查（合法源状态、终态不重开、非法流转服务端拒绝、按钮可见性与流转规则一致、批量混合状态、历史未知状态安全处理）；(4) 幂等与并发（重复点击/回调重放/重试任务/并发扣减等场景，强调状态条件更新 state-conditional update + 操作日志）；(5) 回滚与恢复（如何发现坏状态、证据日志、手工修复、回滚 SQL、补偿任务、旧行为恢复）；(6) 发布就绪确认（管理员/非管理员账号测权限、非法状态与重复操作路径实跑或推演、SQL/配置隔离评审、监控日志足以排障、残留风险白话记录）。",
+        "keyLogic": [
+          "纯声明式 prompt 内容，非可执行代码：作为参考文件被 LLM 在阶段7按需加载，引导其对高风险改动做结构化审查，不含任何脚本/函数/状态机实现",
+          "明确把 7 个高风险域（支付、会员、下载、认证、SQL、文件、回调）以及定时任务/状态机/金额计算/生产配置/破坏性操作划为'不能只信 AI 生成或静态检查、必须人工审查'的范畴（第3、7行）",
+          "一致性检查给出 12 条具体反模式，核心是跨边界状态不一致：前端成功而后端失败、订单已支付权益未激活、回调重复或部分生效、文件已删仍可下载、下载链接绕过归属/配额/数据范围校验、日志成功但事务回滚、按钮隐藏但接口仍放行、状态更新无审计、定时/重试把同一流转应用两次、历史 null/遗留状态搞挂新流程",
+          "状态机检查的 6 个不变式：源状态显式、终态不被重开、非法流转服务端拒绝、前端按钮可见性与后端流转规则一致、批量操作对混合状态可预期、历史/未知状态有安全展示与安全操作",
+          "幂等与并发明确给出推荐手段：重要流转优先用状态条件更新（state-conditional update）+ 操作日志，并枚举 12 类触发场景（重复点击、重复回调、重试、提交后刷新、双操作员同行、重复请求ID/订单号、DB 唯一性与条件更新、回调重放、部分重试、并发配额扣减/权益激活）",
+          "回滚与恢复要求每个高风险改动定义 6 件事：如何发现坏状态、哪些日志能证明发生了什么、如何手工修复、哪条 SQL/管理操作能回滚、是否需要补偿任务、旧行为能否安全恢复",
+          "发布就绪是一个'宣称就绪前'的 gate，强调以管理员+非管理员账号实测权限、非法/重复路径实跑或显式推演、SQL 与配置隔离评审、监控/日志/trace 足以排障、残留风险白话记录"
+        ],
+        "dependencies": [
+          "被 /data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md 引用（第44行流程第7步、第71行参考文件加载说明），是 SKILL.md 定义的8阶段工作流中阶段7的承载文件",
+          "概念上承接阶段6的验证（references/delivery-checklist.md）与阶段6的提交前扫描脚本（scripts/presubmit-scan.sh），并将残留风险输出到阶段8总结（references/retrospective-template.md）",
+          "依赖 SKILL.md 第61-63行'术语映射'约定：本文用分层后端术语（controller/service/repository/mapper、entity/DTO、migration、ORM），需读者自行映射到实际技术栈",
+          "无代码依赖、无外部库、无运行时依赖；纯文本，仅作为 LLM 上下文被加载，与 references/ 下其他 .md 同级互不 import",
+          "与全局规范 /data/workspace/liuyuanjian/CLAUDE.md 第16/17/23条（高风险逻辑人工复核、状态一致性/幂等/权限检查、补充日志与回滚方案）高度同源，二者内容互为呼应"
+        ],
+        "risks": [
+          {
+            "severity": "low",
+            "description": "无执行性/无强制力：这是给 LLM 看的 prompt 文本，本身不会运行也不会阻断发布，全部依赖调用方（人或模型）真正逐条执行。若阶段7被跳过或模型只是'读过'而未实际推演，清单形同虚设——这是 prompt 工程固有的不可强制风险，非文件缺陷。"
+          },
+          {
+            "severity": "low",
+            "description": "清单是定性提纲而非可勾选的判定标准：如'尽可能用管理员和非管理员账号测过权限''被实际跑过或被显式推演'留有'尽可能/或'的弹性措辞，容易被宽松解释为已满足，缺乏明确的通过/不通过判据。"
+          },
+          {
+            "severity": "low",
+            "description": "术语映射成本：正文使用分层后端术语（controller/service/mapper/migration/ORM），对纯前端、库、Serverless 或非分层架构项目，需要读者按 SKILL.md 第61-63行自行翻译意图，存在被错误套用或被认为'不适用而整段忽略'的风险。"
+          },
+          {
+            "severity": "low",
+            "description": "覆盖面虽广但非穷尽：未显式涵盖如多租户数据隔离的横向越权细节（仅在一致性检查里一笔带过'属于其他用户/租户仍可访问'）、限流/防刷、加密与 PII、时间窗口/时区导致的会员到期边界等，复杂支付/会员系统可能需要在此之外补充。"
+          }
+        ],
+        "smells": [
+          "纯 Markdown 文档，不存在传统代码异味（无函数、无重复代码、无死代码、无圈复杂度问题）",
+          "与 SKILL.md（第7行同段高风险域列举）及全局 CLAUDE.md 第16/17/23条存在内容重叠/同源表述，属于规范文档间常见的轻度冗余，便于独立加载但需多处同步维护",
+          "部分条目用顿号'·'把多个检查点压在一行（如状态机检查、发布就绪），单行信息密度高、不可逐项勾选，作为 checklist 的可操作性弱于分点列表",
+          "措辞偏口语/中文白话（'搞挂''大白话记录'），表达清晰但与典型规范文档风格不一致，属风格而非缺陷"
+        ]
+      },
+      {
+        "component": "retrospective-template.md (references/retrospective-template.md)",
+        "responsibilities": "支撑工程化交付流程\"阶段 8 复盘与沉淀\"的纯文档模板（无可执行代码）。提供三套可直接套用的产出骨架：(1) 交付摘要——8 个填空字段（模块、业务背景、业务目标、用户或角色、交付的行为、改动文件、已做的验证、残留风险）；(2) 技术笔记——以\"# 模块名\"为标题的 13 个章节大纲；(3) PR/提交摘要——按领域分组的 7 个分类清单。开头一句强约束：\"没真跑过的测试绝不说通过——写'未运行'/'未验证'并附原因\"，与全局规范第 21 条一致。被 SKILL.md 在阶段 8 引用（SKILL.md:45、SKILL.md:72）。",
+        "keyLogic": [
+          "纯 Markdown 模板，无代码、无脚本、无变量替换逻辑，全部为人工填写的占位骨架",
+          "三段式产出结构：交付摘要(8 字段) → 技术笔记(13 章节) → PR/提交摘要(7 分类)，覆盖从轻量摘要到完整文档的不同粒度",
+          "技术笔记 13 章节(line 23-35)：背景、业务目标、业务流、数据流、表关系、状态设计、权限设计、异常处理、日志与可追溯、实现说明、验证、踩坑、后续优化——强调数据流/状态/权限/异常/可追溯等高风险维度",
+          "PR/提交摘要 7 分类(line 43-56)：摘要、后端、前端、权限、异常处理、验证、风险——按领域分组而非按提交时间",
+          "贯穿全文的核心约束：验证必须如实标注，未跑的测试写'未运行/未验证'并附原因(line 3)，三套模板都内置'验证'与'风险/残留风险'字段以强制留痕"
+        ],
+        "dependencies": [
+          "被引用方：/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md（阶段 8 在 line 45、line 72 两处指向本文件）",
+          "本文件自身不 import/require/链接任何其他文件，无外部依赖",
+          "隐性依赖：与全局 CLAUDE.md 规范第 21 条（未验证禁止写'已验证'）、第 17/23 条（状态一致性、日志与回滚）在内容上呼应，但文件内未显式声明"
+        ],
+        "risks": [
+          {
+            "severity": "low",
+            "description": "任务描述与实际内容不符：任务称技术笔记为'11 个章节'，但实际文件(line 23-35)为 13 个章节（背景、业务目标、业务流、数据流、表关系、状态设计、权限设计、异常处理、日志与可追溯、实现说明、验证、踩坑、后续优化）。属文档计数偏差，不影响功能，但说明上游描述与模板已不同步。"
+          },
+          {
+            "severity": "low",
+            "description": "模板为纯静态填空骨架，无任何校验或必填强制机制。'已做的验证''残留风险''验证'等关键字段完全依赖填写者自觉，若使用者跳过或留空，line 3 的'绝不说通过'约束无法被技术手段拦截，仅靠流程自律。"
+          },
+          {
+            "severity": "low",
+            "description": "三套模板字段存在重叠但措辞不统一：交付摘要用'残留风险'，PR 摘要用'风险'；交付摘要用'已做的验证'，技术笔记/PR 摘要用'验证'。同一概念多种叫法，长期可能造成跨产出物对齐困难，但非缺陷。"
+          }
+        ],
+        "smells": [
+          "技术笔记与 PR 摘要中同义字段命名不一致（'残留风险' vs '风险'、'已做的验证' vs '验证'），降低跨模板可对照性",
+          "三套模板的'验证''风险'字段语义重叠，存在轻度重复，但因服务不同输出粒度可接受",
+          "代码块统一使用 ```text 语言标注，导致技术笔记中以 # / ## 开头的 Markdown 标题被当作纯文本展示，预览时不会渲染为标题层级（属刻意选择以避免被当真标题，非错误，但影响可读性）",
+          "无版本号/更新日期，章节数已与上游任务描述(11 vs 13)产生漂移却无法从文件自身察觉"
+        ]
+      },
+      {
+        "component": "worked-example.md (references/worked-example.md)",
+        "responsibilities": "这是 ai-engineering-delivery-zh Skill 的\"端到端示范\"参考文件，由 SKILL.md 第 47、73 行引用。它用一个真实但高风险的小功能——\"操作员把已支付订单标记为已退款\"——把 SKILL.md 定义的 8 阶段交付主干（业务范围→现有系统扫描→梳理各流→验收标准→规划与最小实现→验证→风险审查→复盘 PR 摘要）从头到尾完整跑通一遍。它的职责是\"展示每个产物的形状\"（文档第 3 行明确声明），即给读者/AI 一个可参照的产出模板，而非可照抄执行的脚本。技术栈以 Spring Boot + MyBatis + Vue 为载体，并提示读者把术语映射到自己的栈。它是纯 Markdown 文档，不含可执行代码、不被任何脚本调用。",
+        "keyLogic": [
+          "阶段 1 业务范围：用 '目标/角色/正常流/核心结果/Non-goals/待确认' 六要素界定范围，并显式把退款语义的歧义（触发网关退款 vs 仅记录外部退款）列为必须确认项，呼应 SKILL.md 的'何时该问'唯一规则。",
+          "阶段 2 现有系统扫描：严格按 SKILL.md 第 39 行规定的五段式输出（已确认事实/合理推断/待确认问题/当前约束/影响范围），并落实'仅当影响数据形态或外部接口时才问'的规则，答复为'只记录'。",
+          "阶段 3-4：梳理业务流/数据流/状态机三条流，给出具体接口契约 POST /admin/orders/{id}/refund 与可观察的验收标准（200/{REFUNDED}、非 PAID 返 409、未授权返 403、同一事务三写）。",
+          "阶段 5 最小实现的核心安全设计：OrderMapper.updateStatusIfPaid 用条件更新 'WHERE id=#{id} AND status=PAID'，以受影响行数=0 作为幂等护栏；OrderService.refund 用 @Transactional 把状态更新+撤销权益+写审计日志绑定在同一事务；只动 4 个文件、不改 markPaid 与状态枚举。",
+          "阶段 6 验证：单测/并发(两个并行退款一个 200 一个 409)/权限(403)/409 零写库/浏览器五类检查全标'通过'，并显式标注'真实网关退款——未运行，按阶段 2 决定属超范围'，符合 SKILL.md 第 79 行的输出纪律。",
+          "阶段 7 风险审查：逐项覆盖 risk-review.md 的四大维度——幂等(条件更新)、一致性(同事务避免'已退款但仍有权益')、状态机(仅 PAID→REFUNDED 终态不重开)、权限(服务端强制非仅隐藏按钮)、回滚(管理员 SQL 恢复+审计行举证)，并标记发布前需人工确认'只记录'语义。",
+          "阶段 8 复盘：按 摘要/后端/前端/权限/验证/风险 六段给出 PR 摘要模板。"
+        ],
+        "dependencies": [
+          "SKILL.md（被其第 47、73 行作为'整条主干的具体跑通'引用；本文件 8 阶段结构与 SKILL.md 第 38-45 行的交付主干一一对应）",
+          "references/risk-review.md（阶段 7 的幂等/一致性/状态机/回滚/发布就绪检查项直接对应此文件内容）",
+          "references/requirement-analysis.md（阶段 1-4 的产物形状对应此文件，未读但由 SKILL.md 映射）",
+          "references/delivery-checklist.md（阶段 5-6 的实现与验证对应此文件，未读但由 SKILL.md 映射）",
+          "references/retrospective-template.md（阶段 8 的 PR 摘要对应此文件，未读但由 SKILL.md 映射）",
+          "无运行时/代码依赖：纯文档，不被 scripts/ 下脚本引用（grep 仅命中 SKILL.md 两处）"
+        ],
+        "risks": [
+          {
+            "severity": "low",
+            "description": "示例代码片段为说明性、非完整可运行：如 updateStatusIfPaid 只写了 SQL 概要、refund() 只写了控制流要点，readers 若直接照抄会缺少异常映射(InvalidStateException→409 的全局处理器)、参数校验、operator 取值等细节。文档第 3 行已声明'展示形状不是照抄脚本'，故风险低，但仍可能被 AI/新手误当作完整实现模板。"
+          },
+          {
+            "severity": "low",
+            "description": "回滚方案依赖'管理员手工 SQL 恢复 PAID + 重新激活权益'(第 87 行)，被列为'残留运维说明'而非工程化补偿能力。在真实系统中手工 SQL 回滚本身是高风险操作(易写错、无幂等、无审计闭环)，作为示范可能弱化读者对'自动化/可审计回滚'的重视。仅文档示范层面，风险低。"
+          },
+          {
+            "severity": "low",
+            "description": "示例显式将'调用真实支付网关退款'排除在范围外(只记录状态)。这是该示例刻意简化的边界，文档也反复标注，但若读者把此模式套用到真正需要触发资金流的场景，会遗漏'记录状态成功但资金未退/资金已退但状态未记'这类支付一致性风险(正是 risk-review.md 第 14、17 行所警示的)。属示范局限而非缺陷。"
+          }
+        ],
+        "smells": [
+          "示例中的标识符'权益失效/撤销权益'对应 EntitlementMapper.deactivateByOrder，与阶段 2 扫描结论'目前没有撤销路径'(第 25 行)一致，即此撤销方法是本次新增；但阶段 5 实现清单(第 63-66 行)只显式列出 mapper.updateStatusIfPaid、service.refund、controller.refund、order-detail.vue 四项，未把 EntitlementMapper.deactivateByOrder 的新增列入'只动了这些文件'(第 68 行)，存在轻微的'声称改动文件清单与实际所需新增方法不完全自洽'的叙述瑕疵（示范文档层面）。",
+          "并发测试结论'一个 200 一个 409，状态只变一次'(第 74 行)依赖数据库条件更新的原子性，但示例未点明 MyBatis/MySQL 默认隔离级别或行锁前提；作为高风险示范，省略并发正确性的前提条件略显含糊。",
+          "整体为纯展示性文档，无版本/日期标记，与 SKILL.md 的阶段编号强耦合(8 阶段)；若 SKILL.md 主干阶段调整，本示例需同步维护，存在文档漂移隐患（当前两者一致，无实际不一致）。"
+        ]
+      }
+    ],
+    "risk": {
+      "risks": [
+        {
+          "area": "presubmit-scan.sh / .ps1 — --base 错误引用静默放行（异常分支）",
+          "severity": "high",
+          "description": "实测确认：当 --base <ref> 传入不存在的引用时，git 把 'fatal: ambiguous argument' 写到 stderr，但 list_files() 中 `git diff ... \"$base...HEAD\"` 没有错误处理；该命令在进程替换 <(list_files) 内运行（.sh 第 71-73 行），其失败不会触发主 shell 的 set -e，stdout 为空，脚本随即打印 'No changed files to scan.' 并以退出码 0 结束。.ps1 第 79 行同样直接 `git diff ... \"$Base...HEAD\"` 且不检查 $LASTEXITCODE，行为一致。",
+          "impact": "PR 准备阶段（脚本主打用途）若基线分支名拼错（如把 origin/main 写成 origin/master、或本地无该远程引用），扫描看似成功(EXIT 0=clean)实则一个文件都没扫，真实密钥/SQL/冲突标记全部漏检。这是 CLAUDE.md 第 16/22 条所指高风险逻辑的兜底环节被静默跳过，且使用者完全无感知。",
+          "mitigation": "验证方案：用错误 base ref 跑脚本，断言应非 0 退出或给出醒目错误而非 'No changed files'。修复建议（仅记录，不改代码）：在 base 模式先 `git rev-parse --verify \"$base^{commit}\"`，失败即 exit 1；或检查 git diff 退出码。"
+        },
+        {
+          "area": "delivery-checklist.md L44 退出码语义与脚本/SKILL.md 矛盾（一致性）",
+          "severity": "medium",
+          "description": "实读三处对照确认不一致：delivery-checklist.md 第 44 行写『项目规则文件（疑似密钥时退出码 2）』，把退出码 2 归因于『疑似密钥』。但 presubmit-scan.sh（第 10-14、99-106、151 行）与 SKILL.md 第 75 行均明确：退出码 2 只由 HIGH 级（真实字面量凭据：PEM 头/AKIA/sk_live 等）触发；『疑似密钥/secret-ish 字段名』属 LOW 级仅警告、不改退出码。动态测试佐证：纯字段名(password:/apiKey=)命中 LOW，EXIT=0；真实值命中 HIGH，EXIT=2。",
+          "impact": "使用者可能误判扫描结果——以为字段名命中就会 FAIL（造成无谓阻塞），或反过来对真实凭据告警的严重性认识不足。文档与实现漂移会侵蚀对兜底脚本的信任，违背单一事实源原则。",
+          "mitigation": "验证方案：以『字段名 only』与『真实值』两类样例分别跑脚本，比对实际退出码与文档表述。建议把 L44 措辞改为与 SKILL.md/脚本一致的『高置信度真实凭据 → 退出码 2；疑似字段名 → 仅警告』。"
+        },
+        {
+          "area": "密钥检测漏报：跨行/非字段名 token/Base64-JWT（边界场景）",
+          "severity": "medium",
+          "description": "脚本基于逐行文本正则，实测三类漏报：(1) 键值跨行——`api_key:` 在第1行、长值在第2行，仅 LOW 命中字段名、HIGH 漏掉真实值(EXIT=0)；(2) 非 KEY 模式的赋值——`token=eyJ...`(JWT) 因 'token' 不在 KEY 集合且无引号，完全无命中(EXIT=0)；(3) 二进制文件内嵌密钥——grep -I / Test-TextFile 跳过含 NUL 字节文件(EXIT=0)。多行 PEM 仅 BEGIN 头匹配（够用），但 PEM body 本身不被识别。",
+          "impact": "把脚本当『充分检查』而非『兜底』时，真实凭据可能溜过提交前扫描。文档(delivery-checklist L44、SKILL L75)已声明『扫描是兜底，不替代读 diff』，风险被显式承认，故定为 medium 而非 high。",
+          "mitigation": "验证方案：维护一组已知应命中/应漏报的密钥样例做回归。使用纪律上严格执行『脚本只是兜底，必须人工读 diff』(CLAUDE.md 第 16 条)。如需收敛漏报，可补充无字段名的常见 token 前缀直检（已有 sk_/gh_/AIza/xox 等，可扩展 JWT/Base64 熵检测——仅建议）。"
+        },
+        {
+          "area": "双实现(.sh/.ps1)跨平台一致性无自动校验，且 pwsh 环境缺失致无法实测(一致性)",
+          "severity": "medium",
+          "description": "两脚本声称『功能一致(matching the bash version)』。本环境 pwsh 不可用，.ps1 仅做静态审读：检测正则常量(KEY/KV_HIGH/KV_LOW/AKIA/PEM/provider 前缀)、demote 列表、两级逻辑、退出码 0/2、四种模式与 .sh 文本对应一致，但 PowerShell 与 grep 的正则引擎差异(如 \\s、字符类、`$`/反引号转义、Select-String 默认大小写不敏感 vs grep -i 的显式标志、AKIA/provider 用 -CaseSensitive)未经运行验证，可能在边界匹配上分叉。.sh 与英文副本经 sha256 确认字节级一致(edf6f07...)，.ps1 与英文副本 diff 亦 IDENTICAL。",
+          "impact": "Windows(pwsh)用户得到的扫描覆盖面若与 Bash 版漂移而不自知，会在跨平台团队产生不一致的提交前把关强度。无 lint/CI 锁定二者等价，长期演进易分叉。",
+          "mitigation": "验证方案：在具备 pwsh 的环境用同一组样例(本报告已构造)分别跑 .sh 与 .ps1，逐项比对命中行与退出码。建议加一个跨平台等价性回归测试或在 CI 校验两脚本对固定 fixtures 的输出。本次因 pwsh 缺失，.ps1 动态行为标注为『未验证』。"
+        },
+        {
+          "area": "SKILL.md 未提及 .ps1，文档与实现脱节（一致性）",
+          "severity": "low",
+          "description": "实读确认：scripts/ 下存在 presubmit-scan.ps1，delivery-checklist.md(L38-42)有 PowerShell 用法，但 SKILL.md 第 75 行只提 .sh，从未提 .ps1。两脚本均自带『byte-identical / 适配 Claude Code 与 Codex 两份副本』注释（.sh 第 7-8 行、.ps1 第 7-8 行），且已验证与英文副本字节级一致。",
+          "impact": "只读 SKILL.md（Skill 主入口）的 Windows 用户或不翻 scripts/ 的使用者无法得知存在等效 PowerShell 脚本，可能误以为无跨平台支持而跳过提交前扫描。",
+          "mitigation": "建议在 SKILL.md 第 75 行补一句指向 .ps1 的跨平台说明（与 delivery-checklist 对齐）。验证方案：核对 SKILL.md 是否覆盖 scripts/ 下全部脚本。"
+        },
+        {
+          "area": "脚本安装路径靠人工替换 <skill-dir> 占位符（异常分支/可用性）",
+          "severity": "low",
+          "description": "SKILL.md L75 与 delivery-checklist L30/L44 强调脚本住在 skill 目录而非项目根，需用完整安装路径调用；示例给的是 '~/.claude/skills/ai-engineering-delivery-zh'，但本仓库实际位置为 /data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh。脚本自身对路径无依赖（实测从任意 git 仓库内用绝对路径调用、或对显式文件/非 git 目录调用均正常工作）。",
+          "impact": "若使用者照抄示例路径而未替换为真实安装路径，会因找不到脚本而无法执行提交前扫描，导致兜底环节被静默跳过——与第一条风险叠加时尤其危险。",
+          "mitigation": "使用纪律：调用前先确认绝对路径存在。可在文档补一句『用 `realpath` 或先 ls 确认脚本路径』。验证方案：用错误路径调用，确认报错明确（系统级 'No such file'，非脚本静默放行）。"
+        },
+        {
+          "area": "全流程纪律纯靠模型自觉，无强制校验（权限/状态流转/幂等的元风险）",
+          "severity": "low",
+          "description": "SKILL.md 与全部 references 为自然语言软约束：任务分级、todo 勾选、『未验证不得写已验证』、最小改动范围、『绝不把猜测当已确认事实』(requirement-analysis L30)、『搞清 schema 前不提表结构变更』(L90)、risk-review 全部审查项——均无 lint/hook/CI 把关。唯一可执行的 presubmit-scan 只覆盖提交前一小段文本面，且本身存在上述漏报与 --base 静默放行。",
+          "impact": "模型若跳过分级、谎称已验证、或在阶段 7 风险审查只『读过未推演』，本框架无机制拦截。对支付/权限/状态机等高风险域，纪律失效即等同 CLAUDE.md 第 16/17/21 条被绕过。",
+          "mitigation": "这是 prompt 工程方法学的固有风险，非文件缺陷。缓解靠：把脚本作为强制 pre-commit hook（结合修复 --base 风险）、对高风险域要求人工复核留痕、复盘模板强制填『已做的验证/残留风险』字段。验证方案不适用于静态分析，属运行时行为。"
+        }
+      ],
+      "consistencyChecks": [
+        "退出码语义三处对照：presubmit-scan.sh(L10-14/99-106/151) 与 SKILL.md(L75) 一致=『仅 HIGH 真实凭据→exit 2，LOW 字段名→仅警告』；但 delivery-checklist.md(L44)『疑似密钥时退出码 2』与之矛盾——需以脚本+SKILL.md 为准修正 checklist 措辞。",
+        "跨副本字节级一致性：已用 sha256sum 验证 zh 与 en 的 .sh 完全一致(edf6f07ef7bb...)，.ps1 用 diff 验证 IDENTICAL，坐实脚本注释『byte-identical across Claude Code and Codex copies』的自我声明。",
+        "双实现等价性：.sh 与 .ps1 的检测项(KEY/KV_HIGH/KV_LOW、AKIA、PEM、provider 前缀、demote 列表、debug/test-only/localhost/TODO/冲突/SQL/规则文件/大文件 512000B 阈值、退出码 0/2、四模式)文本逐项对应一致；但因 pwsh 不可用，正则引擎层面的实际匹配等价性『未验证』。",
+        "SKILL.md 阶段编号(1-8) 与 references 文件绑定一致：requirement-analysis=阶段1-4、delivery-checklist=阶段5-6、risk-review=阶段7、retrospective-template=阶段8、worked-example=完整示例；各 references 内部阶段标题与 SKILL.md L38-45/L69-73 引用一致。",
+        "『何时该问』单一事实源：SKILL.md L49-55 定义一次，delivery-checklist L3 显式委托回 SKILL.md 不重复——单一来源原则被遵守，无重复定义冲突。",
+        "术语映射单一来源：requirement-analysis L3 指向 SKILL.md『把术语映射到实际技术栈』(SKILL.md L61-63)，两处文案一致；为自然语言硬编码引用(非锚点)，重构时需手工同步。",
+        "HIGH/LOW 去重：脚本 L110-112(.sh)/L141(.ps1) 把已 HIGH 的行从 LOW 剔除，实测同一行真实凭据只在 HIGH 报一次、不在 LOW 重复——一致性正确。",
+        "SKILL.md 文档覆盖度：SKILL.md L75 只列 .sh，遗漏实际存在的 .ps1；delivery-checklist 两者都列——主入口与子清单对脚本清单不一致。",
+        "worked-example 改动文件清单自洽性(轻微瑕疵)：阶段5『只动了这4个文件』未把新增 EntitlementMapper.deactivateByOrder 列入，与阶段2『目前没有撤销路径』结论存在叙述不完全自洽(示范文档层面，已在组件分析记录)。"
+      ],
+      "idempotencyConcerns": [
+        "脚本本身只读、无副作用：注释与代码均确认 NEVER modifies/stages/commits；实测多次重复运行同一仓库结果稳定一致，天然幂等，多次执行不改变工作区/暂存区/提交。",
+        "--staged / --base / changed / explicit 四种模式对同一输入重复运行输出一致(已实测 help/explicit/staged-empty/base 各模式)，无累积状态。",
+        "脚本作为提交前兜底，其检测的目标领域(risk-review.md 阶段7)才是真正的幂等关注点：risk-review 明确要求重要状态流转用『状态条件更新(state-conditional update)+操作日志』，worked-example 用 `UPDATE ... WHERE id=#{id} AND status=PAID` 以受影响行数=0 作为幂等护栏——这是该 Skill 指导业务代码幂等的核心模式，但属被指导对象的运行时属性，非本 Skill 自身可静态验证。",
+        "注意：--base 静默放行(高危风险)虽不破坏幂等(重复跑都静默 0)，但『稳定地错误』比『偶发失败』更隐蔽——幂等性在此反而掩盖了功能失效，需配合退出码校验而非依赖重跑发现。"
+      ],
+      "boundaryCases": [
+        "空改动集：--staged 无暂存、或无改动文件→打印 'No changed files to scan.' EXIT=0（已实测）。",
+        "非 git 目录+显式文件：正常扫描显式文件、可正常 exit 2（已实测 x.txt 命中 HIGH）；非 git 目录而无显式文件(changed/staged/base 模式)→require_git 报错 exit 1。",
+        "错误 --base 引用：git fatal 到 stderr 但脚本 EXIT=0 静默放行（已实测，列为 high 风险）。",
+        "跨行密钥：键名与值分处两行→HIGH 漏报、仅 LOW 命中字段名（已实测 split.txt EXIT=0）。",
+        "非字段名 token：token=/JWT/裸 Base64 不在 KEY 集合且无引号→完全漏报（已实测 jwt.txt EXIT=0）。",
+        "二进制/含 NUL 文件：grep -I(.sh)/Test-TextFile 前 8000 字节探 NUL(.ps1) 跳过→内嵌密钥不扫（已实测 bin.dat EXIT=0，标准行为）。",
+        "占位符/env 引用降级：process.env / ${VAR} / <your_key> / changeme / placeholder / your_ / example.com|org 从 HIGH 降级为 LOW（已实测 placeholder.txt 4 行全进 LOW、EXIT=0），正确避免误报。",
+        "大文件阈值边界：>512000 字节(精确 500KB)才标记，等于阈值不标记（静态确认 `-gt 512000`）。",
+        "--base 双点 vs 三点：脚本用三点 `$base...HEAD`(merge-base 以来)，实测 feature 分支只扫自分叉后改动、排除 main-only 文件——语义正确(适合 PR 准备)。",
+        "大小写：KEY/KV 与多数模式用 -i / Select-String 默认不敏感(API_KEY/apiKey/Password 均命中)；AKIA 与 provider 前缀(sk_live/gh_/AIza/xox)用大小写敏感，避免把普通小写文本误判。",
+        ".sql 文件判定：仅按扩展名 *.sql 触发 DROP/TRUNCATE/ALTER TABLE/DELETE FROM 检测；内联在 .java/.xml(MyBatis) 等非 .sql 文件中的危险 SQL 不会被 SQL 检测项命中（漏报边界）。",
+        "合并冲突标记：仅匹配行首 `<<<<<<<` 与 `>>>>>>>`，不匹配 `=======`（避免与其它分隔线误报，已实测只报 2 行 HEAD/branch）。"
+      ]
+    },
+    "testPlan": {
+      "testStrategy": "probe5 escaped full 18",
+      "cases": [
+        {
+          "id": "TC-01",
+          "scenario": "base 传入不存在的引用(origin/does-not-exist 或拼错 origin/master),仓库含真实凭据 sk_live_ 的已提交改动,跑 presubmit-scan.sh --base BADREF",
+          "type": "异常分支负向(高危回归)",
+          "expected": "实测 git 把 fatal ambiguous argument unknown revision 写到 stderr,但脚本 stdout 打印 No changed files to scan 并 EXIT 0,凭据漏检(已复现)。期望应非 0 退出或给醒目错误。锁定回归:只要 EXIT 仍 0 且无错误提示即判定 high 风险存在",
+          "priority": "P0"
+        },
+        {
+          "id": "TC-02",
+          "scenario": "base 传入有效引用(HEAD~1 或真实 origin/main),自分叉以来改动含真实凭据,跑 presubmit-scan.sh --base GOODREF",
+          "type": "正向(与 TC-01 对照)",
+          "expected": "EXIT 2,输出 POSSIBLE SECRET HIGH 列出 leak 文件与行,末尾 FAIL high-confidence secret found exit 2(已实测 HEAD~1 命中 leak.txt 第1行)。证明 TC-01 失败仅因 base 引用无效被静默吞掉,而非检测能力问题",
+          "priority": "P0"
+        },
+        {
+          "id": "TC-03",
+          "scenario": "仅含密钥字段名无真实值(password 冒号 与 apiKey 等号 单独成行),跑显式文件扫描",
+          "type": "边界退出码语义",
+          "expected": "命中 LOW 级 Secret-like field,EXIT 0(已实测)。钉死 delivery-checklist L44 疑似密钥时退出码 2 措辞错误,字段名命中不改退出码",
+          "priority": "P0"
+        },
+        {
+          "id": "TC-04",
+          "scenario": "含真实字面量凭据值(password 冒号 SuperSecretValue12345 同一行),跑显式文件扫描",
+          "type": "正向退出码语义",
+          "expected": "命中 HIGH 级,EXIT 2,打印 FAIL(已实测)。与 TC-03 对照确立 仅 HIGH 真实凭据 exit 2 LOW 字段名仅警告,以脚本加 SKILL.md L75 为准,证明 delivery-checklist L44 文档漂移",
+          "priority": "P0"
+        },
+        {
+          "id": "TC-05",
+          "scenario": "跨行键值 键名第1行 api_key 冒号 长 alnum 值第2行且不含独立 token 前缀(非 AKIA sk_ PEM),跑显式文件扫描",
+          "type": "边界漏报",
+          "expected": "HIGH 漏报仅 LOW 命中字段名 EXIT 0(已实测 split2.txt)。对照同内容同一行 EXIT 2(已实测 sameline.txt)。证逐行正则跨行漏报。注 fixture 值不可含独立 token 模式否则被 AKIA 直检命中造成假阳(首轮 split.txt 即因 AKIA 误测)",
+          "priority": "P1"
+        },
+        {
+          "id": "TC-06",
+          "scenario": "非字段名 token 赋值 token 等号 eyJ JWT(token 不在 KEY 集合且无引号无独立前缀),跑显式文件扫描",
+          "type": "边界漏报",
+          "expected": "HIGH 与 LOW 均 0 命中 EXIT 0(已实测 jwt.txt)。证 KEY 集合外常见 token(JWT 裸 Base64)完全漏报,须按 脚本只兜底必须人工读 diff 执行",
+          "priority": "P1"
+        },
+        {
+          "id": "TC-07",
+          "scenario": "二进制含 NUL 字节文件内嵌真实密钥(sk_live_ 后接 NUL),跑显式文件扫描",
+          "type": "边界漏报(标准行为)",
+          "expected": "grep -I 跳过二进制 HIGH 0 命中 EXIT 0(已实测 bin.dat)。属 grep -I 标准行为。.ps1 用 Test-TextFile 探前 8000 字节 NUL(未验证 pwsh 缺失)",
+          "priority": "P2"
+        },
+        {
+          "id": "TC-08",
+          "scenario": "占位符 env 引用降级 dollarVAR changeme your_password_here process.env.X 各占一行,跑显式文件扫描",
+          "type": "正向误报抑制",
+          "expected": "4 行全部从 HIGH 降级为 LOW EXIT 0(已实测 ph.txt 4 行进 LOW)。证 demote 列表正确避免对占位符误报",
+          "priority": "P1"
+        },
+        {
+          "id": "TC-09",
+          "scenario": "非 git 目录下对显式文件路径(含真实凭据)调用脚本",
+          "type": "边界可用性",
+          "expected": "正常扫描 EXIT 2 打印 FAIL(已实测从 tmp 对 realval.txt 调用命中)。证显式文件模式不依赖 git 上下文",
+          "priority": "P1"
+        },
+        {
+          "id": "TC-10",
+          "scenario": "非 git 目录下不带显式文件用 changed staged base 模式调用脚本",
+          "type": "异常分支",
+          "expected": "require_git 触发 stderr 报 error not inside a git repo EXIT 1(与 TC-01 静默 0 对比,证此分支有正确错误处理,凸显 base 路径缺失同等保护)",
+          "priority": "P2"
+        },
+        {
+          "id": "TC-11",
+          "scenario": ".sql 文件含 DROP TABLE DELETE FROM TRUNCATE ALTER TABLE,跑显式文件扫描",
+          "type": "正向 SQL 风险",
+          "expected": "命中 SQL risk needs human review 列出危险语句 EXIT 0(advisory 已实测 d.sql)。边界 同样危险 SQL 内联在 .java .xml MyBatis 等非 .sql 文件不被命中(按扩展名触发的漏报边界)",
+          "priority": "P1"
+        },
+        {
+          "id": "TC-12",
+          "scenario": "含完整合并冲突标记文件(行首七左尖括号 HEAD 七等号 七右尖括号 branch),跑显式文件扫描",
+          "type": "边界",
+          "expected": "仅报行首七左尖括号与七右尖括号两行,不报七等号(避免与普通分隔线误报)EXIT 0(已实测 conf.txt 报 2 行)",
+          "priority": "P2"
+        },
+        {
+          "id": "TC-13",
+          "scenario": "对同一含密钥文件连续运行脚本两次比对完整输出",
+          "type": "幂等只读",
+          "expected": "两次输出字节级 IDENTICAL 工作区暂存区提交均无变更(已实测 diff -q 一致)。证脚本只读无副作用幂等。注 base 静默放行下 稳定地错误 比偶发失败更隐蔽,幂等性反掩盖功能失效,须配退出码校验非靠重跑(见 TC-01)",
+          "priority": "P2"
+        },
+        {
+          "id": "TC-14",
+          "scenario": "delivery-checklist L44 退出码措辞 与 SKILL.md L75 加 presubmit-scan.sh L10-14 99-106 151 三处对照核验",
+          "type": "文档实现一致性(静态)",
+          "expected": "不一致已确认 L44 把 exit 2 错误归因于 疑似密钥;脚本与 SKILL.md L75 明确 仅 HIGH 真实字面量凭据 exit 2 LOW 疑似字段名仅警告。判 medium 漂移,应以脚本加 SKILL.md 为准修正 L44 措辞",
+          "priority": "P1"
+        },
+        {
+          "id": "TC-15",
+          "scenario": "SKILL.md L75 是否覆盖 scripts 下全部脚本(核对 .ps1 是否被主入口提及)",
+          "type": "文档覆盖度一致性(静态)",
+          "expected": "不一致已确认 scripts 下实存 presubmit-scan.ps1 且 delivery-checklist L38-42 有 PowerShell 用法,但 SKILL.md L75 只提 .sh 从未提 .ps1(已实读三处确认)。判 low 脱节,建议 L75 补跨平台 .ps1 指向",
+          "priority": "P2"
+        },
+        {
+          "id": "TC-16",
+          "scenario": ".sh 与 .ps1 以及 zh 与 en 副本的跨平台跨副本等价性核验",
+          "type": "跨平台等价性(部分未验证)",
+          "expected": "静态 .sh 与英文副本 sha256 一致 .ps1 与英文副本 diff IDENTICAL;检测正则常量 demote 两级逻辑 退出码 0 与 2 四模式与 .sh 逐项对应。运行层 pwsh 缺失(已实测 MISSING),.ps1 正则引擎实际匹配差异(反斜杠s 字符类 转义 Select-String 默认大小写不敏感 vs grep -i AKIA provider 的 CaseSensitive)一律标未验证,需有 pwsh 环境跑同组 fixtures 逐项比对后结案",
+          "priority": "P1"
+        },
+        {
+          "id": "TC-17",
+          "scenario": "大文件阈值边界 构造等于 512000 字节与大于 512000 字节两个文件,跑显式文件扫描",
+          "type": "边界",
+          "expected": "脚本用 -gt 512000 恰好 512000 不标记 512001 及以上标记 Large file(静态确认条件,建议补动态 fixture 确认 off-by-one)。EXIT 不受影响(非 HIGH)",
+          "priority": "P2"
+        },
+        {
+          "id": "TC-18",
+          "scenario": "大小写敏感性核验 API_KEY apiKey Password 走不敏感 AKIA sk_live gh_ AIza xox 走敏感,构造大小写变体扫描",
+          "type": "边界",
+          "expected": "KEY KV 与多数模式用 -i 命中各种大小写;AKIA 与 provider 前缀大小写敏感(小写 akia 或普通文本不误判)。建议构造混合大小写 fixture 实测确认两类策略边界(本轮未单独跑大小写专项 标待补)",
+          "priority": "P2"
+        }
+      ],
+      "verificationCommands": [
+        "bash SCRIPTDIR/presubmit-scan.sh --help; echo EXIT (用法退出码 0 已实测)。SCRIPTDIR=/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/scripts",
+        "TC-01 02 高危回归 W=mktemp -d 在 W 内 git init 并提交一个含 sk_live_0123456789abcdefghij 的 leak.txt 先 bash SCRIPTDIR/presubmit-scan.sh --base origin/nope (期望 EXIT 0 静默放行=风险) 再 bash SCRIPTDIR/presubmit-scan.sh --base HEAD~1 (期望 EXIT 2 命中)",
+        "TC-03 字段名 only 期望 EXIT 0 向 D/f.txt 写两行 password 冒号 与 apiKey 等号 bash SCRIPTDIR/presubmit-scan.sh D/f.txt",
+        "TC-04 真实值 期望 EXIT 2 向 D/r.txt 写 password 冒号 SuperSecretValue12345 bash SCRIPTDIR/presubmit-scan.sh D/r.txt",
+        "TC-05 跨行漏报 期望 EXIT 0 D/s.txt 第1行 api_key 冒号 第2行 QWErtyUIop1234567890ABCDEFGH bash SCRIPTDIR/presubmit-scan.sh D/s.txt",
+        "TC-06 JWT 漏报 期望 EXIT 0 D/j.txt 写 token 等号 eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.abc bash SCRIPTDIR/presubmit-scan.sh D/j.txt",
+        "TC-08 占位符降级 期望 EXIT 0 D/p.txt 写 api_key dollarX secret changeme123456789 password your_password_here bash SCRIPTDIR/presubmit-scan.sh D/p.txt",
+        "TC-11 SQL 风险 期望 advisory EXIT 0 D/d.sql 写 DROP TABLE users 与 DELETE FROM orders bash SCRIPTDIR/presubmit-scan.sh D/d.sql",
+        "TC-13 幂等 对 D/r.txt 连跑两次重定向 a b diff -q a b 应 IDENTICAL",
+        "TC-16 跨平台 command -v pwsh 失败则记 pwsh MISSING 未验证 sha256sum SCRIPTDIR/presubmit-scan.sh 与英文副本比对",
+        "TC-14 15 文档一致性 grep -n 退出码 2 references/delivery-checklist.md grep -n ps1 SKILL.md"
+      ],
+      "coverageGaps": [
+        ".ps1 全部动态行为未验证 本环境 pwsh 缺失(已实测 command -v pwsh MISSING)。.ps1 与英文副本字节级一致 与 .sh 文本逐项对应均为静态结论 PowerShell 正则引擎与 grep 边界差异(反斜杠s 字符类 美元符或反引号转义 Select-String 默认大小写不敏感 vs grep -i AKIA provider 的 CaseSensitive)需在有 pwsh 环境跑同组 fixtures 后结案。TC-07 16 18 的 .ps1 侧均落在此缺口",
+        "双实现等价性无自动校验 无 lint CI 锁定 .sh 与 .ps1 对固定 fixtures 输出一致 长期演进易分叉而无感知。建议加跨平台等价性回归(同一 fixtures 跑两脚本比对命中行加退出码)",
+        "密钥检测固有漏报无法靠脚本自身收敛 跨行键值 TC-05 KEY 集合外 token JWT 裸 Base64 TC-06 二进制内嵌 TC-07 内联在非 .sql 文件中的危险 SQL TC-11 均漏报。文档已声明 扫描是兜底不替代读 diff 缓解只能靠使用纪律(CLAUDE.md 第 16 条人工读 diff) 无法用脚本测试关闭",
+        "全流程纪律(任务分级 todo 勾选 未验证不得写已验证 最小改动范围 风险审查推演 术语映射手工同步)纯属自然语言软约束 无 lint hook CI 把关 无法静态或动态验证 属 prompt 工程方法学固有运行时行为缺口。缓解 把修复 base 后的脚本作为强制 pre-commit hook 高风险域人工复核留痕 复盘模板强制填 已做验证或残留风险",
+        "base 高危风险 TC-01 当前只有锁定回归用例无修复验证 修复方向(base 模式先 git rev-parse --verify 失败即 exit 1 或检查 git diff 退出码)属建议 本任务只读不改码 修复后的正向用例尚不存在",
+        "安装路径占位符 skill-dir 靠人工替换 SKILL.md L75 与 delivery-checklist L30 L44 示例给 波浪号claude skills 与本仓库实际位置 /data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh 不符 照抄示例路径会导致找不到脚本而静默跳过兜底(与 TC-01 叠加更危险) 无机制强制校验路径存在 仅能靠使用前 ls 或 realpath 确认",
+        "大文件阈值 TC-17 与大小写策略 TC-18 本轮仅静态确认条件 未跑专项动态 fixture(off-by-one 边界 AKIA 小写不误判等) 列为待补回归"
+      ]
+    },
+    "review": {
+      "verdict": "CONDITIONAL_PASS",
+      "completenessIssues": [
+        "TC-10 在覆盖矩阵里被列为 P2 且其'预期结果'本身就是错的（详见准确性问题），导致一个与最高危风险同源、且更普遍的失效路径没有被作为独立风险条目提出：在非 git 仓库目录下以 changed/staged/base 任一模式运行，require_git 的 exit 1 因处于进程替换 <(list_files)（.sh 第73行）子shell 内而被吞掉，主 shell 继续执行并打印 'No changed files to scan.' 后 EXIT 0。我已实测复现（三种模式均 EXIT=0，错误仅进 stderr）。这说明高危'静默放行'不止 --base 坏引用一种触发条件，根因是进程替换吞掉子shell退出码，建议把高危风险描述从'--base 坏引用'扩写为'所有依赖 git 的模式在 git 失败/非仓库时都会静默 EXIT 0'。",
+        "测试方案对'修复后正向用例'确实承认缺失（coverageGaps 已自述），但既然 require_git 路径也受同一根因影响，验证方案应补一条：在非 git 目录跑默认 changed 模式断言应非0退出/醒目报错（当前实测为静默 EXIT 0）——这条比 --base 更易被用户无意触发。",
+        "组件分析与扫描多处把脚本表述为'153 行 / 152 行'（scan overview 写 153，理解阶段写 152），实测 wc -l = 152 行，存在内部口径不一致（轻微，但属一致性自查应抓到的）。"
+      ],
+      "accuracyIssues": [
+        "【确定性错误】TC-10 的预期结论写：'require_git 触发 stderr 报 error not inside a git repo EXIT 1（与 TC-01 静默 0 对比,证此分支有正确错误处理,凸显 base 路径缺失同等保护）'。我在真实非 git 目录直接执行 presubmit-scan.sh（changed/staged/base 三种模式）实测：均打印 stderr 错误后 stdout 'No changed files to scan.'、EXIT=0，并非 EXIT 1。根因是 require_git 的 exit 1 运行在 <(list_files) 进程替换子shell 内（.sh 第54-73行），只结束子shell、不终止主 shell。因此'此分支有正确错误处理 / 与 base 形成保护对比'的结论与实际代码行为相反——require_git 并不提供 EXIT 1 保护，它和 --base 坏引用是同一类静默放行。这一条直接削弱了报告用来反衬 --base 风险'独特性'的论据。",
+        "次要：scan overview 把退出码 2 的语义在 components 描述里浓缩为'两级密钥检测…→exit2'尚可，但风险列表/测试方案里有处把脚本行号引用写成 .sh '第151行' 触发 exit 2——实测 exit 2 由第151行 `[ \"$high_hits\" -eq 1 ] && { …exit 2; }` 触发，准确；但'第10-14行'是注释（非可执行逻辑），把它与 99-106/151 并列为'退出码2由此处决定'稍有混淆（注释只是文档说明，真正赋值 high_hits=1 在第105行）。属表述精度问题，不影响结论。"
+      ],
+      "missedRisks": [
+        "高危静默放行的真实暴露面被低估：报告把它框定为'PR 准备 + base 引用拼错'这一相对小众场景，但实测表明【在任何非 git 仓库目录下用默认模式（无参数）运行脚本】同样静默 EXIT 0。默认无参模式是文档（delivery-checklist L33）给出的第一条用法，用户最可能直接拷贝运行；若其当前工作目录恰好不是 git 仓库（或脚本被误解为'在 skill 目录里跑'——而 skill 目录本身可能不是 git 仓库），提交前扫描会在用户毫无察觉下完全空跑。这是比 --base 更高频的失效路径，应升格描述。",
+        "根因层面缺失：报告把 --base 与 require_git 当作两个独立点（一个 high、一个被错判为'有保护'），未点出二者共同根因=进程替换 <(list_files) 吞掉子shell 退出码 + set -e 在此处不生效。指出统一根因更有助于'仅记录的修复建议'（应在 list_files 外层或主流程校验 git 命令退出码，而非只在 base 分支加 rev-parse）。"
+      ],
+      "recommendations": [
+        "修正 TC-10 的预期结论：从'EXIT 1、有正确错误处理'改为实测事实'EXIT 0、错误仅入 stderr、静默放行'，并把它并入高危风险（与 --base 同根因），而非作为'对照组'。",
+        "将高危风险（A 区）的描述与影响从'--base 坏引用'扩写为'所有 git 依赖模式（changed/staged/base）在非 git 仓库或 git 命令失败时均静默 EXIT 0'，并在验证命令里补一条非 git 目录默认模式的负向断言。",
+        "把修复建议从'仅 base 模式 git rev-parse --verify'升级为'统一在 list_files/主流程校验 git 子命令退出码（不要依赖进程替换内的 exit），任何 git 失败都应非0退出'，覆盖根因（仅记录，不改码）。",
+        "统一脚本行数口径（实测 152 行），消除报告内 152/153 的自相矛盾。",
+        "其余 high/medium 结论（--base 坏引用静默放行、delivery-checklist L44 退出码语义漂移、跨行/JWT/二进制密钥漏报、双实现 pwsh 不可用未验证、SKILL.md 未提 .ps1、字节级一致性）均经我实测/校验属实，可保留——这部分质量高，建议维持。"
+      ]
+    },
+    "report": {
+      "markdown": "# ai-engineering-delivery-zh Skill 只读分析 · 最终报告\n\n> 目标：`/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh`\n> 性质：Claude Code Skill 包（工程化交付流程框架），非可独立运行的应用\n> 范围：只读静态分析 + 对唯一可执行模块（presubmit-scan 脚本）的动态实证测试\n> 全程未修改任何目标文件；所有结论附证据来源（文件/行号或实测）。\n\n---\n\n## 一、任务理解\n\n### 1.1 目标\n对该目录做只读分析，建立对其结构、功能模块、风险的准确认知，产出可执行的测试验证方案，并给出最终报告。该 Skill 的作用是\"指导别的项目做工程化交付\"，其本身是一套提示词流程文档 + 一个提交前风险扫描脚本（bash/PowerShell 双实现）。\n\n### 1.2 范围内\n- 全部 8 个文件的职责与相互关系（SKILL.md、5 个 references、2 个脚本）\n- 两个脚本的逻辑正确性、跨平台一致性、正则匹配的真/假阳性与漏报、退出码语义、只读安全性\n- SKILL.md 与 references/* 的内部引用、阶段编号、加载路径、退出码措辞一致性\n\n### 1.3 范围外\n- 修改目标内任何文件（明确禁止改代码）\n- 把 Skill 安装到 `~/.claude/skills` 并端到端跑真实交付流程\n- 评估 LLM 加载该 Skill 后的真实运行时行为（不可静态判定）\n- 目标目录之外的项目代码、git 提交/推送操作\n- 兄弟英文版目录——仅在核验\"字节级一致\"自我声明时做只读对照（已用 sha256/diff 完成）\n\n### 1.4 验收信号（均已满足）\n- 已逐一读完 8 个文件并能描述各自职责与关系\n- 已识别唯一含可执行逻辑的模块 = presubmit-scan 脚本，其余为 Markdown 流程文档\n- 测试方案落到可验证面：脚本可静态/动态测试，文档可做一致性核查\n- 每条结论标注证据来源或显式标注未验证\n- 报告覆盖结构、功能模块、风险（含误报/漏报与跨平台差异）、可执行验证步骤\n- 全程未修改目标文件\n\n### 1.5 假设\n- 目标是 Claude Code Skill 包（依据：SKILL.md 含标准 frontmatter；目录结构 `scripts/` + `references/`；系统提示中存在同名可用 skill）\n- `-zh` 为中文本地化变体；脚本注释自称与 Codex/英文副本\"byte-identical\"，即 `.sh/.ps1` 是跨副本共享、不随语言变化的部分（presubmit-scan.sh 第 7-8 行）——已实测坐实（见 2.4）\n- 脚本预期运行环境为 bash 与 PowerShell，依赖 git/grep/sed/wc 等常规工具\n- \"测试验证\"主要指对脚本做实证测试 + 对文档做一致性核查，而非验证 LLM 行为\n\n---\n\n## 二、结构概览\n\n### 2.1 目录结构（已实测核实）\n```\nai-engineering-delivery-zh/\n├── SKILL.md                              7508 B  入口/流程编排（YAML frontmatter + 纯 Markdown）\n├── references/\n│   ├── requirement-analysis.md          4453 B  阶段 1-4：业务理解/系统扫描/梳理各流/验收标准\n│   ├── delivery-checklist.md            3733 B  阶段 5-6：实现规则 + 验证 + 提交前准备\n│   ├── risk-review.md                   2732 B  阶段 7：支付/权限/状态机/幂等/回滚等高风险审查\n│   ├── retrospective-template.md         768 B  阶段 8：交付摘要/技术笔记/PR 摘要模板\n│   └── worked-example.md               6007 B  订单退款的完整 8 阶段走通示例\n└── scripts/\n    ├── presubmit-scan.sh   6652 B / 152 行  可执行 bash，提交前只读风险扫描\n    └── presubmit-scan.ps1  7593 B / 184 行  PowerShell 移植版（功能对应 .sh）\n```\n\n### 2.2 框架定位\n业务优先的工程化交付方法学。通过 **8 个阶段**（理解业务 → 扫描现有系统 → 梳理各流 → 定验收标准 → 最小范围实现 → 验证 → 风险审查 → 复盘）+ 多层参考清单，把高风险业务需求转化为可控的工程实现。无自动化测试框架，流程纪律依赖模型自觉执行；唯一的机器把关是提交前扫描脚本（且只覆盖提交前文本面一小段）。\n\n### 2.3 阶段编号与文件绑定（一致性已核验）\n| 阶段 | 承载文件 | SKILL.md 引用 |\n|---|---|---|\n| 1-4 需求分析 | requirement-analysis.md | L38-41 / L69 |\n| 5-6 实现与验证 | delivery-checklist.md | L42-43 / L70 |\n| 7 风险审查 | risk-review.md | L44 / L71 |\n| 8 复盘沉淀 | retrospective-template.md | L45 / L72 |\n| 完整示例 | worked-example.md | L47 / L73 |\n\n各 references 内部阶段标题与 SKILL.md 引用一致；\"何时该问\"在 SKILL.md L49-55 单一定义、delivery-checklist 委托回它不重复——单一事实源原则被遵守。\n\n### 2.4 跨副本/跨平台字节级一致性（已实测坐实自我声明）\n- `.sh` 的 zh 与 en 副本 **sha256 完全相同**：`edf6f07ef7bb2e3b81fa9e4879b8be945da04525e3a02b0ad0408898e43e9d0f`\n- `.ps1` 的 zh 与 en 副本 **diff IDENTICAL**\n- 坐实脚本注释\"byte-identical across Claude Code and Codex copies\"的自我声明\n\n---\n\n## 三、组件分析\n\n### 3.1 SKILL.md（核心流程编排，纯 Markdown + frontmatter）\n入口与编排文档。定义：frontmatter 的 name/description 路由触发；任务复杂度分级（简单/中等/复杂）；5 种任务模式；8 个交付主干阶段；\"何时问 vs 直接做\"唯一规则（L49-55）；规则优先级链（L57-59）；分层后端术语到实际技术栈的映射（L61-63）；5 个 references 的按需加载时机（L65-75）；提交前脚本说明（L75）；编码前/中/后输出纪律（L77-79）。明确声明叠加在项目规则、CLAUDE.md 与实现类 Skill 之上而非替代。\n\n### 3.2 references/requirement-analysis.md（阶段 1-4）\n为需求分析提供结构化框架：业务理解 8 项追问（注：上游任务描述称\"6 项\"，实际为 8 项）；现有系统扫描固定五段式输出（已确认事实/合理推断/待确认问题/当前约束/影响范围，L33-43）；项目规则抽取七段式模板（L49-57）；业务流/数据流/持久化/UI/接口五个子框架。核心方法论原则：第 30 行\"绝不把猜测当成已确认事实\"。第 3 行占位词映射交叉引用 SKILL.md L61-63，文案一致。\n\n### 3.3 references/delivery-checklist.md（阶段 5-6）\n实现与验证操作清单：编辑前 7 项前置确认；实现规则 8 条（只改相关文件、不擅改接口、前后端字段一致、权限放后端、数据库变更显式用 SQL 脚本、避免投机抽象等）；验证清单（前端 7 项 + 后端 9 项）；提交前准备（调用 presubmit-scan.sh + 人工核查纪律）。与全局 CLAUDE.md 第 11/12/16/18/21 条高度同向。**注意**：L44 退出码措辞与脚本实际行为矛盾（见风险 R2）。\n\n### 3.4 references/risk-review.md（阶段 7）\n高风险域发布前人工审查提纲，6 个检查维度：不要只信生成代码/静态检查；一致性检查（12 条跨边界状态不一致反模式）；状态机检查（6 个不变式）；幂等与并发（推荐\"状态条件更新 + 操作日志\"，12 类触发场景）；回滚与恢复（每个高风险改动定义 6 件事）；发布就绪 gate。与 CLAUDE.md 第 16/17/23 条高度同源。\n\n### 3.5 references/retrospective-template.md（阶段 8）\n复盘沉淀模板：交付摘要 8 字段、技术笔记 13 章节（注：上游描述称\"11 章节\"，实际 13）、PR 摘要 7 分类。开头强约束\"没真跑过的测试绝不说通过\"，与 CLAUDE.md 第 21 条一致。\n\n### 3.6 references/worked-example.md（端到端示例）\n用\"操作员把已支付订单标记为已退款\"完整跑通 8 阶段，展示每个产物的形状（非照抄脚本）。核心安全设计示范：`OrderMapper.updateStatusIfPaid` 用条件更新 `WHERE id=#{id} AND status=PAID`、以受影响行数=0 作幂等护栏；`@Transactional` 把状态更新+撤销权益+审计绑同一事务。轻微叙述瑕疵：阶段 5\"只动 4 个文件\"未把新增 `EntitlementMapper.deactivateByOrder` 列入。\n\n### 3.7 scripts/presubmit-scan.sh（唯一可执行模块，152 行 bash）\n提交前只读风险扫描。**两级密钥检测**：HIGH（真实字面量凭据：PEM 头/AKIA/sk_live 等）→ exit 2（L104/L151）；LOW（secret-ish 字段名）→ 仅警告不改退出码。另含调试日志、test-only 标记、本地地址、SQL 风险、合并冲突标记、项目规则文件、大文件（>512000 B）检查。四种模式：默认（changed）/`--staged`/`--base <ref>`/显式文件 + `--help`。注释与代码均声明 **NEVER modifies/stages/commits**——实测多次重跑工作区/暂存区/提交无变更，天然幂等。\n\n### 3.8 scripts/presubmit-scan.ps1（PowerShell 移植，184 行）\n功能对应 `.sh`，支持 `-Staged/-Base/-Help`/文件参数。**本环境 pwsh 缺失（已实测 `command -v pwsh` MISSING）**，故 `.ps1` 仅做静态审读 + 与英文副本 diff（IDENTICAL）；其 PowerShell 正则引擎与 grep 的边界差异（`\\s`、字符类、转义、Select-String 默认大小写不敏感 vs grep `-i`、AKIA/provider 的 `-CaseSensitive`）未经运行验证，标注为**未验证**。\n\n---\n\n## 四、风险清单\n\n> 严重度：high=可导致兜底环节静默失效；medium=文档/实现漂移或漏报；low=可用性/一致性轻微问题。所有 high/medium 均经本次实测复现。\n\n### R1 [HIGH] 所有 git 依赖模式在 git 失败/非仓库时静默 EXIT 0（异常分支，根因层）\n**实测确认**（已扩大暴露面，采纳独立审查意见）：\n- 非 git 目录下默认（changed）/`--staged`/`--base` **三种模式均**打印 `error: not inside a git repo` 到 stderr 后仍 **EXIT=0**，stdout 打印 `No changed files to scan.`\n- 有效 git 仓库内 `--base origin/does-not-exist`（坏引用）：git `fatal: ambiguous argument` 到 stderr，仍 **EXIT=0** 静默放行\n- 对照：`--base HEAD~1`（有效）正常命中并 EXIT=2\n\n**统一根因**：`require_git` 的 `exit 1` 与 `git diff` 的失败都运行在进程替换 `<(list_files)`（.sh 第 54-73 行）子 shell 内，只结束子 shell、不终止主 shell，`set -e` 在此处不生效。`.ps1` 第 79 行同样不检查 `$LASTEXITCODE`。\n\n**影响**：提交前扫描是 CLAUDE.md 第 16/22 条所指高风险逻辑的兜底环节。默认无参模式正是 delivery-checklist L33 的第一条用法，用户最易直接拷贝运行；若工作目录恰非 git 仓库（或脚本被误解为\"在 skill 目录里跑\"），扫描看似成功（EXIT 0=clean）实则一个文件都没扫，真实密钥/SQL/冲突标记全部漏检且使用者完全无感知。幂等性在此反而掩盖了功能失效（稳定地错误比偶发失败更隐蔽）。\n\n**修复方向（仅记录，本任务只读不改码）**：统一在 `list_files`/主流程校验 git 子命令退出码，不要依赖进程替换内的 `exit`；任何 git 失败都应非 0 退出。`--base` 模式可先 `git rev-parse --verify \"$base^{commit}\"` 失败即 exit 1。覆盖根因而非只补 base 分支。\n\n### R2 [MEDIUM] delivery-checklist L44 退出码语义与脚本/SKILL.md 矛盾（一致性）\n**实测三处对照**：delivery-checklist L44 写\"项目规则文件（疑似密钥时退出码 2）\"，把 exit 2 归因于\"疑似密钥\"。但 presubmit-scan.sh（L11/L104/L151）与 SKILL.md L75 均明确：exit 2 **仅由 HIGH 级真实字面量凭据触发**；\"疑似字段名\"属 LOW 级仅警告不改退出码。动态佐证：纯字段名（`password:` / `apiKey =`）→ LOW，EXIT=0；真实值（`password: SuperSecretValue12345`）→ HIGH，EXIT=2。\n**影响**：使用者可能误判——以为字段名命中就 FAIL（无谓阻塞），或低估真实凭据告警严重性；侵蚀对兜底脚本的信任。\n**建议**：把 L44 措辞改为与脚本/SKILL.md 一致——\"高置信度真实凭据 → 退出码 2；疑似字段名 → 仅警告\"。\n\n### R3 [MEDIUM] 密钥检测漏报：跨行/非字段名 token/Base64-JWT/二进制（边界场景）\n脚本基于逐行文本正则，实测漏报：(1) 键值跨行——`api_key:` 在第 1 行、长值在第 2 行，仅 LOW 命中字段名、HIGH 漏掉真实值（EXIT=0）；(2) 非 KEY 模式赋值——`token=eyJ...`（JWT）因 token 不在 KEY 集合且无引号，完全无命中（EXIT=0）；(3) 二进制含 NUL 文件——grep `-I`/Test-TextFile 跳过（EXIT=0）。多行 PEM 仅 BEGIN 头匹配（够用），body 不识别。\n**影响**：把脚本当\"充分检查\"而非\"兜底\"时，真实凭据可能溜过。文档已声明\"扫描是兜底，不替代读 diff\"，风险被显式承认，故 medium。\n**建议**：维护一组已知应命中/应漏报的密钥样例做回归；严格执行 CLAUDE.md 第 16 条人工读 diff。\n\n### R4 [MEDIUM] 双实现（.sh/.ps1）跨平台一致性无自动校验，且 pwsh 缺失致无法实测（一致性）\n两脚本声称功能一致。`.ps1` 与英文副本 diff IDENTICAL、与 `.sh` 文本逐项对应（KEY/KV_HIGH/KV_LOW、AKIA、PEM、provider 前缀、demote 列表、两级逻辑、退出码 0/2、四模式），但本环境 **pwsh MISSING（已实测）**，PowerShell 与 grep 的正则引擎边界差异未经运行验证。\n**影响**：Windows（pwsh）用户的扫描覆盖面若与 Bash 版漂移而不自知，跨平台团队把关强度不一致；无 lint/CI 锁定二者等价，长期演进易分叉。\n**建议**：在有 pwsh 的环境用同一组 fixtures 分别跑 `.sh`/`.ps1` 逐项比对命中行与退出码；CI 加跨平台等价性回归。\n\n### R5 [LOW] SKILL.md 未提及 .ps1，主入口与子清单文档脱节（一致性）\nscripts/ 下实存 presubmit-scan.ps1，delivery-checklist L38-42 有 PowerShell 用法，但 SKILL.md L75 只提 `.sh`、从未提 `.ps1`（实测 grep 确认）。只读 SKILL.md 的 Windows 用户可能误以为无跨平台支持而跳过提交前扫描。建议 L75 补一句指向 `.ps1` 的跨平台说明。\n\n### R6 [LOW] 脚本安装路径靠人工替换 `<skill-dir>` 占位符（可用性）\nSKILL.md L75、delivery-checklist L30/L44 示例给的是 `~/.claude/skills/ai-engineering-delivery-zh`，但本仓库实际位置为 `/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh`。脚本自身对路径无依赖（实测从任意 git 仓库内用绝对路径、或对显式文件/非 git 目录调用均正常）。若使用者照抄示例路径未替换，会因找不到脚本而无法执行——与 R1 叠加时尤其危险（兜底被静默跳过）。建议文档补\"用 `realpath` 或先 `ls` 确认脚本路径\"。\n\n### R7 [LOW] 全流程纪律纯靠模型自觉，无强制校验（方法学元风险）\nSKILL.md 与全部 references 为自然语言软约束：任务分级、todo 勾选、\"未验证不得写已验证\"、最小改动、\"绝不把猜测当已确认事实\"、风险审查推演等均无 lint/hook/CI 把关。唯一可执行的 presubmit-scan 只覆盖提交前一小段文本面，且本身存在 R1/R3。这是 prompt 工程方法学固有风险，非文件缺陷。缓解：把修复 R1 后的脚本作为强制 pre-commit hook；高风险域人工复核留痕；复盘模板强制填\"已做验证/残留风险\"。\n\n### 上游任务描述与实际计数偏差（非缺陷，备查）\n- requirement-analysis 业务理解：描述称 6 项，实际 8 项\n- retrospective 技术笔记：描述称 11 章节，实际 13 章节\n- presubmit-scan.sh 行数：扫描阶段口径 153、理解阶段 152，**实测 152**（已统一为 152）\n\n---\n\n## 五、测试验证方案\n\n> 策略：脚本做静态 + 动态实证（语法/退出码/两级密钥真假阳性/占位符降级/SQL/冲突/四模式）；文档做一致性核查。`SCRIPTDIR=/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/scripts`。下列标\"已实测\"者本次已复现。\n\n| ID | 场景 | 类型 | 预期（含实测结果） | 优先级 |\n|---|---|---|---|---|\n| TC-01 | `--base` 坏引用，仓库含真实凭据 | 异常分支负向(高危回归) | git fatal 到 stderr，脚本 EXIT 0 静默放行——**已实测复现**；锁定回归：仍 EXIT 0 即判 R1 存在 | P0 |\n| TC-02 | `--base HEAD~1`（有效），自分叉含真实凭据 | 正向对照 | EXIT 2，POSSIBLE SECRET HIGH 列出 leak 文件+行——**已实测**；证 TC-01 失败仅因引用无效被吞 | P0 |\n| TC-03 | 仅密钥字段名（`password:` / `apiKey =`） | 边界退出码语义 | LOW，EXIT 0——**已实测**；钉死 delivery-checklist L44 措辞错误 | P0 |\n| TC-04 | 真实字面量值（`password: SuperSecretValue12345`） | 正向退出码语义 | HIGH，EXIT 2，FAIL——**已实测**；与 TC-03 对照确立\"仅 HIGH→exit 2\" | P0 |\n| TC-NG | **非 git 目录默认/staged/base 三模式**（采纳独立审查新增） | 异常分支(高频) | 三模式均 stderr 报错但 EXIT 0 静默放行——**已实测复现**；比 TC-01 更易被无意触发 | P0 |\n| TC-05 | 跨行键值（键名第 1 行、值第 2 行，值不含独立 token 前缀） | 边界漏报 | HIGH 漏报、仅 LOW 命中，EXIT 0；对照同一行 EXIT 2。fixture 值不可含 AKIA/sk_ 否则被直检命中假阳 | P1 |\n| TC-06 | 非字段名 token 赋值（`token=eyJ...` JWT） | 边界漏报 | HIGH/LOW 均 0 命中，EXIT 0；证 KEY 集合外 token 完全漏报 | P1 |\n| TC-07 | 二进制含 NUL 内嵌真实密钥 | 边界漏报(标准行为) | grep -I 跳过，EXIT 0；.ps1 侧 pwsh 缺失未验证 | P2 |\n| TC-08 | 占位符/env 引用（`${VAR}`/`changeme`/`your_*`/`process.env`） | 正向误报抑制 | 全部从 HIGH 降级 LOW，EXIT 0 | P1 |\n| TC-09 | 非 git 目录对**显式文件**（含真实凭据）调用 | 边界可用性 | 正常扫描 EXIT 2 FAIL——证显式文件模式不依赖 git 上下文 | P1 |\n| TC-11 | `.sql` 文件含 DROP/DELETE/TRUNCATE/ALTER | 正向 SQL 风险 | 命中 SQL risk（advisory），EXIT 0；边界：内联在 .java/.xml 的危险 SQL 不命中（按扩展名触发的漏报） | P1 |\n| TC-12 | 完整合并冲突标记 | 边界 | 仅报行首 `<<<<<<<` 与 `>>>>>>>`，不报 `=======`，EXIT 0 | P2 |\n| TC-13 | 同一含密钥文件连跑两次比对输出 | 幂等只读 | 两次字节级 IDENTICAL，工作区/暂存区/提交无变更 | P2 |\n| TC-14 | delivery-checklist L44 vs SKILL.md L75 vs 脚本 L104/L151 三处对照 | 文档一致性(静态) | 已确认不一致（R2），以脚本+SKILL.md 为准修正 L44 | P1 |\n| TC-15 | SKILL.md L75 是否覆盖 scripts/ 全部脚本 | 文档覆盖度(静态) | 已确认 SKILL.md 只提 .sh 漏 .ps1（R5），建议补跨平台指向 | P2 |\n| TC-16 | .sh/.ps1 与 zh/en 跨平台跨副本等价性 | 跨平台等价性(部分未验证) | 静态：.sh sha256 一致、.ps1 diff IDENTICAL——**已实测**；运行层 pwsh MISSING，.ps1 正则引擎匹配差异**未验证**，需有 pwsh 环境跑同组 fixtures 结案 | P1 |\n| TC-17 | 大文件阈值边界（=512000 vs >512000 字节） | 边界 | `-gt 512000`：恰好 512000 不标记、512001+ 标记 Large file，EXIT 不受影响；建议补动态 off-by-one fixture | P2 |\n| TC-18 | 大小写敏感性（API_KEY/apiKey/Password 不敏感；AKIA/sk_live/gh_/AIza/xox 敏感） | 边界 | KEY/KV 用 -i 命中各种大小写；AKIA/provider 前缀大小写敏感避免误判；建议构造混合大小写 fixture 实测结案 | P2 |\n\n### 关键验证命令（节选）\n```bash\nSCRIPTDIR=/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/scripts\n# 用法/退出码\nbash \"$SCRIPTDIR/presubmit-scan.sh\" --help; echo \"EXIT=$?\"\n# TC-NG 非 git 目录默认模式负向断言（应非 0；实测当前 EXIT 0=R1）\nW=$(mktemp -d); ( cd \"$W\" && bash \"$SCRIPTDIR/presubmit-scan.sh\"; echo \"EXIT=$?\" )\n# TC-01/02 高危回归\nG=$(mktemp -d); git -C \"$G\" init -q\nprintf 'k=AKIAIOSFODNN7EXAMPLE\\n' > \"$G/leak.txt\"; git -C \"$G\" add -A && git -C \"$G\" -c user.email=t@t -c user.name=t commit -qm a\nprintf 'k=sk_live_zzzzzzzzzzzzzzzzzzzz\\n' > \"$G/leak.txt\"; git -C \"$G\" add -A && git -C \"$G\" -c user.email=t@t -c user.name=t commit -qm b\n( cd \"$G\" && bash \"$SCRIPTDIR/presubmit-scan.sh\" --base origin/nope; echo \"EXIT=$?\" )   # 期望 EXIT 0=R1\n( cd \"$G\" && bash \"$SCRIPTDIR/presubmit-scan.sh\" --base HEAD~1; echo \"EXIT=$?\" )         # 期望 EXIT 2\n# TC-03/04 退出码语义\nD=$(mktemp -d); printf 'password:\\napiKey =\\n' > \"$D/f.txt\"; bash \"$SCRIPTDIR/presubmit-scan.sh\" \"$D/f.txt\"; echo \"EXIT=$?\"  # 0\nprintf 'password: SuperSecretValue12345\\n' > \"$D/r.txt\"; bash \"$SCRIPTDIR/presubmit-scan.sh\" \"$D/r.txt\"; echo \"EXIT=$?\"       # 2\n# TC-13 幂等\nbash \"$SCRIPTDIR/presubmit-scan.sh\" \"$D/r.txt\" >a 2>&1; bash \"$SCRIPTDIR/presubmit-scan.sh\" \"$D/r.txt\" >b 2>&1; diff -q a b\n# TC-16 跨平台/跨副本\ncommand -v pwsh >/dev/null && echo \"pwsh OK\" || echo \"pwsh MISSING\"\nsha256sum \"$SCRIPTDIR/presubmit-scan.sh\" /data/workspace/liuyuanjian/liu/ai-engineering-delivery/scripts/presubmit-scan.sh\n# TC-14/15 文档一致性\ngrep -n '退出码 2' /data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/references/delivery-checklist.md\ngrep -n 'ps1\\|PowerShell' /data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh/SKILL.md\n```\n\n---\n\n## 六、独立审查意见与采纳情况\n\n独立审查结论 **CONDITIONAL_PASS**。其核心更正经本次重新实测全部确认属实，已采纳并并入正文：\n\n| 审查意见 | 实测复核 | 采纳情况 |\n|---|---|---|\n| TC-10 原预期\"非 git 目录 require_git → EXIT 1、有正确错误处理\"是**确定性错误**；实测三模式均 EXIT 0 静默放行 | **已复现**：changed/staged/base 三模式均 stderr 报错后 EXIT=0 | 已采纳：删去错误的\"对照组\"定位，新增 TC-NG 为 P0 高危用例 |\n| 高危静默放行**真实暴露面被低估**，不止 `--base` 坏引用；默认无参模式在非 git 目录同样静默 EXIT 0，且是文档首条用法、最易被无意触发 | **已复现** | 已采纳：R1 描述从\"`--base` 坏引用\"扩写为\"所有 git 依赖模式在 git 失败/非仓库时均静默 EXIT 0\" |\n| 根因层缺失：未点出统一根因 = 进程替换 `<(list_files)` 吞掉子 shell 退出码 + `set -e` 不生效 | 代码核实（.sh 54-73）+ 实测一致 | 已采纳：R1 增\"统一根因\"段，修复建议升级为\"在 list_files/主流程校验 git 退出码\"而非只补 base 分支 |\n| 脚本行数口径自相矛盾（152 vs 153） | **实测 `wc -l` = 152** | 已采纳：全报告统一为 152 行，并在偏差备查中记录 |\n| 其余 high/medium 结论（`--base` 坏引用静默放行、L44 退出码漂移、跨行/JWT/二进制漏报、双实现 pwsh 未验证、SKILL.md 未提 .ps1、字节级一致性）均属实，可保留 | 本次逐项重测/校验确认（含 sha256/diff、HIGH/LOW 退出码、坏 base） | 全部保留 |\n\n**结论**：独立审查所有可执行更正均已纳入，报告关键结论的准确性与暴露面描述较初稿更严谨。\n\n---\n\n## 七、遗留问题\n\n1. **`.ps1` 全部动态行为未验证**：本环境 `pwsh` MISSING（已实测）。`.ps1` 与英文副本 diff IDENTICAL、与 `.sh` 文本逐项对应均为静态结论；PowerShell 与 grep 的正则引擎边界差异（`\\s`/字符类/转义/Select-String 默认大小写不敏感 vs grep `-i`、AKIA/provider 的 `-CaseSensitive`）需在有 pwsh 的环境跑同组 fixtures 后结案。TC-07/16/18 的 `.ps1` 侧均落在此缺口。\n2. **双实现等价性无自动校验**：无 lint/CI 锁定 `.sh`/`.ps1` 对固定 fixtures 输出一致，长期演进易分叉而无感知。\n3. **密钥检测固有漏报无法靠脚本自身收敛**：跨行键值、KEY 集合外 token/JWT/裸 Base64、二进制内嵌、内联在非 `.sql` 文件中的危险 SQL 均漏报。文档已声明\"兜底不替代读 diff\"，缓解只能靠使用纪律，无法用脚本测试关闭。\n4. **R1 当前只有锁定回归用例，无修复验证用例**：修复方向（主流程校验 git 退出码）属建议；本任务只读不改码，修复后的正向用例尚不存在。\n5. **安装路径占位符 `<skill-dir>` 无强制校验**：示例路径与本仓库实际位置不符，照抄会静默跳过兜底（与 R1 叠加更危险），仅能靠使用前 `ls`/`realpath` 确认。\n6. **全流程纪律软约束无法静态/动态验证**：任务分级、未验证不得写已验证、风险审查推演、术语映射手工同步等属 prompt 工程方法学固有运行时行为缺口，超出静态分析范围。\n7. **大文件阈值 TC-17 与大小写策略 TC-18 本轮仅静态确认条件**，未跑专项动态 fixture（off-by-one 边界、AKIA 小写不误判），列为待补回归。\n\n---\n\n*本报告全程未修改目标目录任何文件；R1/R2/R3 与跨副本一致性、退出码语义、非 git 静默放行均经本次 scratchpad 临时仓库实测复现。*",
+      "headline": "ai-engineering-delivery-zh 是一个结构清晰、与全局 CLAUDE.md 高度对齐的工程化交付 Skill（8 阶段流程文档 + 双实现提交前扫描脚本），但唯一可执行模块 presubmit-scan 存在一处高危缺陷：所有依赖 git 的模式在非 git 目录或 git 失败时会静默 EXIT 0、完全空跑，使提交前兜底在用户无感知下失效。",
+      "topRisks": [
+        "[HIGH] presubmit-scan 在非 git 目录或 git 命令失败（含 --base 坏引用）时，changed/staged/base 三模式均把错误打到 stderr 后仍 EXIT 0 静默放行，真实密钥/SQL/冲突标记全部漏检——根因是进程替换 <(list_files) 吞掉子 shell 退出码、set -e 不生效（已实测复现；默认无参模式是文档首条用法，最易被无意触发）",
+        "[MEDIUM] delivery-checklist L44 退出码语义与脚本/SKILL.md 矛盾：L44 称'疑似密钥时退出码 2'，但实测仅 HIGH 真实字面量凭据触发 exit 2，LOW 字段名仅警告不改退出码——文档与实现漂移会误导使用者",
+        "[MEDIUM] 密钥检测固有漏报：跨行键值、KEY 集合外 token/JWT/裸 Base64、二进制内嵌、内联在非 .sql 文件的危险 SQL 均漏报（均已实测 EXIT 0）；脚本仅为兜底，不可当充分检查",
+        "[MEDIUM] 双实现(.sh/.ps1)无自动等价性校验，且本环境 pwsh 缺失致 .ps1 动态行为全部未验证；PowerShell 与 grep 正则引擎边界差异可能在跨平台团队产生不一致的把关强度",
+        "[LOW] SKILL.md 主入口只提 .sh、从未提 .ps1（delivery-checklist 两者都列），Windows 用户可能误以为无跨平台支持而跳过提交前扫描"
+      ]
+    }
+  }
+}

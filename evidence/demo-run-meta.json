@@ -1,0 +1,14 @@
+{
+  "demo_run": { "name": "analyze-repo", "runId": "wf_e93aaabd-756", "taskId": "ww4dhmlh9",
+    "scriptPath": ".claude/workflows/analyze-repo.js",
+    "target": "/data/workspace/liuyuanjian/liu/ai-engineering-delivery-zh",
+    "agentCount": 12, "componentsAnalyzed": "6/7", "risks": 7, "testCases": 18, "independentReviewVerdict": "CONDITIONAL_PASS",
+    "rawResult": "evidence/demo-run-raw.json", "report": "evidence/demo-run-report.md" },
+  "methodology_research_run": { "name": "wf-methodology-research", "runId": "wf_8b251548-42a", "taskId": "wb2pvf81g",
+    "scriptPath": ".claude/workflows/wf-methodology-research.js",
+    "agentCount": 11, "rawResult": "evidence/research-raw.json" },
+  "docs_generation_run": { "name": "wf-docs-generation", "runId": "wf_a8d04e67-327", "taskId": "wwl96vk8z",
+    "scriptPath": ".claude/workflows/wf-docs-generation.js", "agentCount": 9, "docsWritten": "docs/01-09" },
+  "review_gate_round0": { "verdict": "CONDITIONAL_PASS", "score": 89, "p0": 0, "p1": 2, "p2": 3,
+    "report": "evidence/review-report-round0.md" }
+}
