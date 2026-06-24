@@ -15,6 +15,7 @@ evidence/deliveries/
 .claude/settings.local.json
 .claude/**/settings.local.json
 **/memory/
+**/AGENTS.md
 *.log
 # yml/yaml 配置默认不入库（全局规则 9）
 *.yml

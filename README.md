@@ -2,9 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Claude Code Dynamic Workflows for turning a user requirement into a reviewed engineering plan, then into a sandboxed code diff with explicit verification evidence.
+AI engineering workflow contracts and adapters for turning a user requirement into a reviewed engineering plan, then into a sandboxed code diff with explicit verification evidence.
 
-This repository is a Claude Code project. It does not run in Codex or generic agent runners unless they implement the same `Workflow` tool surface.
+The Claude Code Dynamic Workflows adapter is the stable implementation. The Codex adapter is being added in phases and shares the platform-neutral artifact contracts in `core/` instead of duplicating methodology, schemas, or status definitions.
 
 ## What This Does
 
@@ -22,8 +22,9 @@ The main chain is intentionally split:
 
 ## Requirements
 
-- Claude Code with Dynamic Workflows enabled.
-- A visible `Workflow` tool in the Claude Code session.
+- Claude Code with Dynamic Workflows enabled for the stable `.claude/` workflows.
+- A visible `Workflow` tool in the Claude Code session for Claude runs.
+- OpenAI Codex CLI for the experimental `codex/` adapter.
 - `bash`, `git`, and common POSIX tools for the demo and self-check scripts.
 - `pwsh` only when you want to verify PowerShell-specific behavior. If `pwsh` is missing, PowerShell checks must be marked as open manual verification.
 
@@ -33,6 +34,7 @@ Useful preflight checks:
 
 ```bash
 claude --version
+codex --version
 git --version
 bash --version
 node --version
@@ -66,7 +68,7 @@ Workflow({ scriptPath: "<repo>/.claude/workflows/deliver-from-plan.js", args: {
 }})
 ```
 
-The complete sample input and sanitized output shape are in `examples/`.
+The complete sample input and sanitized output shape are in `examples/`. See `codex/` for the first-phase Codex plan adapter design.
 
 ## Examples
 
@@ -93,17 +95,19 @@ These examples are static, public, and safe to inspect. They are not customer ou
 
 ```text
 .
-├── .claude/
-│   ├── agents/                 # Role prompts used by the workflows
-│   ├── skills/workflow-designer # Local methodology skill
-│   └── workflows/              # Runnable Workflow scripts
-├── docs/                       # Methodology and design docs
-├── examples/                   # Minimal target project and sanitized artifacts
-├── evidence/                   # Curated public evidence; dynamic runs are ignored
-├── scripts/                    # Deterministic repository checks
-├── vendor/zhuliming-templates/ # Attributed third-party templates
-├── CLAUDE.md                   # Project-level rules for this public repo
-└── README.md
+|-- core/                      # Platform-neutral schemas, statuses, and artifact contracts
+|-- .claude/
+|   |-- agents/                # Role prompts used by Claude workflows
+|   |-- skills/workflow-designer
+|   `-- workflows/             # Stable Claude Dynamic Workflow scripts
+|-- codex/                     # First-phase Codex adapter design and guidance
+|-- docs/                      # Methodology and design docs
+|-- examples/                  # Minimal target project and sanitized artifacts
+|-- evidence/                  # Curated public evidence; dynamic runs are ignored
+|-- scripts/                   # Deterministic repository checks
+|-- vendor/zhuliming-templates # Attributed third-party templates
+|-- CLAUDE.md                  # Claude project-level rules for this public repo
+`-- README.md
 ```
 
 ## Verification
@@ -111,10 +115,11 @@ These examples are static, public, and safe to inspect. They are not customer ou
 Run the repository self-check before publishing changes:
 
 ```bash
+node scripts/validate-plan-artifacts.mjs examples/artifacts/plan-ready
 node scripts/self-check.mjs
 ```
 
-The check validates public-repo hygiene: forbidden local paths, key file references, workflow metadata consistency, basic secret patterns, example artifacts, license/attribution files, and README command paths.
+The checks validate shared plan artifact schemas, public-repo hygiene, forbidden local paths, key file references, workflow metadata consistency, basic secret patterns, example artifacts, license/attribution files, and README command paths.
 
 ## Troubleshooting
 
@@ -128,6 +133,7 @@ The check validates public-repo hygiene: forbidden local paths, key file referen
 
 Stable:
 
+- Platform-neutral plan artifact schema in `core`.
 - Requirement-to-plan workflow.
 - Plan-to-sandboxed-diff workflow.
 - Repository analysis workflow.
@@ -135,6 +141,7 @@ Stable:
 
 Experimental:
 
+- Codex `plan-from-requirement` adapter design in `codex/`; exact CLI runner remains pending local Codex smoke verification.
 - Methodology research and docs-generation workflows.
 - Deep verification of environment-specific shell or PowerShell behavior.
 - Any use of external Skills through `args.skillDir`.

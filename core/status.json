@@ -1,0 +1,25 @@
+{
+  "planStatuses": {
+    "PASS": "Plan passed independent review and has no known blocking gaps.",
+    "PARTIAL": "Plan passed, but coverage degraded or open verification remains.",
+    "CONDITIONAL": "No P0 blocker, but important P1 issues remain and require human judgment.",
+    "FAILED_WITH_FINDINGS": "Review found blockers or the plan is not reliable enough to implement.",
+    "FAILED": "Workflow failed before producing a reliable artifact.",
+    "NEEDS_CLARIFICATION": "Requirement ambiguity blocks a responsible implementation plan."
+  },
+  "deliveryStatuses": {
+    "BLOCKED": "Workflow stopped before a safe handoff.",
+    "DELIVERED": "Delivery produced a verified sandbox diff with no open items.",
+    "DELIVERED_WITH_OPEN_ITEMS": "Delivery produced a diff, but some verification remains manual or environment-dependent."
+  },
+  "readinessForDev": {
+    "ready": "A delivery workflow may consume the plan.",
+    "not-ready": "The plan must be clarified, reworked, or reviewed before delivery.",
+    "blocked": "A prerequisite prevents safe delivery."
+  },
+  "reviewVerdicts": {
+    "PASS": "No P0 blockers and review criteria are satisfied.",
+    "CONDITIONAL_PASS": "No P0 blockers, but important unresolved issues remain.",
+    "FAIL": "One or more blockers make the artifact unreliable."
+  }
+}

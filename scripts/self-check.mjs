@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { validatePlanArtifacts } from './validate-plan-artifacts.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -139,107 +140,7 @@ for (const file of workflowFiles) {
   }
 }
 
-function validate(value, schema, label) {
-  const localErrors = []
-  function fail(pathName, message) { localErrors.push(`${label}${pathName}: ${message}`) }
-  function check(v, s, pathName) {
-    if (s.enum && !s.enum.includes(v)) fail(pathName, `expected one of ${s.enum.join(', ')}`)
-    if (s.type) {
-      const typeOk =
-        s.type === 'array' ? Array.isArray(v) :
-        s.type === 'integer' ? Number.isInteger(v) :
-        s.type === 'number' ? typeof v === 'number' && Number.isFinite(v) :
-        s.type === 'object' ? !!v && typeof v === 'object' && !Array.isArray(v) :
-        typeof v === s.type
-      if (!typeOk) { fail(pathName, `expected ${s.type}`); return }
-    }
-    if (s.type === 'object') {
-      const keys = Object.keys(v)
-      for (const req of s.required || []) if (!keys.includes(req)) fail(`${pathName}.${req}`, 'missing required property')
-      if (s.additionalProperties === false) {
-        for (const key of keys) if (!s.properties || !Object.hasOwn(s.properties, key)) fail(`${pathName}.${key}`, 'unexpected property')
-      }
-      for (const [key, child] of Object.entries(s.properties || {})) if (Object.hasOwn(v, key)) check(v[key], child, `${pathName}.${key}`)
-    }
-    if (s.type === 'array') {
-      v.forEach((item, index) => check(item, s.items || {}, `${pathName}[${index}]`))
-    }
-  }
-  check(value, schema, '')
-  return localErrors
-}
-
-const evidenceSchema = {
-  type: 'object', additionalProperties: false,
-  properties: { path: { type: 'string' }, symbol: { type: 'string' }, lineRange: { type: 'string' }, observation: { type: 'string' } },
-  required: ['path', 'lineRange', 'observation'],
-}
-const riskItemSchema = {
-  type: 'object', additionalProperties: false,
-  properties: {
-    id: { type: 'string' }, area: { type: 'string' }, severity: { type: 'string', enum: ['high', 'medium', 'low'] },
-    description: { type: 'string' }, impact: { type: 'string' }, mitigation: { type: 'string' },
-    confidence: { type: 'string', enum: ['high', 'medium', 'low'] }, evidence: { type: 'array', items: evidenceSchema },
-  },
-  required: ['id', 'area', 'severity', 'description', 'impact', 'mitigation', 'confidence', 'evidence'],
-}
-const requirementSchema = {
-  type: 'object', additionalProperties: false,
-  properties: {
-    goal: { type: 'string' }, actors: { type: 'array', items: { type: 'string' } },
-    normalFlow: { type: 'array', items: { type: 'string' } }, exceptionFlow: { type: 'array', items: { type: 'string' } },
-    coreOutcome: { type: 'string' }, nonGoals: { type: 'array', items: { type: 'string' } },
-    ambiguities: { type: 'array', items: { type: 'string' } }, openQuestions: { type: 'array', items: { type: 'string' } },
-    successCriteria: { type: 'array', items: { type: 'string' } }, searchHints: { type: 'array', items: { type: 'string' } },
-  },
-  required: ['goal', 'actors', 'normalFlow', 'exceptionFlow', 'coreOutcome', 'nonGoals', 'ambiguities', 'openQuestions', 'successCriteria', 'searchHints'],
-}
-const planSchema = {
-  type: 'object', additionalProperties: false,
-  properties: {
-    approach: { type: 'string' },
-    reuse: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { target: { type: 'string' }, what: { type: 'string' } }, required: ['target', 'what'] } },
-    modify: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, change: { type: 'string' }, why: { type: 'string' } }, required: ['path', 'change', 'why'] } },
-    add: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, what: { type: 'string' }, why: { type: 'string' } }, required: ['path', 'what', 'why'] } },
-    steps: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { order: { type: 'number' }, action: { type: 'string' }, touches: { type: 'array', items: { type: 'string' } } }, required: ['order', 'action', 'touches'] } },
-    affected: { type: 'object', additionalProperties: false, properties: {
-      modules: { type: 'array', items: { type: 'string' } }, files: { type: 'array', items: { type: 'string' } },
-      interfaces: { type: 'array', items: { type: 'string' } }, data: { type: 'array', items: { type: 'string' } },
-      state: { type: 'array', items: { type: 'string' } }, permissions: { type: 'array', items: { type: 'string' } },
-      frontend: { type: 'array', items: { type: 'string' } }, backend: { type: 'array', items: { type: 'string' } },
-    }, required: ['modules', 'files', 'interfaces', 'data', 'state', 'permissions', 'frontend', 'backend'] },
-    architectureFit: { type: 'string' }, assumptions: { type: 'array', items: { type: 'string' } },
-    alternatives: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { option: { type: 'string' }, whyNot: { type: 'string' } }, required: ['option', 'whyNot'] } },
-  },
-  required: ['approach', 'reuse', 'modify', 'add', 'steps', 'affected', 'architectureFit', 'assumptions', 'alternatives'],
-}
-const testPlanSchema = {
-  type: 'object', additionalProperties: false,
-  properties: {
-    testStrategy: { type: 'string' },
-    cases: { type: 'array', items: { type: 'object', additionalProperties: false, properties: {
-      id: { type: 'string' }, priority: { type: 'string', enum: ['P0', 'P1', 'P2'] }, riskIds: { type: 'array', items: { type: 'string' } },
-      scenario: { type: 'string' }, steps: { type: 'array', items: { type: 'string' } }, expected: { type: 'string' }, verificationType: { type: 'string' },
-    }, required: ['id', 'priority', 'riskIds', 'scenario', 'steps', 'expected', 'verificationType'] } },
-    acceptanceCriteria: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { id: { type: 'string' }, criterion: { type: 'string' }, linkedTo: { type: 'string' } }, required: ['id', 'criterion', 'linkedTo'] } },
-    coverageGaps: { type: 'array', items: { type: 'string' } },
-  },
-  required: ['testStrategy', 'cases', 'acceptanceCriteria', 'coverageGaps'],
-}
-const risksSchema = {
-  type: 'object', additionalProperties: false,
-  properties: { risks: { type: 'array', items: riskItemSchema }, rollback: { type: 'array', items: { type: 'string' } }, openConcerns: { type: 'array', items: { type: 'string' } } },
-  required: ['risks', 'rollback', 'openConcerns'],
-}
-
-for (const [file, schema] of [
-  ['examples/artifacts/plan-ready/requirement.json', requirementSchema],
-  ['examples/artifacts/plan-ready/plan.json', planSchema],
-  ['examples/artifacts/plan-ready/test-plan.json', testPlanSchema],
-  ['examples/artifacts/plan-ready/risks.json', risksSchema],
-]) {
-  errors.push(...validate(JSON.parse(read(file)), schema, file))
-}
+errors.push(...validatePlanArtifacts(path.join(root, 'examples/artifacts/plan-ready')))
 
 for (const file of ['app.sh', 'test.sh']) {
   const plan = JSON.parse(read('examples/artifacts/plan-ready/plan.json'))

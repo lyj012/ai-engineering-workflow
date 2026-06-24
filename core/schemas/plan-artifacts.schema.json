@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lyj012/ai-engineering-workflow/core/schemas/plan-artifacts.schema.json",
+  "title": "AI Engineering Workflow Plan Artifacts",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string" },
+        "symbol": { "type": "string" },
+        "lineRange": { "type": "string" },
+        "observation": { "type": "string" }
+      },
+      "required": ["path", "lineRange", "observation"]
+    },
+    "riskItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "area": { "type": "string" },
+        "severity": { "type": "string", "enum": ["high", "medium", "low"] },
+        "description": { "type": "string" },
+        "impact": { "type": "string" },
+        "mitigation": { "type": "string" },
+        "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } }
+      },
+      "required": ["id", "area", "severity", "description", "impact", "mitigation", "confidence", "evidence"]
+    },
+    "planChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string" },
+        "change": { "type": "string" },
+        "why": { "type": "string" }
+      },
+      "required": ["path", "change", "why"]
+    },
+    "planAddition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string" },
+        "what": { "type": "string" },
+        "why": { "type": "string" }
+      },
+      "required": ["path", "what", "why"]
+    },
+    "acceptanceCriterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "criterion": { "type": "string" },
+        "linkedTo": { "type": "string" }
+      },
+      "required": ["id", "criterion", "linkedTo"]
+    }
+  },
+  "properties": {
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "goal": { "type": "string" },
+        "actors": { "type": "array", "items": { "type": "string" } },
+        "normalFlow": { "type": "array", "items": { "type": "string" } },
+        "exceptionFlow": { "type": "array", "items": { "type": "string" } },
+        "coreOutcome": { "type": "string" },
+        "nonGoals": { "type": "array", "items": { "type": "string" } },
+        "ambiguities": { "type": "array", "items": { "type": "string" } },
+        "openQuestions": { "type": "array", "items": { "type": "string" } },
+        "successCriteria": { "type": "array", "items": { "type": "string" } },
+        "searchHints": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["goal", "actors", "normalFlow", "exceptionFlow", "coreOutcome", "nonGoals", "ambiguities", "openQuestions", "successCriteria", "searchHints"]
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "approach": { "type": "string" },
+        "reuse": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "target": { "type": "string" },
+              "what": { "type": "string" }
+            },
+            "required": ["target", "what"]
+          }
+        },
+        "modify": { "type": "array", "items": { "$ref": "#/$defs/planChange" } },
+        "add": { "type": "array", "items": { "$ref": "#/$defs/planAddition" } },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "order": { "type": "number" },
+              "action": { "type": "string" },
+              "touches": { "type": "array", "items": { "type": "string" } }
+            },
+            "required": ["order", "action", "touches"]
+          }
+        },
+        "affected": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "modules": { "type": "array", "items": { "type": "string" } },
+            "files": { "type": "array", "items": { "type": "string" } },
+            "interfaces": { "type": "array", "items": { "type": "string" } },
+            "data": { "type": "array", "items": { "type": "string" } },
+            "state": { "type": "array", "items": { "type": "string" } },
+            "permissions": { "type": "array", "items": { "type": "string" } },
+            "frontend": { "type": "array", "items": { "type": "string" } },
+            "backend": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["modules", "files", "interfaces", "data", "state", "permissions", "frontend", "backend"]
+        },
+        "architectureFit": { "type": "string" },
+        "assumptions": { "type": "array", "items": { "type": "string" } },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "option": { "type": "string" },
+              "whyNot": { "type": "string" }
+            },
+            "required": ["option", "whyNot"]
+          }
+        }
+      },
+      "required": ["approach", "reuse", "modify", "add", "steps", "affected", "architectureFit", "assumptions", "alternatives"]
+    },
+    "testPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "testStrategy": { "type": "string" },
+        "cases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "priority": { "type": "string", "enum": ["P0", "P1", "P2"] },
+              "riskIds": { "type": "array", "items": { "type": "string" } },
+              "scenario": { "type": "string" },
+              "steps": { "type": "array", "items": { "type": "string" } },
+              "expected": { "type": "string" },
+              "verificationType": { "type": "string" }
+            },
+            "required": ["id", "priority", "riskIds", "scenario", "steps", "expected", "verificationType"]
+          }
+        },
+        "acceptanceCriteria": { "type": "array", "items": { "$ref": "#/$defs/acceptanceCriterion" } },
+        "coverageGaps": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["testStrategy", "cases", "acceptanceCriteria", "coverageGaps"]
+    },
+    "risks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "risks": { "type": "array", "items": { "$ref": "#/$defs/riskItem" } },
+        "rollback": { "type": "array", "items": { "type": "string" } },
+        "openConcerns": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["risks", "rollback", "openConcerns"]
+    }
+  },
+  "required": ["requirement", "plan", "testPlan", "risks"]
+}
