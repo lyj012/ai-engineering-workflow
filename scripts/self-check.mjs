@@ -10,6 +10,8 @@ import { computeReadiness as coreComputeReadiness } from '../core/readiness.mjs'
 import { runReadinessTests, CASES as READINESS_CASES } from './readiness.test.mjs'
 import { computePersistOutcome as coreComputePersistOutcome } from '../core/persist-outcome.mjs'
 import { runPersistOutcomeTests, CASES as PERSIST_OUTCOME_CASES } from './persist-outcome.test.mjs'
+import { compareRepoFingerprint as coreCompareRepoFingerprint } from '../core/repo-fingerprint.mjs'
+import { runRepoFingerprintTests, CASES as REPO_FINGERPRINT_CASES } from './repo-fingerprint.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -273,6 +275,31 @@ for (const failure of runPersistOutcomeTests()) errors.push(failure)
   }
 }
 
+// repo-fingerprint logic (#5): run unit tests + behaviour-diff the deliver workflow inline copy against core.
+for (const failure of runRepoFingerprintTests()) errors.push(failure)
+{
+  const dWf = '.claude/workflows/deliver-from-plan.js'
+  if (exists(dWf)) {
+    const src = read(dWf)
+    const s = src.indexOf('// >>> FINGERPRINT-START')
+    const e = src.indexOf('// <<< FINGERPRINT-END')
+    if (s === -1 || e === -1 || e <= s) {
+      errors.push(`${dWf} is missing FINGERPRINT markers required for the inline-vs-core parity check`)
+    } else {
+      const block = src.slice(src.indexOf('\n', s), e)
+      let inlineFn = null
+      try { inlineFn = new Function(`${block}\n; return compareRepoFingerprint;`)() } catch (error) { errors.push(`failed to evaluate inline compareRepoFingerprint in ${dWf}: ${error.message}`) }
+      if (inlineFn) {
+        for (const [name, planFp, currentFp] of REPO_FINGERPRINT_CASES) {
+          const a = inlineFn(planFp, currentFp)
+          const b = coreCompareRepoFingerprint(planFp, currentFp)
+          if (a.severity !== b.severity || a.stale !== b.stale) errors.push(`repo-fingerprint drift on "${name}": inline(${a.severity}/${a.stale}) core(${b.severity}/${b.stale})`)
+        }
+      }
+    }
+  }
+}
+
 errors.push(...validatePlanArtifacts(path.join(root, 'examples/artifacts/plan-ready')))
 
 for (const file of ['app.sh', 'test.sh']) {
@@ -336,5 +363,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, readiness logic+parity, persist-outcome logic+parity, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)

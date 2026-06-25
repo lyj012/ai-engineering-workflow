@@ -43,6 +43,7 @@ const targetRepoArg = A.targetRepo ? String(A.targetRepo) : null
 const outDirBase = A.outDir ? String(A.outDir) : 'evidence/deliveries'
 const vendorDir = A.vendorDir ? String(A.vendorDir) : 'vendor/zhuliming-templates'
 const bridgeDoc = A.bridgeDoc ? String(A.bridgeDoc) : 'docs/12-plan-to-coding-bridge.md'
+const allowStalePlan = !!A.allowStalePlan   // true 时即便目标仓库自方案生成后变更也放行（#5 stale-plan 闸门）
 // 有界循环兜底轮数（防无限循环）：Implement 最多 MAX_IMPL 轮、Review↔Fix 最多 MAX_FIX 轮
 const MAX_IMPL = (Number.isFinite(Number(A.maxImplRounds)) && Number(A.maxImplRounds) > 0) ? Number(A.maxImplRounds) : 3
 const argMaxFix = (Number.isFinite(Number(A.maxFixRounds)) && Number(A.maxFixRounds) >= 0) ? Number(A.maxFixRounds) : null
@@ -113,9 +114,37 @@ function computeDeliverStatus(input) {
 }
 // <<< DELIVER-STATUS-END
 
+// >>> FINGERPRINT-START — 与 core/repo-fingerprint.mjs 同一逻辑（行为由 scripts/self-check.mjs 比对锁定，单测见 scripts/repo-fingerprint.test.mjs）；勿删本标记与 END 标记
+// stale-plan 检测：比对方案生成时与交付时的目标仓库指纹；commit/treeHash 变更=hard（默认拒交付），仅 dirty 变更=soft
+function compareRepoFingerprint(planFp, currentFp) {
+  if (!planFp || !currentFp) {
+    return { comparable: false, severity: 'unknown', stale: false, changed: [], reasons: ['缺少指纹，无法判定 stale（按可继续处理，但已标注）'] }
+  }
+  const changed = []
+  const reasons = []
+  let identityComparable = false
+  if (planFp.commit && currentFp.commit) {
+    identityComparable = true
+    if (planFp.commit !== currentFp.commit) { changed.push('commit'); reasons.push(`commit 变更：方案基于 ${planFp.commit}，当前 ${currentFp.commit}`) }
+  } else if (planFp.treeHash && currentFp.treeHash) {
+    identityComparable = true
+    if (planFp.treeHash !== currentFp.treeHash) { changed.push('treeHash'); reasons.push('文件树内容哈希变更') }
+  }
+  if ((planFp.dirtyDiffHash || '') !== (currentFp.dirtyDiffHash || '')) { changed.push('dirtyDiff'); reasons.push('未提交改动(dirty diff)与方案生成时不一致') }
+  const hard = changed.includes('commit') || changed.includes('treeHash')
+  const soft = !hard && changed.length > 0
+  const severity = hard ? 'hard' : soft ? 'soft' : (identityComparable ? 'none' : 'unknown')
+  if (!identityComparable) reasons.push('两侧均缺 commit/treeHash，身份不可比（仅比对了 dirty）')
+  return { comparable: identityComparable, severity, stale: hard || soft, changed, reasons }
+}
+// <<< FINGERPRINT-END
+
 const SAFETY = `【硬安全约束】(1) 只在沙箱目录内写文件，绝不修改原仓库 ${targetRepoArg || '(方案目标仓库)'} 之外或之内的任何原始文件；(2) 绝不执行 git commit/push/merge/reset、绝不删库删表、绝不碰支付/权限/密钥/认证/不可逆操作——命中即停并在结构化结果里报告；(3) 只改方案 SCOPE(plan.affected.files)内的文件，越界即停。中文输出，只返回结构化结果。`
 
 // ===================== Schemas =====================
+const FINGERPRINT_SCHEMA = { type: 'object', additionalProperties: false, properties: {
+  commit: { type: 'string' }, treeHash: { type: 'string' }, dirty: { type: 'boolean' }, dirtyDiffHash: { type: 'string' },
+}, required: ['commit', 'treeHash', 'dirty', 'dirtyDiffHash'] }
 const GATE_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   finalStatus: { type: 'string' }, readinessForDev: { type: 'string' },
   requirementGoal: { type: 'string' }, manifestTarget: { type: 'string' },
@@ -124,8 +153,9 @@ const GATE_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   openQuestions: { type: 'array', items: { type: 'string' } },
   complexity: { type: 'string', description: 'manifest.triage.complexity（simple/medium/complex），无则填 medium' },
   riskFlags: { type: 'array', items: { type: 'string' }, description: 'manifest.triage.riskFlags，无则 ["none"]' },
+  planFingerprint: FINGERPRINT_SCHEMA, currentFingerprint: FINGERPRINT_SCHEMA,
   targetReadable: { type: 'boolean' }, note: { type: 'string' },
-}, required: ['finalStatus', 'readinessForDev', 'requirementGoal', 'manifestTarget', 'affectedFiles', 'remainingGaps', 'openQuestions', 'complexity', 'riskFlags', 'targetReadable', 'note'] }
+}, required: ['finalStatus', 'readinessForDev', 'requirementGoal', 'manifestTarget', 'affectedFiles', 'remainingGaps', 'openQuestions', 'complexity', 'riskFlags', 'planFingerprint', 'currentFingerprint', 'targetReadable', 'note'] }
 
 const SCAFFOLD_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   ok: { type: 'boolean' }, runDir: { type: 'string' }, sandboxDir: { type: 'string' },
@@ -187,7 +217,7 @@ const DELIVER_SCHEMA = { type: 'object', additionalProperties: false, properties
 // ===================== 状态收集 =====================
 let finalStatus = 'FAILED'
 let gate = null, scaffold = null, materialize = null, implement = null, reviews = [], fix = null, verify = null, deliver = null
-let trustworthy = false, reviewIncomplete = false, halted = false, diffResult = null
+let trustworthy = false, reviewIncomplete = false, halted = false, diffResult = null, staleCmp = null
 const failedStages = [], fixHistory = []
 
 try {
@@ -197,16 +227,21 @@ try {
   phase('Preflight')
   const pf = await callAgent(
     `你是只读分析者。读取方案目录 ${planDir} 下的 run-manifest.json（必要时再看 requirement.json / plan.json）。${SAFETY}\n` +
-    `回报：finalStatus、readinessForDev、requirementGoal(需求一句话目标)、manifestTarget(manifest.target 即被分析的目标仓库绝对路径)、affectedFiles(plan.affected.files，原样)、remainingGaps、openQuestions、complexity(manifest.triage.complexity，无则 medium)、riskFlags(manifest.triage.riskFlags，无则 ["none"])、targetReadable(用 Bash 确认 ${targetRepoArg || 'manifestTarget'} 存在且可读)。不要改任何文件。`,
+    `回报：finalStatus、readinessForDev、requirementGoal(需求一句话目标)、manifestTarget(manifest.target 即被分析的目标仓库绝对路径)、affectedFiles(plan.affected.files，原样)、remainingGaps、openQuestions、complexity(manifest.triage.complexity，无则 medium)、riskFlags(manifest.triage.riskFlags，无则 ["none"])、targetReadable(用 Bash 确认 ${targetRepoArg || 'manifestTarget'} 存在且可读)。\n` +
+    `另：planFingerprint=manifest.repoFingerprint（原样；无则各字段留空/false）；currentFingerprint=重新计算目标仓库 ${targetRepoArg || 'manifestTarget'} 当前版本指纹（git 则 commit=\`git rev-parse HEAD\`、treeHash=\`git rev-parse HEAD^{tree}\`、dirty=\`git status --porcelain\` 非空、dirtyDiffHash=dirty 时 \`git diff HEAD|sha256sum\` 前16位；非 git 则 treeHash=\`find . -type f -not -path './.git/*' -print0|sort -z|xargs -0 sha256sum 2>/dev/null|sha256sum\` 前16位，其余留空/false）。不要改任何文件。`,
     { schema: GATE_SCHEMA, label: 'preflight-gate', phase: 'Preflight', agentType: AT, effort: 'low' }, true)
   if (!pf.ok) { failedStages.push('Preflight'); halt('Preflight', pf.error) }
   gate = pf.value
   const targetRepo = targetRepoArg || gate.manifestTarget
   const gateOk = ['PASS', 'PARTIAL'].includes(gate.finalStatus) && gate.readinessForDev === 'ready'
-  note(`就绪闸门：finalStatus=${gate.finalStatus}，readinessForDev=${gate.readinessForDev} → ${gateOk ? '放行' : '拦截'}；目标仓库=${targetRepo}（可读=${gate.targetReadable}）`)
+  staleCmp = compareRepoFingerprint(gate.planFingerprint, gate.currentFingerprint)
+  note(`就绪闸门：finalStatus=${gate.finalStatus}，readinessForDev=${gate.readinessForDev} → ${gateOk ? '放行' : '拦截'}；目标仓库=${targetRepo}（可读=${gate.targetReadable}）；stale=${staleCmp.severity}${staleCmp.changed.length ? '(' + staleCmp.changed.join('/') + ')' : ''}`)
   if (!gateOk) { finalStatus = 'BLOCKED'; note('方案未就绪（需 PASS/PARTIAL 且 readinessForDev=ready），不进入编码。请回到需求澄清或方案返工。') }
   else if (!gate.targetReadable) { finalStatus = 'BLOCKED'; note('目标仓库不可读，无法建立沙箱。') }
+  else if (staleCmp.severity === 'hard' && !allowStalePlan) { finalStatus = 'BLOCKED'; note(`⛔ Stale plan：目标仓库自方案生成后已变更（${staleCmp.reasons.join('；')}）。方案可能不再贴合当前代码，拒绝交付。确认要在变更后的代码上继续，请传 allowStalePlan:true。`) }
   else {
+    if (staleCmp.severity === 'hard' && allowStalePlan) note('⚠ 目标仓库已变更但 allowStalePlan=true，按用户要求在变更后的代码上继续（stale 风险已知）。')
+    else if (staleCmp.severity === 'soft') note('⚠ 目标仓库有未提交改动差异(soft stale)，记录为开环项后继续。')
 
     // ---- 分档（建议1）：按方案复杂度/风险自动选档，args.mode 可覆盖；高风险至少 standard ----
     const cplx = String(gate.complexity || 'medium')
@@ -419,7 +454,9 @@ const deliverManifest = {
     ...reviews.filter(r => r.verdict === 'needs-work' && !(fix && fix.passed)).flatMap(r => r.findings.map(f => `审查未关闭[${r.lens}]: ${f}`)),
     ...(verify && verify.redGreenVerified === false ? ['独立"先红后绿"未复现：DONE 可信度未独立确认'] : []),
     ...(diffResult && diffResult.diffApplyCheckPassed === false ? ['diff 未通过 git apply --check'] : []),
+    ...(staleCmp && staleCmp.severity === 'soft' ? ['目标仓库 soft stale：有未提交改动差异（方案基于略有不同的工作区）'] : []),
   ],
+  stalePlan: staleCmp ? { severity: staleCmp.severity, changed: staleCmp.changed, reasons: staleCmp.reasons } : null,
   failedStages,
 }
 

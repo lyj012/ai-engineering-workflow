@@ -170,10 +170,13 @@ const ITEM = { type: 'object', additionalProperties: false, properties: {
   confidence: { type: 'string', enum: ['high', 'medium', 'low'] }, evidence: { type: 'array', items: EVIDENCE },
 }, required: ['id', 'area', 'severity', 'description', 'impact', 'mitigation', 'confidence', 'evidence'] }
 
+const FINGERPRINT_SCHEMA = { type: 'object', additionalProperties: false, properties: {
+  commit: { type: 'string' }, treeHash: { type: 'string' }, dirty: { type: 'boolean' }, dirtyDiffHash: { type: 'string' },
+}, required: ['commit', 'treeHash', 'dirty', 'dirtyDiffHash'] }
 const PREFLIGHT_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   targetExists: { type: 'boolean' }, isReadable: { type: 'boolean' }, repoKind: { type: 'string' },
-  requirementClear: { type: 'boolean' }, note: { type: 'string' },
-}, required: ['targetExists', 'isReadable', 'repoKind', 'requirementClear', 'note'] }
+  requirementClear: { type: 'boolean' }, fingerprint: FINGERPRINT_SCHEMA, note: { type: 'string' },
+}, required: ['targetExists', 'isReadable', 'repoKind', 'requirementClear', 'fingerprint', 'note'] }
 
 const REQUIREMENT_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   goal: { type: 'string' }, actors: { type: 'array', items: { type: 'string' } },
@@ -320,6 +323,7 @@ function runConsistencyChecks() {
 // ===================== 主流程 =====================
 let requirementU = null, locate = null, gap = null, plan = null, risk = null, testPlan = null, review = null, report = null
 let componentAnalyses = [], failedComponents = [], relevantComps = []
+let repoFingerprint = null
 
 async function doReview(round, scope) {
   return roleAgent('review',
@@ -337,11 +341,14 @@ try {
   // ---- Preflight ----
   phase('Preflight')
   const pf = await roleAgent('preflight',
-    `${BASE}\n\n本阶段=前置校验。用 Bash 确认目标仓库存在且可读，判断仓库类型/技术栈；并初判这条需求是否足够清晰(requirementClear)。`,
+    `${BASE}\n\n本阶段=前置校验。用 Bash 确认目标仓库存在且可读，判断仓库类型/技术栈；并初判这条需求是否足够清晰(requirementClear)。\n` +
+    `另计算目标仓库版本指纹 fingerprint（供后续检测 stale plan）：cd 到目标目录；若为 git 仓库：commit=\`git rev-parse HEAD\`（取不到留空）、treeHash=\`git rev-parse HEAD^{tree}\`（留空亦可）、dirty=\`git status --porcelain\` 是否非空、dirtyDiffHash=dirty 时取 \`git diff HEAD | sha256sum\` 前16位否则留空；若非 git：commit 与 dirtyDiffHash 留空、dirty=false、treeHash 尽量用 \`find . -type f -not -path './.git/*' -print0 | sort -z | xargs -0 sha256sum 2>/dev/null | sha256sum\` 前16位。`,
     { schema: PREFLIGHT_SCHEMA, label: 'preflight', phase: 'Preflight', required: true, effort: EFFORT.light })
   if (!pf.ok) { failedStages.push('Preflight'); halt('Preflight', pf.error) }
   if (!pf.value.targetExists || !pf.value.isReadable) halt('Preflight', `目标仓库不可用：${pf.value.note}`)
   note(`Preflight ok：${pf.value.repoKind}；需求初判清晰度=${pf.value.requirementClear ? '足够' : '偏模糊'} — ${pf.value.note}`)
+  repoFingerprint = pf.value.fingerprint || null
+  if (repoFingerprint) note(`仓库指纹：commit=${repoFingerprint.commit || '(无)'} tree=${repoFingerprint.treeHash || '(无)'} dirty=${repoFingerprint.dirty}`)
 
   // ---- Requirement（需求理解；参考 Skill 的 requirement-analysis 维度）----
   phase('Requirement')
@@ -550,7 +557,7 @@ const manifest = {
   workflow: 'plan-from-requirement', requirement, target, constraints, mode: MODE, pathway,
   triage: triage ? { clarity: triage.clarity, complexity: forceComplexity || triage.complexity, riskFlags: triage.riskFlags, recommendedDepth: triage.recommendedDepth } : null,
   params: { mode: userMode || `auto:${MODE}`, maxComponents: MAX, maxReworkRounds: MAX_REWORK, effort: EFFORT, skillDir: SKILL_DIR, useCustomAgents: useCustom, forceComplexity, skipClarificationGate: skipClarify, forceFirstVerdict, injectComponentFailureIndex: injectFailIdx },
-  finalStatus, readinessForDev, failedStages, failedComponents,
+  finalStatus, readinessForDev, repoFingerprint, failedStages, failedComponents,
   coverage: { located: (locate && locate.relevant || []).length, analyzed: componentAnalyses.length },
   consistency: consistency || { ok: true, checks: [{ name: '(澄清/提前终止路径，未跑完整分析)', ok: true, detail: pathway }] },
   reviewHistory, reworkHistory,
