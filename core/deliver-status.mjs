@@ -56,5 +56,8 @@ export function computeDeliverStatus(input) {
   if (diff.diffApplyCheckPassed !== true) { reasons.push('diff 未通过 git apply --check，状态降级 BLOCKED。'); return { finalStatus: 'BLOCKED', reasons } }
   if (!Array.isArray(diff.filesChanged) || diff.filesChanged.length === 0) { reasons.push('交付未产出任何变更文件，状态降级 BLOCKED。'); return { finalStatus: 'BLOCKED', reasons } }
 
+  // delivery write is the very last fact: if the manifest/report failed to persist, do not claim DELIVERED
+  if (i.deliveryPersisted === false) { reasons.push('交付产物落盘失败（delivery-manifest/报告未成功写入），状态降级 BLOCKED。'); return { finalStatus: 'BLOCKED', reasons } }
+
   return { finalStatus: hasOpenItems ? 'DELIVERED_WITH_OPEN_ITEMS' : 'DELIVERED', reasons }
 }

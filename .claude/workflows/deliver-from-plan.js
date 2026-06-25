@@ -110,6 +110,9 @@ function computeDeliverStatus(input) {
   if (diff.diffApplyCheckPassed !== true) { reasons.push('diff 未通过 git apply --check，状态降级 BLOCKED。'); return { finalStatus: 'BLOCKED', reasons } }
   if (!Array.isArray(diff.filesChanged) || diff.filesChanged.length === 0) { reasons.push('交付未产出任何变更文件，状态降级 BLOCKED。'); return { finalStatus: 'BLOCKED', reasons } }
 
+  // delivery write is the very last fact: if the manifest/report failed to persist, do not claim DELIVERED
+  if (i.deliveryPersisted === false) { reasons.push('交付产物落盘失败（delivery-manifest/报告未成功写入），状态降级 BLOCKED。'); return { finalStatus: 'BLOCKED', reasons } }
+
   return { finalStatus: hasOpenItems ? 'DELIVERED_WITH_OPEN_ITEMS' : 'DELIVERED', reasons }
 }
 // <<< DELIVER-STATUS-END
@@ -138,6 +141,30 @@ function compareRepoFingerprint(planFp, currentFp) {
   return { comparable: identityComparable, severity, stale: hard || soft, changed, reasons }
 }
 // <<< FINGERPRINT-END
+
+// >>> CHANGED-FILES-START — 与 core/changed-files.mjs 同一逻辑（行为由 scripts/self-check.mjs 比对锁定，单测见 scripts/changed-files.test.mjs）；勿删本标记与 END 标记
+// 三方对账：独立 Verify 文件列表 / diff 文件列表 / SCOPE，不一致即列为遗留项
+function reconcileChangedFiles(input) {
+  const i = input || {}
+  const verified = Array.isArray(i.verifiedFiles) ? i.verifiedFiles : []
+  const diff = Array.isArray(i.diffFiles) ? i.diffFiles : []
+  const scope = new Set([...(Array.isArray(i.scopeFiles) ? i.scopeFiles : []), ...(Array.isArray(i.optionalScopeFiles) ? i.optionalScopeFiles : [])])
+  const issues = []
+  const vSet = new Set(verified), dSet = new Set(diff)
+  if (verified.length && diff.length) {
+    const onlyVerify = verified.filter(f => !dSet.has(f))
+    const onlyDiff = diff.filter(f => !vSet.has(f))
+    if (onlyVerify.length || onlyDiff.length) {
+      issues.push(`Verify 与 Diff 变更文件不一致：仅Verify[${onlyVerify.join(', ') || '无'}] 仅Diff[${onlyDiff.join(', ') || '无'}]`)
+    }
+  }
+  if (scope.size && diff.length) {
+    const outOfScope = diff.filter(f => !scope.has(f))
+    if (outOfScope.length) issues.push(`Diff 超出 SCOPE：${outOfScope.join(', ')}`)
+  }
+  return { consistent: issues.length === 0, issues }
+}
+// <<< CHANGED-FILES-END
 
 const SAFETY = `【硬安全约束】(1) 只在沙箱目录内写文件，绝不修改原仓库 ${targetRepoArg || '(方案目标仓库)'} 之外或之内的任何原始文件；(2) 绝不执行 git commit/push/merge/reset、绝不删库删表、绝不碰支付/权限/密钥/认证/不可逆操作——命中即停并在结构化结果里报告；(3) 只改方案 SCOPE(plan.affected.files)内的文件，越界即停。中文输出，只返回结构化结果。`
 
@@ -408,8 +435,9 @@ if (scaffold && scaffold.runDir && finalStatus !== 'BLOCKED' && !halted) {
 }
 
 // step 2：确定性终态（纯函数；非 halt 路径才重算；diff 也是判定输入 —— #1/#2 不再以 DELIVERED 收尾失败交付）
+let statusInput = null
 if (!halted) {
-  const sr = computeDeliverStatus({
+  statusInput = {
     priorStatus: finalStatus,
     implementPassed: !!(implement && implement.passed),
     verify: verify ? { donePassedVerified: verify.donePassedVerified, scopeCleanVerified: verify.scopeCleanVerified, redGreenVerified: verify.redGreenVerified } : null,
@@ -419,13 +447,21 @@ if (!halted) {
     gateOpenQuestions: (gate && gate.openQuestions) || [],
     gateRemainingGaps: (gate && gate.remainingGaps) || [],
     diff: (scaffold && scaffold.runDir) ? diffResult : null,
-  })
+  }
+  const sr = computeDeliverStatus(statusInput)
   finalStatus = sr.finalStatus
   sr.reasons.forEach(note)
 }
 
 // step 3：据最终事实构建 manifest（filesChanged 以独立验证为准 —— #3；记录 diff apply-check 结果）
 const verifiedChanged = (verify && Array.isArray(verify.changedFilesVerified) && verify.changedFilesVerified.length) ? verify.changedFilesVerified : null
+// 三方对账（#4）：Verify / diff / SCOPE 文件列表一致性
+const filesReconcile = reconcileChangedFiles({
+  verifiedFiles: (verify && verify.changedFilesVerified) || [],
+  diffFiles: (diffResult && diffResult.filesChanged) || [],
+  scopeFiles: (scaffold && scaffold.scopeFiles) || [],
+  optionalScopeFiles: (scaffold && scaffold.optionalScopeFiles) || [],
+})
 const deliverManifest = {
   schemaVersion: '1.0',
   workflow: 'deliver-from-plan', planDir, targetRepo: targetRepoArg || (gate && gate.manifestTarget) || null,
@@ -451,12 +487,14 @@ const deliverManifest = {
     ...(materialize ? materialize.openLoopItems : []),
     ...((gate && gate.openQuestions) || []).map(q => `方案待确认: ${q}`),
     ...((gate && gate.remainingGaps) || []).map(g => `方案遗留: ${g}`),
-    ...reviews.filter(r => r.verdict === 'needs-work' && !(fix && fix.passed)).flatMap(r => r.findings.map(f => `审查未关闭[${r.lens}]: ${f}`)),
+    ...reviews.filter(r => r.verdict === 'needs-work').flatMap(r => r.findings.map(f => `审查未关闭[${r.lens}]: ${f}`)),
     ...(verify && verify.redGreenVerified === false ? ['独立"先红后绿"未复现：DONE 可信度未独立确认'] : []),
     ...(diffResult && diffResult.diffApplyCheckPassed === false ? ['diff 未通过 git apply --check'] : []),
     ...(staleCmp && staleCmp.severity === 'soft' ? ['目标仓库 soft stale：有未提交改动差异（方案基于略有不同的工作区）'] : []),
+    ...filesReconcile.issues.map(s => `变更文件对账: ${s}`),
   ],
   stalePlan: staleCmp ? { severity: staleCmp.severity, changed: staleCmp.changed, reasons: staleCmp.reasons } : null,
+  filesReconcile: { consistent: filesReconcile.consistent, issues: filesReconcile.issues },
   failedStages,
 }
 
@@ -479,6 +517,17 @@ if (scaffold && scaffold.runDir) {
   note(`Deliver 落盘：${deliver.ok ? '已写入 ' + deliver.absOutDir + '（' + deliver.written.length + ' 文件）' : '失败：' + deliver.note}`)
 } else {
   note('未建立 runDir（就绪闸门或前置失败），无产物可落盘。')
+}
+
+// 落盘是最后一项事实（#1）：交付产物未成功写入则不以 DELIVERED 收尾
+deliverManifest.deliveryPersisted = deliver ? deliver.ok : null
+if (!halted && statusInput && deliver && deliver.ok === false) {
+  const sr2 = computeDeliverStatus({ ...statusInput, deliveryPersisted: false })
+  if (sr2.finalStatus !== finalStatus) {
+    note(`⚠ 交付产物落盘失败，最终状态由 ${finalStatus} 降级为 ${sr2.finalStatus}。`)
+    finalStatus = sr2.finalStatus
+    deliverManifest.finalStatus = finalStatus
+  }
 }
 
 log(`deliver-from-plan 完成。最终状态=${finalStatus}；DONE可信=${trustworthy}；实现全绿=${!!(implement && implement.passed)}；审查 ${reviews.length} 视角；开环遗留 ${deliverManifest.openItems.length} 项；失败阶段 [${failedStages.join(', ') || '无'}]。`)

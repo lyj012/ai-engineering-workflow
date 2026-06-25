@@ -12,6 +12,8 @@ import { computePersistOutcome as coreComputePersistOutcome } from '../core/pers
 import { runPersistOutcomeTests, CASES as PERSIST_OUTCOME_CASES } from './persist-outcome.test.mjs'
 import { compareRepoFingerprint as coreCompareRepoFingerprint } from '../core/repo-fingerprint.mjs'
 import { runRepoFingerprintTests, CASES as REPO_FINGERPRINT_CASES } from './repo-fingerprint.test.mjs'
+import { reconcileChangedFiles as coreReconcileChangedFiles } from '../core/changed-files.mjs'
+import { runChangedFilesTests, CASES as CHANGED_FILES_CASES } from './changed-files.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -300,6 +302,31 @@ for (const failure of runRepoFingerprintTests()) errors.push(failure)
   }
 }
 
+// changed-files reconciliation (#4): run unit tests + behaviour-diff the deliver workflow inline copy.
+for (const failure of runChangedFilesTests()) errors.push(failure)
+{
+  const dWf = '.claude/workflows/deliver-from-plan.js'
+  if (exists(dWf)) {
+    const src = read(dWf)
+    const s = src.indexOf('// >>> CHANGED-FILES-START')
+    const e = src.indexOf('// <<< CHANGED-FILES-END')
+    if (s === -1 || e === -1 || e <= s) {
+      errors.push(`${dWf} is missing CHANGED-FILES markers required for the inline-vs-core parity check`)
+    } else {
+      const block = src.slice(src.indexOf('\n', s), e)
+      let inlineFn = null
+      try { inlineFn = new Function(`${block}\n; return reconcileChangedFiles;`)() } catch (error) { errors.push(`failed to evaluate inline reconcileChangedFiles in ${dWf}: ${error.message}`) }
+      if (inlineFn) {
+        for (const [name, input] of CHANGED_FILES_CASES) {
+          const a = inlineFn(input).consistent
+          const b = coreReconcileChangedFiles(input).consistent
+          if (a !== b) errors.push(`changed-files drift on "${name}": inline=${a} core=${b}`)
+        }
+      }
+    }
+  }
+}
+
 errors.push(...validatePlanArtifacts(path.join(root, 'examples/artifacts/plan-ready')))
 
 for (const file of ['app.sh', 'test.sh']) {
@@ -363,5 +390,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)

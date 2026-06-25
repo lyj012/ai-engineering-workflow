@@ -32,6 +32,8 @@ export const CASES = [
   ['#1 diff not ok -> BLOCKED', { ...clean, diff: { ok: false, diffApplyCheckPassed: false, filesChanged: [] } }, 'BLOCKED'],
   ['#2 apply-check failed -> BLOCKED', { ...clean, diff: { ok: true, diffApplyCheckPassed: false, filesChanged: ['app.sh'] } }, 'BLOCKED'],
   ['no changed files -> BLOCKED', { ...clean, diff: { ok: true, diffApplyCheckPassed: true, filesChanged: [] } }, 'BLOCKED'],
+  ['#1 delivery persist failed -> BLOCKED', { ...clean, deliveryPersisted: false }, 'BLOCKED'],
+  ['delivery persisted ok -> DELIVERED', { ...clean, deliveryPersisted: true }, 'DELIVERED'],
   // --- open-item downgrades (still delivered, but not clean) ---
   ['materialize open loop item -> WITH_OPEN_ITEMS', { ...clean, materializeOpenLoopItems: ['no pwsh .ps1'] }, 'DELIVERED_WITH_OPEN_ITEMS'],
   ['non-blocking needs-work -> WITH_OPEN_ITEMS', { ...clean, reviews: [{ verdict: 'needs-work', blocking: false }] }, 'DELIVERED_WITH_OPEN_ITEMS'],
