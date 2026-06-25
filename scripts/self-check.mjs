@@ -4,6 +4,8 @@ import path from 'node:path'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { validatePlanArtifacts } from './validate-plan-artifacts.mjs'
+import { computeDeliverStatus as coreComputeDeliverStatus } from '../core/deliver-status.mjs'
+import { runDeliverStatusTests, CASES as DELIVER_STATUS_CASES } from './deliver-status.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -193,6 +195,31 @@ if (exists(planContractFile) && exists('core/schemas/plan-artifacts.schema.json'
   }
 }
 
+// deliver final-status logic (#6): run the unit tests, and behaviour-diff the workflow's inline copy
+// against the canonical core/deliver-status.mjs over fixed vectors so they cannot drift (covers #1/#2).
+for (const failure of runDeliverStatusTests()) errors.push(failure)
+
+const deliverWf = '.claude/workflows/deliver-from-plan.js'
+if (exists(deliverWf)) {
+  const src = read(deliverWf)
+  const s = src.indexOf('// >>> DELIVER-STATUS-START')
+  const e = src.indexOf('// <<< DELIVER-STATUS-END')
+  if (s === -1 || e === -1 || e <= s) {
+    errors.push(`${deliverWf} is missing DELIVER-STATUS markers required for the inline-vs-core parity check`)
+  } else {
+    const block = src.slice(src.indexOf('\n', s), e)
+    let inlineFn = null
+    try { inlineFn = new Function(`${block}\n; return computeDeliverStatus;`)() } catch (error) { errors.push(`failed to evaluate inline computeDeliverStatus in ${deliverWf}: ${error.message}`) }
+    if (inlineFn) {
+      for (const [name, input] of DELIVER_STATUS_CASES) {
+        const inlineStatus = inlineFn(input).finalStatus
+        const coreStatus = coreComputeDeliverStatus(input).finalStatus
+        if (inlineStatus !== coreStatus) errors.push(`deliver-status drift on "${name}": inline=${inlineStatus} core=${coreStatus}`)
+      }
+    }
+  }
+}
+
 errors.push(...validatePlanArtifacts(path.join(root, 'examples/artifacts/plan-ready')))
 
 for (const file of ['app.sh', 'test.sh']) {
@@ -256,5 +283,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)

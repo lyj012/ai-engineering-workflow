@@ -76,6 +76,43 @@ async function callAgent(prompt, opts, required) {
 }
 function halt(stage, reason, status) { const e = new Error(`HALT@${stage}: ${reason}`); e.__halt = { stage, reason, status: status || 'FAILED' }; throw e }
 
+// >>> DELIVER-STATUS-START — 与 core/deliver-status.mjs 同一逻辑（行为由 scripts/self-check.mjs 比对锁定，单测见 scripts/deliver-status.test.mjs）；勿删本标记与 END 标记
+// 确定性终态判定：BLOCKED 短路；唯有"全程干净 + diff 已落盘且 apply-check 通过且有变更文件"才给乐观态（#1/#2）
+function computeDeliverStatus(input) {
+  const i = input || {}
+  const reasons = []
+  if (i.priorStatus === 'BLOCKED') return { finalStatus: 'BLOCKED', reasons }
+
+  const reviews = Array.isArray(i.reviews) ? i.reviews : []
+  const verify = i.verify || null
+  const verifiedGreen = !!(verify && verify.donePassedVerified === true && verify.scopeCleanVerified === true)
+  const blockingReview = reviews.some(r => r && r.verdict === 'needs-work' && r.blocking)
+  const redGreenUnconfirmed = !!(verify && verify.redGreenVerified === false)
+  if (redGreenUnconfirmed) reasons.push('独立"先红后绿"未复现：DONE 可信度未被独立确认，降为带开环项交付。')
+
+  const materializeOpenLoopItems = Array.isArray(i.materializeOpenLoopItems) ? i.materializeOpenLoopItems : []
+  const gateOpenQuestions = Array.isArray(i.gateOpenQuestions) ? i.gateOpenQuestions : []
+  const gateRemainingGaps = Array.isArray(i.gateRemainingGaps) ? i.gateRemainingGaps : []
+  const hasOpenItems = materializeOpenLoopItems.length > 0 ||
+    reviews.some(r => r && r.verdict === 'needs-work') ||
+    redGreenUnconfirmed ||
+    gateOpenQuestions.length > 0 || gateRemainingGaps.length > 0
+
+  if (!i.implementPassed) { reasons.push('实现未达全绿，不交付。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (!verify) { reasons.push('缺独立验证（Verify 失败），不乐观交付。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (!verifiedGreen) { reasons.push('独立验证未确认 DONE 真绿 / 只动 SCOPE，不交付。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (i.reviewIncomplete) { reasons.push('独立复审视角不齐，不乐观交付。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (blockingReview) { reasons.push('存在阻断性审查意见未关闭。'); return { finalStatus: 'BLOCKED', reasons } }
+
+  const diff = i.diff || null
+  if (!diff || diff.ok !== true) { reasons.push('交付 diff 生成/落盘失败，状态降级 BLOCKED（不以 DELIVERED 收尾）。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (diff.diffApplyCheckPassed !== true) { reasons.push('diff 未通过 git apply --check，状态降级 BLOCKED。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (!Array.isArray(diff.filesChanged) || diff.filesChanged.length === 0) { reasons.push('交付未产出任何变更文件，状态降级 BLOCKED。'); return { finalStatus: 'BLOCKED', reasons } }
+
+  return { finalStatus: hasOpenItems ? 'DELIVERED_WITH_OPEN_ITEMS' : 'DELIVERED', reasons }
+}
+// <<< DELIVER-STATUS-END
+
 const SAFETY = `【硬安全约束】(1) 只在沙箱目录内写文件，绝不修改原仓库 ${targetRepoArg || '(方案目标仓库)'} 之外或之内的任何原始文件；(2) 绝不执行 git commit/push/merge/reset、绝不删库删表、绝不碰支付/权限/密钥/认证/不可逆操作——命中即停并在结构化结果里报告；(3) 只改方案 SCOPE(plan.affected.files)内的文件，越界即停。中文输出，只返回结构化结果。`
 
 // ===================== Schemas =====================
@@ -138,16 +175,19 @@ const VERIFY_SCHEMA = { type: 'object', additionalProperties: false, properties:
   note: { type: 'string' },
 }, required: ['donePassedVerified', 'doneExitCodeVerified', 'redGreenVerified', 'changedFilesVerified', 'scopeCleanVerified', 'note'] }
 
-const DELIVER_SCHEMA = { type: 'object', additionalProperties: false, properties: {
-  ok: { type: 'boolean' }, absOutDir: { type: 'string' }, written: { type: 'array', items: { type: 'string' } },
-  diffStat: { type: 'string' }, filesChanged: { type: 'array', items: { type: 'string' } },
+const DIFF_SCHEMA = { type: 'object', additionalProperties: false, properties: {
+  ok: { type: 'boolean', description: '是否成功生成可用 diff（无任何变更文件时为 false）' },
+  diffStat: { type: 'string' }, filesChanged: { type: 'array', items: { type: 'string' }, description: 'target-root-relative 路径' },
   diffApplyCheckPassed: { type: 'boolean' }, note: { type: 'string' },
-}, required: ['ok', 'absOutDir', 'written', 'diffStat', 'filesChanged', 'diffApplyCheckPassed', 'note'] }
+}, required: ['ok', 'diffStat', 'filesChanged', 'diffApplyCheckPassed', 'note'] }
+const DELIVER_SCHEMA = { type: 'object', additionalProperties: false, properties: {
+  ok: { type: 'boolean' }, absOutDir: { type: 'string' }, written: { type: 'array', items: { type: 'string' } }, note: { type: 'string' },
+}, required: ['ok', 'absOutDir', 'written', 'note'] }
 
 // ===================== 状态收集 =====================
 let finalStatus = 'FAILED'
 let gate = null, scaffold = null, materialize = null, implement = null, reviews = [], fix = null, verify = null, deliver = null
-let trustworthy = false, reviewIncomplete = false
+let trustworthy = false, reviewIncomplete = false, halted = false, diffResult = null
 const failedStages = [], fixHistory = []
 
 try {
@@ -307,31 +347,50 @@ try {
     }
   }
 
-  // ---- 计算最终状态（C4/C17：以独立验证 + 复审完整性为准，不只信实现者自报；不达标不给乐观状态）----
-  if (finalStatus !== 'BLOCKED') {
-    const implPassed = !!(implement && implement.passed)
-    const verifiedGreen = !!(verify && verify.donePassedVerified === true && verify.scopeCleanVerified === true)
-    const blockingReview = reviews.some(r => r.verdict === 'needs-work' && r.blocking)
-    const redGreenUnconfirmed = !!(verify && verify.redGreenVerified === false)   // 独立"先红后绿"未复现 → DONE 可信度未被独立确认
-    if (redGreenUnconfirmed) note('独立"先红后绿"未复现：DONE 可信度未被独立确认，降为带开环项交付。')
-    const hasOpenItems = (materialize && materialize.openLoopItems.length > 0) ||
-      reviews.some(r => r.verdict === 'needs-work') ||
-      redGreenUnconfirmed ||
-      (gate && (gate.openQuestions.length > 0 || gate.remainingGaps.length > 0))
-    if (!implPassed) { finalStatus = 'BLOCKED'; note('实现未达全绿，不交付。') }
-    else if (!verify) { finalStatus = 'BLOCKED'; note('缺独立验证（Verify 失败），不乐观交付。') }
-    else if (!verifiedGreen) { finalStatus = 'BLOCKED'; note('独立验证未确认 DONE 真绿 / 只动 SCOPE，不交付。') }
-    else if (reviewIncomplete) { finalStatus = 'BLOCKED'; note('独立复审视角不齐，不乐观交付。') }
-    else if (blockingReview) { finalStatus = 'BLOCKED'; note('存在阻断性审查意见未关闭。') }
-    else finalStatus = hasOpenItems ? 'DELIVERED_WITH_OPEN_ITEMS' : 'DELIVERED'
-  }
+  // 终态延后到 Deliver 阶段用 computeDeliverStatus 计算：diff 落盘 + apply-check 也是判定输入（#1/#2）。
 
 } catch (e) {
-  if (e && e.__halt) { finalStatus = e.__halt.status; note(`流程在 ${e.__halt.stage} 终止：${e.__halt.reason}。输出已有结果，不伪造后续。`) }
+  if (e && e.__halt) { finalStatus = e.__halt.status; halted = true; note(`流程在 ${e.__halt.stage} 终止：${e.__halt.reason}。输出已有结果，不伪造后续。`) }
   else { throw e }
 }
 
-// ===================== Deliver（出 diff + 报告 + manifest）=====================
+// ===================== Deliver（先生成 diff + apply-check，据此定终态，再落盘）=====================
+phase('Deliver')
+// step 1：独立生成 target-root-relative diff 并做 git apply --check —— 这是终态判定的最后一项事实
+if (scaffold && scaffold.runDir && finalStatus !== 'BLOCKED' && !halted) {
+  const gd = await callAgent(
+    `你负责生成交付 diff（只在 ${scaffold.runDir} 内写，绝不动原仓库、绝不 commit/push）。${SAFETY}\n` +
+    `1) 生成 target-root-relative diff：以 ${targetRepoArg || (gate && gate.manifestTarget)} 为 target root，仅基于独立验证得到的 changedFiles/scopeFiles 收集相对路径；为每个相对路径从原仓库和沙箱复制到临时 diff-root/old/<rel> 与 diff-root/new/<rel>，然后在 diff-root 内执行 git diff --no-index --src-prefix=a/ --dst-prefix=b/ old new > "${scaffold.runDir}/changes.diff"（退出码 1=有差异属正常），再把 diff 头中的 a/old/、b/new/ 规范化为 a/、b/。禁止 diff 头出现绝对路径、sandbox、targetRepo、old/ 或 new/ 前缀；filesChanged 必须全部是 target-root-relative 路径。\n` +
+    `2) 检查 diff 可应用：复制一份干净 target root 到临时 apply-check 目录，在该目录执行 git apply --check "${scaffold.runDir}/changes.diff"；通过则 diffApplyCheckPassed=true，否则 false。若 diff 为空（无任何变更文件）则 ok=false。\n` +
+    `只产出 changes.diff 并回报事实，不要写 manifest 或报告。回报 ok/diffStat/filesChanged(target-root-relative)/diffApplyCheckPassed/note。`,
+    { schema: DIFF_SCHEMA, label: 'generate-diff', phase: 'Deliver', agentType: AT, effort: 'medium' }, true)
+  diffResult = gd.ok ? gd.value : { ok: false, diffStat: '', filesChanged: [], diffApplyCheckPassed: false, note: gd.error }
+  note(`Diff：${diffResult.ok ? '已生成 changes.diff（' + diffResult.diffStat + '），apply-check=' + diffResult.diffApplyCheckPassed : '失败：' + diffResult.note}`)
+} else if (scaffold && scaffold.runDir) {
+  note('前置已 BLOCKED/halt，跳过 diff 生成（无可交付实现）。')
+} else {
+  note('未建立 runDir（就绪闸门或前置失败），无 diff 可生成。')
+}
+
+// step 2：确定性终态（纯函数；非 halt 路径才重算；diff 也是判定输入 —— #1/#2 不再以 DELIVERED 收尾失败交付）
+if (!halted) {
+  const sr = computeDeliverStatus({
+    priorStatus: finalStatus,
+    implementPassed: !!(implement && implement.passed),
+    verify: verify ? { donePassedVerified: verify.donePassedVerified, scopeCleanVerified: verify.scopeCleanVerified, redGreenVerified: verify.redGreenVerified } : null,
+    reviews: reviews.map(r => ({ verdict: r.verdict, blocking: r.blocking })),
+    reviewIncomplete,
+    materializeOpenLoopItems: materialize ? materialize.openLoopItems : [],
+    gateOpenQuestions: (gate && gate.openQuestions) || [],
+    gateRemainingGaps: (gate && gate.remainingGaps) || [],
+    diff: (scaffold && scaffold.runDir) ? diffResult : null,
+  })
+  finalStatus = sr.finalStatus
+  sr.reasons.forEach(note)
+}
+
+// step 3：据最终事实构建 manifest（filesChanged 以独立验证为准 —— #3；记录 diff apply-check 结果）
+const verifiedChanged = (verify && Array.isArray(verify.changedFilesVerified) && verify.changedFilesVerified.length) ? verify.changedFilesVerified : null
 const deliverManifest = {
   schemaVersion: '1.0',
   workflow: 'deliver-from-plan', planDir, targetRepo: targetRepoArg || (gate && gate.manifestTarget) || null,
@@ -342,9 +401,12 @@ const deliverManifest = {
   doneTrustworthy: trustworthy,
   doneTrustEvidence: materialize ? { redCommand: materialize.redCommand, regressionCommand: materialize.regressionCommand, newFeatureTestsFailOnCurrent: materialize.newFeatureTestsFailOnCurrent, regressionTestsPassOnCurrent: materialize.regressionTestsPassOnCurrent, redExitCode: materialize.redExitCode } : null,
   implementPassed: !!(implement && implement.passed),
-  filesChanged: implement ? implement.filesChanged : [],
+  filesChanged: verifiedChanged || (diffResult ? diffResult.filesChanged : []) || (implement ? implement.filesChanged : []),
+  filesChangedSource: verifiedChanged ? 'independent-verify' : ((diffResult && diffResult.filesChanged.length) ? 'diff' : 'implementer-self-report'),
   scopeViolations: implement ? implement.scopeViolations : [],
   redLine: implement && implement.redLineHit ? implement.redLineReason : null,
+  diffApplyCheckPassed: diffResult ? diffResult.diffApplyCheckPassed : null,
+  diffStat: diffResult ? diffResult.diffStat : null,
   reviewVerdicts: reviews.map(r => ({ lens: r.lens, verdict: r.verdict, blocking: r.blocking })),
   fix: fix ? { passed: fix.passed, donePassed: fix.donePassed, stillOpen: fix.stillOpen } : null,
   fixHistory,
@@ -356,26 +418,28 @@ const deliverManifest = {
     ...((gate && gate.remainingGaps) || []).map(g => `方案遗留: ${g}`),
     ...reviews.filter(r => r.verdict === 'needs-work' && !(fix && fix.passed)).flatMap(r => r.findings.map(f => `审查未关闭[${r.lens}]: ${f}`)),
     ...(verify && verify.redGreenVerified === false ? ['独立"先红后绿"未复现：DONE 可信度未独立确认'] : []),
+    ...(diffResult && diffResult.diffApplyCheckPassed === false ? ['diff 未通过 git apply --check'] : []),
   ],
   failedStages,
 }
 
-phase('Deliver')
+// step 4：落盘（diff 已生成；本步只写 manifest/报告/日志，不重新生成 diff）
 if (scaffold && scaffold.runDir) {
   const dl = await callAgent(
-    `你负责交付落盘（只在 ${scaffold.runDir} 内写，绝不动原仓库、绝不 commit/push）。${SAFETY}\n` +
+    `你负责把交付产物落盘（只在 ${scaffold.runDir} 内写，绝不动原仓库、绝不 commit/push）。${SAFETY}\n` +
+    `changes.diff 已由上一步生成（git apply --check=${diffResult ? diffResult.diffApplyCheckPassed : 'N/A'}），不要重新生成或修改它。最终状态已确定为 ${finalStatus}，原样写入、不要更改。\n` +
     `步骤：\n` +
-    `1) 生成 target-root-relative diff：以 ${targetRepoArg || (gate && gate.manifestTarget)} 为 target root，仅基于独立验证得到的 changedFiles/scopeFiles 收集相对路径；为每个相对路径从原仓库和沙箱复制到临时 diff-root/old/<rel> 与 diff-root/new/<rel>，然后在 diff-root 内执行 git diff --no-index --src-prefix=a/ --dst-prefix=b/ old new > "${scaffold.runDir}/changes.diff"（退出码 1=有差异属正常），再把 diff 头中的 a/old/、b/new/ 规范化为 a/、b/。禁止 diff 头出现绝对路径、sandbox、targetRepo、old/ 或 new/ 前缀；filesChanged 必须全部是 target-root-relative 路径。\n` +
-    `2) 交付前检查 diff 可应用：复制一份干净 target root 到临时 apply-check 目录，在该目录执行 git apply --check "${scaffold.runDir}/changes.diff"；未通过则 ok=false，diffApplyCheckPassed=false，最终报告必须写明阻断原因。\n` +
-    `3) 写 ${scaffold.runDir}/delivery-manifest.json（规范 JSON，内容用下方对象，并补入 diffApplyCheckPassed）。\n` +
-    `4) 写 ${scaffold.runDir}/delivery-report.md（中文）：含 1 最终状态 2 来源方案 3 就绪闸门结果 4 DONE 命令与"先红后绿"可信证据 5 实现改动(filesChanged)与 SCOPE 合规 6 diff apply check 结果 7 各视角审查结论 8 修复 9 开环人工核对项(逐条) 10 红线/越界停点(若有) 11 如何应用 diff(人工 patch 步骤) + 明确"桥接未 commit/merge"。\n` +
-    `5) 写 ${scaffold.runDir}/execution-log.md（用下方日志数组）。\n` +
-    `6) 写 ${scaffold.runDir}/residual-verification.md（建议5）：把 manifest.openItems 每个开环/未验证项整理成"换到具备相应环境的机器上照着做即可闭环"的【可执行清单】——如：无 pwsh 的 .ps1 项 → 给在装 pwsh 机器上要跑的具体命令/对拍步骤；需编译/特定运行时的用例 → 给环境与命令；待客户拍板的语义歧义 → 列成待确认问题。让"未验证"从备注变成可交接的行动项。\n` +
-    `回报 ok/absOutDir/written(文件名列表)/diffStat/filesChanged/diffApplyCheckPassed/note。\n` +
+    `1) 写 ${scaffold.runDir}/delivery-manifest.json（规范 JSON，用下方对象原样写入）。\n` +
+    `2) 写 ${scaffold.runDir}/delivery-report.md（中文）：含 1 最终状态(=${finalStatus}) 2 来源方案 3 就绪闸门结果 4 DONE 命令与"先红后绿"可信证据 5 变更文件(filesChanged，来源=${deliverManifest.filesChangedSource})与 SCOPE 合规 6 diff apply check 结果(=${diffResult ? diffResult.diffApplyCheckPassed : 'N/A'}；未通过须写明这就是未给 DELIVERED 的原因) 7 各视角审查结论 8 修复 9 开环人工核对项(逐条) 10 红线/越界停点(若有) 11 如何应用 diff(人工 patch 步骤) + 明确"桥接未 commit/merge"。\n` +
+    `3) 写 ${scaffold.runDir}/execution-log.md（用下方日志数组）。\n` +
+    `4) 写 ${scaffold.runDir}/residual-verification.md：把 manifest.openItems 每个开环/未验证项整理成"换到具备相应环境的机器上照着做即可闭环"的【可执行清单】（无 pwsh 的 .ps1 → 给装 pwsh 后的命令/对拍；需特定运行时的用例 → 给环境与命令；待拍板歧义 → 列成待确认问题）。\n` +
+    `回报 ok/absOutDir/written(文件名列表)/note。\n` +
     `delivery-manifest(JSON):\n${JSON.stringify(deliverManifest)}\nexecution-log(JSON):\n${JSON.stringify(execLog)}`,
-    { schema: DELIVER_SCHEMA, label: 'deliver', phase: 'Deliver', agentType: AT, effort: 'medium' }, true)
-  deliver = dl.ok ? dl.value : { ok: false, absOutDir: scaffold.runDir, written: [], diffStat: '', filesChanged: [], diffApplyCheckPassed: false, note: dl.error }
-  note(`Deliver：${deliver.ok ? '已写入 ' + deliver.absOutDir + '（' + deliver.written.length + ' 文件，' + deliver.diffStat + '）' : '失败：' + deliver.note}`)
+    { schema: DELIVER_SCHEMA, label: 'deliver-persist', phase: 'Deliver', agentType: AT, effort: 'medium' }, true)
+  deliver = dl.ok
+    ? { ...dl.value, diffStat: diffResult ? diffResult.diffStat : '', filesChanged: deliverManifest.filesChanged, diffApplyCheckPassed: diffResult ? diffResult.diffApplyCheckPassed : false }
+    : { ok: false, absOutDir: scaffold.runDir, written: [], note: dl.error, diffStat: '', filesChanged: [], diffApplyCheckPassed: false }
+  note(`Deliver 落盘：${deliver.ok ? '已写入 ' + deliver.absOutDir + '（' + deliver.written.length + ' 文件）' : '失败：' + deliver.note}`)
 } else {
   note('未建立 runDir（就绪闸门或前置失败），无产物可落盘。')
 }
