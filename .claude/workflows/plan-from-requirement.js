@@ -133,6 +133,15 @@ async function roleAgent(roleKey, prompt, { schema, label, phase: ph, required, 
 }
 function halt(stage, reason) { const e = new Error(`HALT@${stage}: ${reason}`); e.__halt = { stage, reason }; throw e }
 
+// >>> READINESS-START — 与 core/readiness.mjs 同一逻辑（行为由 scripts/self-check.mjs 比对锁定，单测见 scripts/readiness.test.mjs）；勿删本标记与 END 标记
+// readinessForDev 由确定性代码从 finalStatus 推导，不由报告 agent 决定（堵死 FAILED/CONDITIONAL + ready 等非法组合）
+function computeReadiness(finalStatus) {
+  if (finalStatus === 'PASS' || finalStatus === 'PARTIAL') return 'ready'
+  if (finalStatus === 'NEEDS_CLARIFICATION') return 'needs-clarification'
+  return 'blocked'
+}
+// <<< READINESS-END
+
 // ===================== Schemas =====================
 // >>> SCHEMA-CONTRACT-START — 本区块被 scripts/self-check.mjs 切出求值，与 core/schemas/plan-artifacts.schema.json 结构比对防漂移；勿删本标记与下方 END 标记
 const EVIDENCE = { type: 'object', additionalProperties: false, properties: {
@@ -247,8 +256,7 @@ const REWORK_SCHEMA = { type: 'object', additionalProperties: false, properties:
 
 const REPORT_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   markdown: { type: 'string' }, headline: { type: 'string' }, topRisks: { type: 'array', items: { type: 'string' } },
-  readinessForDev: { type: 'string', enum: ['ready', 'needs-clarification', 'blocked'] },
-}, required: ['markdown', 'headline', 'topRisks', 'readinessForDev'] }
+}, required: ['markdown', 'headline', 'topRisks'] }
 
 const PERSIST_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   ok: { type: 'boolean' }, absOutDir: { type: 'string' }, written: { type: 'array', items: { type: 'string' } }, note: { type: 'string' },
@@ -360,9 +368,9 @@ try {
     const cl = await roleAgent('report',
       `${BASE}\n\n本阶段=澄清清单。需求当前不够明确，**不能负责任地直接出实现方案**。请产出一份给客户的"待确认清单"markdown：\n` +
       `1 我对需求的当前理解（已能确定的部分）；2 必须先澄清的阻断性问题（逐条说明为什么它会实质影响方案）；3 每个问题的可能选项/我的倾向（帮助客户快速回答）；4 澄清后预计可走的方案方向（只给方向，不展开具体方案）。\n` +
-      `readinessForDev 必须为 needs-clarification。\n需求理解:${JSON.stringify(requirementU)}\n分级与阻断问题:${JSON.stringify(triage)}`,
+      `需求理解:${JSON.stringify(requirementU)}\n分级与阻断问题:${JSON.stringify(triage)}`,
       { schema: REPORT_SCHEMA, label: 'clarify-report', phase: 'Clarify', required: true, effort: EFFORT.heavy })
-    report = cl.ok ? cl.value : { markdown: '# 需求需澄清\n\n生成失败，阻断问题：\n- ' + (triage.blockingQuestions || []).join('\n- '), headline: '需求需澄清', topRisks: [], readinessForDev: 'needs-clarification' }
+    report = cl.ok ? cl.value : { markdown: '# 需求需澄清\n\n生成失败，阻断问题：\n- ' + (triage.blockingQuestions || []).join('\n- '), headline: '需求需澄清', topRisks: [] }
     note(`澄清闸门触发：列出 ${(triage.blockingQuestions || []).length} 个阻断性待确认问题，未出方案。`)
 
   } else {
@@ -503,7 +511,7 @@ try {
     // ---- Report（开发可直接实施的方案；只汇总）----
     phase('Report')
     const rp = await roleAgent('report',
-      `${BASE}\n\n本阶段=最终方案报告（只汇总既有分析/方案/评审，**不新增**未经分析的结论）。面向开发可直接实施，中文 markdown，含：1 需求理解(目标/范围/非目标/验收) 2 待向客户确认的问题 3 相关代码现状(带证据) 4 现状与目标差距 5 实现方案总体思路 6 可复用 7 需修改(文件+改什么+为什么) 8 需新增 9 有序实施步骤 10 涉及的模块/文件/接口/数据/状态/权限/前后端影响 11 方案风险与回滚 12 测试方案 13 验收标准 14 风险↔测试、需求↔验收 追踪矩阵 15 评审历史与采纳 16 返工历史 17 最终状态与 readinessForDev 18 遗留与未验证项。本次路径=${pathway}、深度档=${MODE}。\n` +
+      `${BASE}\n\n本阶段=最终方案报告（只汇总既有分析/方案/评审，**不新增**未经分析的结论）。面向开发可直接实施，中文 markdown，含：1 需求理解(目标/范围/非目标/验收) 2 待向客户确认的问题 3 相关代码现状(带证据) 4 现状与目标差距 5 实现方案总体思路 6 可复用 7 需修改(文件+改什么+为什么) 8 需新增 9 有序实施步骤 10 涉及的模块/文件/接口/数据/状态/权限/前后端影响 11 方案风险与回滚 12 测试方案 13 验收标准 14 风险↔测试、需求↔验收 追踪矩阵 15 评审历史与采纳 16 返工历史 17 最终状态(readinessForDev 由系统按 finalStatus 确定性判定，不在此处自评) 18 遗留与未验证项。本次路径=${pathway}、深度档=${MODE}。\n` +
       `最终状态:${finalStatus}\n分级:${JSON.stringify(triage)}\n需求:${JSON.stringify(requirementU)}\n定位:${JSON.stringify(locate)}\n现状:${JSON.stringify(componentAnalyses)}\n失败模块:${JSON.stringify(failedComponents)}\n差距:${JSON.stringify(gap)}\n方案:${JSON.stringify(plan)}\n风险:${JSON.stringify(risk)}\n测试验收:${JSON.stringify(testPlan)}\n评审历史:${JSON.stringify(reviewHistory)}\n返工历史:${JSON.stringify(reworkHistory)}\n最终评审:${JSON.stringify(review)}`,
       { schema: REPORT_SCHEMA, label: 'report', phase: 'Report', required: true, effort: EFFORT.heavy })
     if (!rp.ok) { failedStages.push('Report'); halt('Report', rp.error) }
@@ -516,12 +524,14 @@ try {
 }
 
 // ===================== Persist =====================
+// readinessForDev 由确定性代码从 finalStatus 推导（不由报告 agent 决定；堵死 FAILED/CONDITIONAL + ready 等非法组合）
+const readinessForDev = computeReadiness(finalStatus)
 const manifest = {
   schemaVersion: '1.0',
   workflow: 'plan-from-requirement', requirement, target, constraints, mode: MODE, pathway,
   triage: triage ? { clarity: triage.clarity, complexity: forceComplexity || triage.complexity, riskFlags: triage.riskFlags, recommendedDepth: triage.recommendedDepth } : null,
   params: { mode: userMode || `auto:${MODE}`, maxComponents: MAX, maxReworkRounds: MAX_REWORK, effort: EFFORT, skillDir: SKILL_DIR, useCustomAgents: useCustom, forceComplexity, skipClarificationGate: skipClarify, forceFirstVerdict, injectComponentFailureIndex: injectFailIdx },
-  finalStatus, readinessForDev: report ? report.readinessForDev : 'blocked', failedStages, failedComponents,
+  finalStatus, readinessForDev, failedStages, failedComponents,
   coverage: { located: (locate && locate.relevant || []).length, analyzed: componentAnalyses.length },
   consistency: consistency || { ok: true, checks: [{ name: '(澄清/提前终止路径，未跑完整分析)', ok: true, detail: pathway }] },
   reviewHistory, reworkHistory,
@@ -548,6 +558,6 @@ const writtenBase = (persisted.written || []).map(w => String(w).split('/').pop(
 const missingFiles = expectedFiles.filter(f => !writtenBase.includes(f))
 note(`Persist：${persisted.ok ? '已写入 ' + persisted.absOutDir + '（' + persisted.written.length + ' 文件）' : '失败：' + persisted.note}${missingFiles.length ? '；⚠ 缺 ' + missingFiles.join(', ') : ''}`)
 
-log(`plan-from-requirement 完成。路径=${pathway}，mode=${MODE}，最终状态=${finalStatus}，readinessForDev=${report ? report.readinessForDev : 'blocked'}；分级=${triage ? (forceComplexity || triage.complexity) : 'N/A'}/清晰度=${triage ? triage.clarity : 'N/A'}；相关模块 ${componentAnalyses.length}/${relevantComps.length}、风险 ${(risk && risk.risks || []).length}、用例 ${(testPlan && testPlan.cases || []).length}、验收 ${(testPlan && testPlan.acceptanceCriteria || []).length}、评审 ${reviewHistory.length} 轮、返工 ${reworkHistory.length}；失败阶段 [${failedStages.join(', ') || '无'}]。`)
+log(`plan-from-requirement 完成。路径=${pathway}，mode=${MODE}，最终状态=${finalStatus}，readinessForDev=${readinessForDev}；分级=${triage ? (forceComplexity || triage.complexity) : 'N/A'}/清晰度=${triage ? triage.clarity : 'N/A'}；相关模块 ${componentAnalyses.length}/${relevantComps.length}、风险 ${(risk && risk.risks || []).length}、用例 ${(testPlan && testPlan.cases || []).length}、验收 ${(testPlan && testPlan.acceptanceCriteria || []).length}、评审 ${reviewHistory.length} 轮、返工 ${reworkHistory.length}；失败阶段 [${failedStages.join(', ') || '无'}]。`)
 
-return { finalStatus, pathway, mode: MODE, triage, readinessForDev: report ? report.readinessForDev : 'blocked', manifest, persisted, missingFiles, consistency, requirement: requirementU, locate, componentAnalyses, failedComponents, gap, plan, risk, testPlan, reviewHistory, reworkHistory, review, report }
+return { finalStatus, pathway, mode: MODE, triage, readinessForDev, manifest, persisted, missingFiles, consistency, requirement: requirementU, locate, componentAnalyses, failedComponents, gap, plan, risk, testPlan, reviewHistory, reworkHistory, review, report }

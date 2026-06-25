@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url'
 import { validatePlanArtifacts } from './validate-plan-artifacts.mjs'
 import { computeDeliverStatus as coreComputeDeliverStatus } from '../core/deliver-status.mjs'
 import { runDeliverStatusTests, CASES as DELIVER_STATUS_CASES } from './deliver-status.test.mjs'
+import { computeReadiness as coreComputeReadiness } from '../core/readiness.mjs'
+import { runReadinessTests, CASES as READINESS_CASES } from './readiness.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -220,6 +222,30 @@ if (exists(deliverWf)) {
   }
 }
 
+// readiness logic (#2): run unit tests + behaviour-diff the plan workflow inline copy against core/readiness.mjs.
+for (const failure of runReadinessTests()) errors.push(failure)
+
+const planWf = '.claude/workflows/plan-from-requirement.js'
+if (exists(planWf)) {
+  const src = read(planWf)
+  const s = src.indexOf('// >>> READINESS-START')
+  const e = src.indexOf('// <<< READINESS-END')
+  if (s === -1 || e === -1 || e <= s) {
+    errors.push(`${planWf} is missing READINESS markers required for the inline-vs-core parity check`)
+  } else {
+    const block = src.slice(src.indexOf('\n', s), e)
+    let inlineReadiness = null
+    try { inlineReadiness = new Function(`${block}\n; return computeReadiness;`)() } catch (error) { errors.push(`failed to evaluate inline computeReadiness in ${planWf}: ${error.message}`) }
+    if (inlineReadiness) {
+      for (const [status] of READINESS_CASES) {
+        const inlineR = inlineReadiness(status)
+        const coreR = coreComputeReadiness(status)
+        if (inlineR !== coreR) errors.push(`readiness drift on "${status}": inline=${inlineR} core=${coreR}`)
+      }
+    }
+  }
+}
+
 errors.push(...validatePlanArtifacts(path.join(root, 'examples/artifacts/plan-ready')))
 
 for (const file of ['app.sh', 'test.sh']) {
@@ -283,5 +309,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, readiness logic+parity, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)

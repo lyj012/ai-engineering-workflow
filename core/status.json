@@ -14,8 +14,8 @@
   },
   "readinessForDev": {
     "ready": "A delivery workflow may consume the plan.",
-    "not-ready": "The plan must be clarified, reworked, or reviewed before delivery.",
-    "blocked": "A prerequisite prevents safe delivery."
+    "needs-clarification": "The requirement is too ambiguous; it must be clarified before any delivery.",
+    "blocked": "A prerequisite prevents safe delivery (failed or conditional review, or an unmet precondition)."
   },
   "reviewVerdicts": {
     "PASS": "No P0 blockers and review criteria are satisfied.",
