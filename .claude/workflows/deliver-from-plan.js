@@ -100,12 +100,14 @@ const SCAFFOLD_SCHEMA = { type: 'object', additionalProperties: false, propertie
 
 const MATERIALIZE_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   ok: { type: 'boolean' }, doneCommand: { type: 'string' }, testsDir: { type: 'string' },
+  redCommand: { type: 'string', description: 'DONE 的 --red 模式：只跑【新功能测试】（未实现时应红）；供 Implement 自检与 Verify 独立复现' },
+  regressionCommand: { type: 'string', description: 'DONE 的 --regression 模式：只跑【回归测试】（任何版本都应绿）' },
   newFeatureTestsFailOnCurrent: { type: 'boolean', description: '新功能测试在【未实现的当前沙箱】上是否如预期 FAIL（红）' },
   regressionTestsPassOnCurrent: { type: 'boolean', description: '回归/既有行为测试在当前沙箱上是否如预期 PASS（绿）' },
   redExitCode: { type: 'number' }, autoVerifiableCount: { type: 'number' },
   openLoopItems: { type: 'array', items: { type: 'string' }, description: '无法自动验、转人工核对的项（如无 pwsh 的 .ps1）' },
   note: { type: 'string' },
-}, required: ['ok', 'doneCommand', 'testsDir', 'newFeatureTestsFailOnCurrent', 'regressionTestsPassOnCurrent', 'redExitCode', 'autoVerifiableCount', 'openLoopItems', 'note'] }
+}, required: ['ok', 'doneCommand', 'redCommand', 'regressionCommand', 'testsDir', 'newFeatureTestsFailOnCurrent', 'regressionTestsPassOnCurrent', 'redExitCode', 'autoVerifiableCount', 'openLoopItems', 'note'] }
 
 const IMPLEMENT_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   passed: { type: 'boolean', description: 'DONE 命令是否全绿' }, doneExitCode: { type: 'number' },
@@ -183,7 +185,7 @@ try {
       `3) task 目录：mkdir -p "$runDir/task-workflow/"{input,output,tests,state}；mkdir -p "$runDir/task-workflow/state/scratch"。\n` +
       `4) 把方案产物（final-plan.md 若有、plan.json、test-plan.json、requirement.json、risks.json）从 ${planDir} 复制到 "$runDir/task-workflow/input/"。\n` +
       `5) 读 vendored 模板 ${vendorDir}/build-workflow.md，按其结构生成一份**填好的** "$runDir/task-workflow/coding-workflow.md"：\n` +
-      `   - §1 GOAL=需求目标；§2 VARIABLES：INPUT=task-workflow/input/、OUTPUT=沙箱内被改文件、DONE=见 MaterializeTests 产出的命令（先写占位"见 tests/，由桥接物化"）、SCOPE=【只许改下列文件】、CONTRACT=保持 .sh/.ps1 行为一致与既有退出码语义；\n` +
+      `   - §1 GOAL=需求目标；§2 VARIABLES：INPUT=task-workflow/input/、OUTPUT=沙箱内被改文件、DONE=见 MaterializeTests 产出的命令（先写占位"见 tests/，由桥接物化；入口支持 --red/--regression 按类筛选与可选目标目录"）、SCOPE=【只许改下列文件】、CONTRACT=保持 .sh/.ps1 行为一致与既有退出码语义；\n` +
       `   - §3 在通用红线外，追加本任务红线（来自 risks.json 高危项）；§4 LOOP 的 todo 用 plan.json.steps；\n` +
       `   - §7.1 复核视角写明四个：correctness / robustness / scope-conformance / risk-coverage（见 ${bridgeDoc} §5.5）。\n` +
       `6) SCOPE 规整：把 plan.affected.files 与 plan.modify[].path/plan.add[].path 统一规整成【相对仓库根】的路径；拒绝绝对路径、../ 目录穿越、指向沙箱外的符号链接；去掉 ${targetRepo} 前缀；把带"(可选)/optional"标记的归入 optionalScopeFiles。\n` +
@@ -202,11 +204,11 @@ try {
       `你负责把测试规格物化成【可运行的测试】并核验其可信。${SAFETY}\n` +
       `输入：方案的 test-plan.json（在 ${taskDir}/input/）。沙箱：${sandboxDir}（当前为【未实现新功能】的原始代码副本）。\n` +
       `步骤：\n` +
-      `1) 把 test-plan.json 的用例物化到 ${taskDir}/tests/，并写一个 DONE 入口（如 ${taskDir}/tests/run_verify.sh：跑全部测试，全过则 echo "ALL PASSED" 并 exit 0，否则非0退出）。测试要对【沙箱里的脚本】跑（用绝对/相对沙箱路径）。\n` +
-      `2) 把测试分两类：①【新功能测试】针对本次要实现的行为（当前应失败）；②【回归测试】针对既有且不该被破坏的行为（如既有退出码语义，当前应通过）。\n` +
+      `1) 把 test-plan.json 的用例物化到 ${taskDir}/tests/，并写一个 DONE 入口（如 ${taskDir}/tests/run_verify.sh）：默认（无参数）跑全部测试，全过则 echo "ALL PASSED" 并 exit 0，否则非0退出。测试要对【沙箱里的脚本】跑（用绝对/相对沙箱路径）。\n` +
+      `2) 把测试分两类，并让 DONE 入口支持【按类筛选 + 指定目标】（硬契约：Verify 要靠它在原仓库新副本上独立复现"红/绿"）：①【新功能测试】针对本次要实现的行为（未实现时应红）；②【回归测试】针对既有且不该被破坏的行为（如既有退出码语义，应一直绿）。DONE 入口必须支持开关 \`--red\`（只跑①）与 \`--regression\`（只跑②），并接受一个可选的【目标目录】参数（默认沙箱 ${sandboxDir}），使同一套测试能对任意代码副本运行。\n` +
       `3) verificationType 无法自动验的（如本机无 pwsh 的 .ps1 行为：先 command -v pwsh 探测）→ 不要硬塞进 DONE，列入 openLoopItems 作人工核对，并在 note 说明。\n` +
-      `4) **先红后绿核验**（关键）：在当前未实现的沙箱上跑 DONE：报告 newFeatureTestsFailOnCurrent(新功能测试是否如预期红)、regressionTestsPassOnCurrent(回归测试是否如预期绿)、redExitCode。\n` +
-      `回报 ok/doneCommand(可直接跑的整条命令)/testsDir/newFeatureTestsFailOnCurrent/regressionTestsPassOnCurrent/redExitCode/autoVerifiableCount/openLoopItems/note。`,
+      `4) **先红后绿核验**（关键）：在当前未实现的沙箱上，用 --red 跑①确认其为红、用 --regression 跑②确认其为绿；报告 newFeatureTestsFailOnCurrent、regressionTestsPassOnCurrent、redExitCode(①的退出码)。\n` +
+      `回报 ok/doneCommand(默认跑全部)/redCommand(只跑新功能,--red 的完整命令)/regressionCommand(只跑回归,--regression 的完整命令)/testsDir/newFeatureTestsFailOnCurrent/regressionTestsPassOnCurrent/redExitCode/autoVerifiableCount/openLoopItems/note。`,
       { schema: MATERIALIZE_SCHEMA, label: 'materialize-tests', phase: 'MaterializeTests', agentType: AT, effort: 'high' }, true)
     if (!mt.ok) { failedStages.push('MaterializeTests'); halt('MaterializeTests', mt.error) }
     materialize = mt.value
@@ -294,7 +296,7 @@ try {
         const vf = await callAgent(
           `你是独立验证者，未参与实现/修复/审查，只复核客观事实、不打分、不改任何文件。${SAFETY}\n` +
           `1) 亲手复跑最终 DONE：\`${materialize.doneCommand}\`，取真实退出码与是否输出 "ALL PASSED"。\n` +
-          `2) 先红后绿独立复核：把原仓库 ${targetRepo} 复制到一个 mktemp -d 临时目录，对其跑该 DONE 的 red 模式（如脚本支持 \`--red\`），确认新功能测试在【未实现版】上确为红、回归为绿。\n` +
+          `2) 先红后绿独立复核：把原仓库 ${targetRepo} 复制到一个 mktemp -d 临时副本（不含本次实现），用 DONE 的 --red 对该副本跑（命令形如 \`${materialize ? materialize.redCommand : '<redCommand>'}\`，把目标目录指向该副本），确认新功能测试在【未实现版】上确为红（非0）；再用 --regression（形如 \`${materialize ? materialize.regressionCommand : '<regressionCommand>'}\`）确认回归为绿（0）。两者都成立才置 redGreenVerified=true。\n` +
           `3) 独立算 diff：diff -ruN "${targetRepo}" "${sandboxDir}"（忽略 .git），列出真正变更的文件，判断是否【只动了 SCOPE】=${JSON.stringify(scaffold.scopeFiles)}（可选 ${JSON.stringify(scaffold.optionalScopeFiles)}）。\n` +
           `回报 donePassedVerified(最终DONE是否真绿)/doneExitCodeVerified/redGreenVerified(先红后绿是否独立复现)/changedFilesVerified(实测变更文件)/scopeCleanVerified(是否只动SCOPE)/note。`,
           { schema: VERIFY_SCHEMA, label: 'independent-verify', phase: 'Verify', agentType: AT, effort: 'high' }, true)
@@ -338,7 +340,7 @@ const deliverManifest = {
   scope: scaffold ? { scopeFiles: scaffold.scopeFiles, optionalScopeFiles: scaffold.optionalScopeFiles } : null,
   doneCommand: materialize ? materialize.doneCommand : null,
   doneTrustworthy: trustworthy,
-  doneTrustEvidence: materialize ? { newFeatureTestsFailOnCurrent: materialize.newFeatureTestsFailOnCurrent, regressionTestsPassOnCurrent: materialize.regressionTestsPassOnCurrent, redExitCode: materialize.redExitCode } : null,
+  doneTrustEvidence: materialize ? { redCommand: materialize.redCommand, regressionCommand: materialize.regressionCommand, newFeatureTestsFailOnCurrent: materialize.newFeatureTestsFailOnCurrent, regressionTestsPassOnCurrent: materialize.regressionTestsPassOnCurrent, redExitCode: materialize.redExitCode } : null,
   implementPassed: !!(implement && implement.passed),
   filesChanged: implement ? implement.filesChanged : [],
   scopeViolations: implement ? implement.scopeViolations : [],
