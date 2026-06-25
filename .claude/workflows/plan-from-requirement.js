@@ -158,6 +158,26 @@ function computePersistOutcome(input) {
 }
 // <<< PERSIST-OUTCOME-END
 
+// >>> PLAN-PATCH-START — 与 core/plan-patch.mjs 同一逻辑（行为由 scripts/self-check.mjs 比对锁定，单测见 scripts/plan-patch.test.mjs）；勿删本标记与 END 标记
+// 把返工产出的结构化 Plan Patch 合并回主方案（modify/add 同 path 覆盖；steps 追加；affected.files 去重并集；approach 可改）
+function applyPlanPatch(plan, patch) {
+  const p = plan || {}
+  const pa = patch || {}
+  const dedupByPath = (arr) => {
+    const seen = new Map()
+    for (const item of arr) if (item && item.path) seen.set(item.path, item)
+    return [...seen.values()]
+  }
+  const modify = dedupByPath([...(Array.isArray(p.modify) ? p.modify : []), ...(Array.isArray(pa.addModify) ? pa.addModify : [])])
+  const add = dedupByPath([...(Array.isArray(p.add) ? p.add : []), ...(Array.isArray(pa.addAdd) ? pa.addAdd : [])])
+  const steps = [...(Array.isArray(p.steps) ? p.steps : []), ...(Array.isArray(pa.addSteps) ? pa.addSteps : [])]
+  const baseAffected = (p.affected && typeof p.affected === 'object') ? p.affected : {}
+  const affectedFiles = [...new Set([...(Array.isArray(baseAffected.files) ? baseAffected.files : []), ...(Array.isArray(pa.addAffectedFiles) ? pa.addAffectedFiles : [])])]
+  const approach = (typeof pa.revisedApproach === 'string' && pa.revisedApproach.trim()) ? pa.revisedApproach : p.approach
+  return { ...p, approach, modify, add, steps, affected: { ...baseAffected, files: affectedFiles } }
+}
+// <<< PLAN-PATCH-END
+
 // ===================== Schemas =====================
 // >>> SCHEMA-CONTRACT-START — 本区块被 scripts/self-check.mjs 切出求值，与 core/schemas/plan-artifacts.schema.json 结构比对防漂移；勿删本标记与下方 END 标记
 const EVIDENCE = { type: 'object', additionalProperties: false, properties: {
@@ -267,11 +287,17 @@ const REVIEW_SCHEMA = { type: 'object', additionalProperties: false, properties:
   affectedPhases: { type: 'array', items: { type: 'string' } }, remainingRisks: { type: 'array', items: { type: 'string' } }, readyForReport: { type: 'boolean' },
 }, required: ['verdict', 'score', 'summary', 'requirementsCoverage', 'p0', 'p1', 'p2', 'mustFix', 'missingEvidence', 'affectedPhases', 'remainingRisks', 'readyForReport'] }
 
+const PLAN_PATCH_SCHEMA = { type: 'object', additionalProperties: false, properties: {
+  addModify: { type: 'array', items: PLAN_PROPS.modify.items }, addAdd: { type: 'array', items: PLAN_PROPS.add.items },
+  addSteps: { type: 'array', items: PLAN_PROPS.steps.items }, addAffectedFiles: { type: 'array', items: { type: 'string' } },
+  revisedApproach: { type: 'string', description: '若需调整总体思路则给出，否则留空字符串' },
+}, required: ['addModify', 'addAdd', 'addSteps', 'addAffectedFiles', 'revisedApproach'] }
 const REWORK_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   addressed: { type: 'array', items: { type: 'string' } }, stillOpen: { type: 'array', items: { type: 'string' } },
-  planRefinements: { type: 'array', items: { type: 'string' } }, addedRisks: { type: 'array', items: ITEM }, addedTestCases: { type: 'array', items: TESTCASE },
+  planRefinements: { type: 'array', items: { type: 'string' } }, planPatch: PLAN_PATCH_SCHEMA,
+  addedRisks: { type: 'array', items: ITEM }, addedTestCases: { type: 'array', items: TESTCASE },
   notes: { type: 'array', items: { type: 'string' } }, confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-}, required: ['addressed', 'stillOpen', 'planRefinements', 'addedRisks', 'addedTestCases', 'notes', 'confidence'] }
+}, required: ['addressed', 'stillOpen', 'planRefinements', 'planPatch', 'addedRisks', 'addedTestCases', 'notes', 'confidence'] }
 
 const REPORT_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   markdown: { type: 'string' }, headline: { type: 'string' }, topRisks: { type: 'array', items: { type: 'string' } },
@@ -501,15 +527,20 @@ try {
         round++
         phase('Rework')
         const rw = await roleAgent('rework',
-          `${BASE}\n\n本阶段=返工补充（第 ${round} 轮）。针对评审 mustFix/missingEvidence 做补充只读分析与方案细化：addressed/stillOpen/planRefinements/addedRisks(带 id 证据)/addedTestCases(带 riskIds)/notes。不写客户代码。\n` +
+          `${BASE}\n\n本阶段=返工补充（第 ${round} 轮）。针对评审 mustFix/missingEvidence 做补充只读分析与方案修订：addressed/stillOpen/planRefinements/planPatch/addedRisks(带 id 证据)/addedTestCases(带 riskIds)/notes。不写客户代码。\n` +
+          `planPatch=对主方案的结构化修订（会被合并回方案、影响后续复评）：addModify(新增/修订的 modify 项 path/change/why)、addAdd(新增 add 项 path/what/why)、addSteps(新增有序步骤 order/action/touches)、addAffectedFiles(新增受影响文件路径)、revisedApproach(若需调整总体思路否则空串)。同 path 的 modify/add 会覆盖旧项。planRefinements 仅作叙述说明，真正的方案落点改动必须放进 planPatch。\n` +
           `mustFix:${JSON.stringify(review.mustFix)}\nmissingEvidence:${JSON.stringify(review.missingEvidence)}\naffectedPhases:${JSON.stringify(review.affectedPhases)}\n现有方案:${JSON.stringify(plan)}\n现有风险:${JSON.stringify(risk.risks)}\n现有用例:${JSON.stringify(testPlan.cases)}`,
           { schema: REWORK_SCHEMA, label: `rework-r${round}`, phase: 'Rework', required: false, effort: EFFORT.heavy })
         if (rw.ok) {
           risk.risks.push(...(rw.value.addedRisks || []))
           testPlan.cases.push(...(rw.value.addedTestCases || []))
           if ((rw.value.planRefinements || []).length) plan.assumptions = [...(plan.assumptions || []), ...rw.value.planRefinements.map(s => `[返工细化] ${s}`)]
-          reworkHistory.push({ round, mustFix: review.mustFix, addressed: rw.value.addressed, stillOpen: rw.value.stillOpen, planRefinements: rw.value.planRefinements, addedRisks: (rw.value.addedRisks || []).length, addedTestCases: (rw.value.addedTestCases || []).length })
-          note(`Rework r${round}：处理 ${rw.value.addressed.length}，仍开放 ${rw.value.stillOpen.length}，方案细化 ${(rw.value.planRefinements || []).length}，补风险 ${(rw.value.addedRisks || []).length}/补用例 ${(rw.value.addedTestCases || []).length}。`)
+          // 真正把结构化 Plan Patch 合并回主方案（#2），使复评看到的是更新后的 steps/modify/add/affected
+          const beforeP = { modify: (plan.modify || []).length, add: (plan.add || []).length, steps: (plan.steps || []).length }
+          plan = applyPlanPatch(plan, rw.value.planPatch)
+          const patchDelta = { modify: (plan.modify || []).length - beforeP.modify, add: (plan.add || []).length - beforeP.add, steps: (plan.steps || []).length - beforeP.steps }
+          reworkHistory.push({ round, mustFix: review.mustFix, addressed: rw.value.addressed, stillOpen: rw.value.stillOpen, planRefinements: rw.value.planRefinements, planPatch: patchDelta, addedRisks: (rw.value.addedRisks || []).length, addedTestCases: (rw.value.addedTestCases || []).length })
+          note(`Rework r${round}：处理 ${rw.value.addressed.length}，仍开放 ${rw.value.stillOpen.length}，方案细化 ${(rw.value.planRefinements || []).length}，PlanPatch(modify/add/steps +${patchDelta.modify}/${patchDelta.add}/${patchDelta.steps})，补风险 ${(rw.value.addedRisks || []).length}/补用例 ${(rw.value.addedTestCases || []).length}。`)
         } else {
           reworkHistory.push({ round, mustFix: review.mustFix, addressed: [], stillOpen: ['返工 agent 失败'], planRefinements: [], addedRisks: 0, addedTestCases: 0 })
           note(`Rework r${round} 失败，记录后继续复评。`)

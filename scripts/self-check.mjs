@@ -14,6 +14,8 @@ import { compareRepoFingerprint as coreCompareRepoFingerprint } from '../core/re
 import { runRepoFingerprintTests, CASES as REPO_FINGERPRINT_CASES } from './repo-fingerprint.test.mjs'
 import { reconcileChangedFiles as coreReconcileChangedFiles } from '../core/changed-files.mjs'
 import { runChangedFilesTests, CASES as CHANGED_FILES_CASES } from './changed-files.test.mjs'
+import { applyPlanPatch as coreApplyPlanPatch } from '../core/plan-patch.mjs'
+import { runPlanPatchTests, CASES as PLAN_PATCH_CASES } from './plan-patch.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -327,6 +329,29 @@ for (const failure of runChangedFilesTests()) errors.push(failure)
   }
 }
 
+// plan-patch logic (#2): run unit tests + behaviour-diff the plan workflow inline copy against core.
+for (const failure of runPlanPatchTests()) errors.push(failure)
+{
+  const pWf = '.claude/workflows/plan-from-requirement.js'
+  if (exists(pWf)) {
+    const src = read(pWf)
+    const s = src.indexOf('// >>> PLAN-PATCH-START')
+    const e = src.indexOf('// <<< PLAN-PATCH-END')
+    if (s === -1 || e === -1 || e <= s) {
+      errors.push(`${pWf} is missing PLAN-PATCH markers required for the inline-vs-core parity check`)
+    } else {
+      const block = src.slice(src.indexOf('\n', s), e)
+      let inlineFn = null
+      try { inlineFn = new Function(`${block}\n; return applyPlanPatch;`)() } catch (error) { errors.push(`failed to evaluate inline applyPlanPatch in ${pWf}: ${error.message}`) }
+      if (inlineFn) {
+        for (const [name, plan, patch] of PLAN_PATCH_CASES) {
+          if (JSON.stringify(inlineFn(plan, patch)) !== JSON.stringify(coreApplyPlanPatch(plan, patch))) errors.push(`plan-patch drift on "${name}"`)
+        }
+      }
+    }
+  }
+}
+
 errors.push(...validatePlanArtifacts(path.join(root, 'examples/artifacts/plan-ready')))
 
 for (const file of ['app.sh', 'test.sh']) {
@@ -390,5 +415,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)
