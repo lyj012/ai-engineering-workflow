@@ -140,6 +140,59 @@ for (const file of workflowFiles) {
   }
 }
 
+// inline-vs-core schema parity: the Claude workflow inlines its plan-artifact schemas (the Workflow JS
+// surface cannot import core/), and the Codex adapter targets core/. Nothing else proves they stay equal,
+// so extract the four inline schemas from plan-from-requirement.js and structurally diff them against
+// core/schemas/plan-artifacts.schema.json (refs resolved; doc-only string `description` ignored).
+function normalizeSchemaShape(node, defs) {
+  if (Array.isArray(node)) return node.map(n => normalizeSchemaShape(n, defs))
+  if (node && typeof node === 'object') {
+    if (typeof node.$ref === 'string') return normalizeSchemaShape(defs[node.$ref.replace('#/$defs/', '')], defs)
+    const out = {}
+    for (const key of Object.keys(node).sort()) {
+      if (key === '$schema' || key === '$id' || key === 'title' || key === '$defs') continue
+      const value = node[key]
+      if (key === 'description' && typeof value === 'string') continue   // schema annotation, not part of the contract
+      out[key] = (key === 'required' || key === 'enum') && Array.isArray(value) ? [...value].sort() : normalizeSchemaShape(value, defs)
+    }
+    return out
+  }
+  return node
+}
+
+const planContractFile = '.claude/workflows/plan-from-requirement.js'
+if (exists(planContractFile) && exists('core/schemas/plan-artifacts.schema.json')) {
+  const src = read(planContractFile)
+  const startMarker = '// >>> SCHEMA-CONTRACT-START'
+  const endMarker = '// <<< SCHEMA-CONTRACT-END'
+  const start = src.indexOf(startMarker)
+  const end = src.indexOf(endMarker)
+  if (start === -1 || end === -1 || end <= start) {
+    errors.push(`${planContractFile} is missing SCHEMA-CONTRACT markers required for the inline-vs-core schema parity check`)
+  } else {
+    // skip the remainder of the START marker line (it carries a trailing comment) so the block begins at clean code
+    const blockStart = src.indexOf('\n', start)
+    const block = src.slice(blockStart, end)
+    let inlineSchemas = null
+    try {
+      inlineSchemas = new Function(`${block}\n; return { requirement: REQUIREMENT_SCHEMA, plan: PLAN_SCHEMA, risks: RISK_SCHEMA, testPlan: TESTPLAN_SCHEMA };`)()
+    } catch (error) {
+      errors.push(`failed to evaluate inline schemas in ${planContractFile}: ${error.message}`)
+    }
+    if (inlineSchemas) {
+      const coreSchema = JSON.parse(read('core/schemas/plan-artifacts.schema.json'))
+      const coreDefs = coreSchema.$defs || {}
+      for (const key of ['requirement', 'plan', 'risks', 'testPlan']) {
+        const inlineShape = JSON.stringify(normalizeSchemaShape(inlineSchemas[key], {}))
+        const coreShape = JSON.stringify(normalizeSchemaShape(coreSchema.properties[key], coreDefs))
+        if (inlineShape !== coreShape) {
+          errors.push(`schema drift: ${planContractFile} ${key} schema no longer matches core/schemas/plan-artifacts.schema.json (properties.${key})`)
+        }
+      }
+    }
+  }
+}
+
 errors.push(...validatePlanArtifacts(path.join(root, 'examples/artifacts/plan-ready')))
 
 for (const file of ['app.sh', 'test.sh']) {
@@ -203,5 +256,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)
