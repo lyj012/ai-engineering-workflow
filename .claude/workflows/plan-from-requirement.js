@@ -134,6 +134,7 @@ async function roleAgent(roleKey, prompt, { schema, label, phase: ph, required, 
 function halt(stage, reason) { const e = new Error(`HALT@${stage}: ${reason}`); e.__halt = { stage, reason }; throw e }
 
 // ===================== Schemas =====================
+// >>> SCHEMA-CONTRACT-START — 本区块被 scripts/self-check.mjs 切出求值，与 core/schemas/plan-artifacts.schema.json 结构比对防漂移；勿删本标记与下方 END 标记
 const EVIDENCE = { type: 'object', additionalProperties: false, properties: {
   path: { type: 'string' }, symbol: { type: 'string' },
   lineRange: { type: 'string', description: '如 "88-126"；不确定填 "unknown"，严禁编造' }, observation: { type: 'string' },
@@ -252,6 +253,7 @@ const REPORT_SCHEMA = { type: 'object', additionalProperties: false, properties:
 const PERSIST_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   ok: { type: 'boolean' }, absOutDir: { type: 'string' }, written: { type: 'array', items: { type: 'string' } }, note: { type: 'string' },
 }, required: ['ok', 'absOutDir', 'written', 'note'] }
+// <<< SCHEMA-CONTRACT-END
 
 const BASE = `客户需求: ${requirement}\n目标代码仓库: ${target}\n已知约束: ${constraints.length ? JSON.stringify(constraints) : '（无）'}\n` +
   `这是只读分析 + 方案设计：当前阶段**不编写客户项目代码、不提交/合并/部署**。关于现有代码的结论必须基于实际读到的内容并带证据(path/symbol/lineRange)，读不到/不确定要标注，绝不臆测、绝不编造行号(不确定填 "unknown")。中文输出，只返回结构化结果。`
