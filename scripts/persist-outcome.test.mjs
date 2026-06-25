@@ -14,6 +14,8 @@ export const CASES = [
     { expectedFiles: expected, existing: ['run-manifest.json', 'plan.json'], unparseable: [], finalStatus: 'PASS' }, { ok: false, finalStatus: 'FAILED' }],
   ['unparseable json downgrades PARTIAL -> FAILED',
     { expectedFiles: expected, existing: expected, unparseable: ['plan.json'], finalStatus: 'PARTIAL' }, { ok: false, finalStatus: 'FAILED' }],
+  ['schema-invalid downgrades PASS -> FAILED',
+    { expectedFiles: expected, existing: expected, unparseable: [], schemaInvalid: ['plan.json'], finalStatus: 'PASS' }, { ok: false, finalStatus: 'FAILED' }],
   ['already FAILED stays FAILED',
     { expectedFiles: expected, existing: [], unparseable: [], finalStatus: 'FAILED' }, { ok: false, finalStatus: 'FAILED' }],
   ['NEEDS_CLARIFICATION not touched when persist ok',

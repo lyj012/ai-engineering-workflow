@@ -17,10 +17,11 @@ export function computePersistOutcome(input) {
   const expected = Array.isArray(i.expectedFiles) ? i.expectedFiles : []
   const existing = new Set((Array.isArray(i.existing) ? i.existing : []).map(f => String(f).split('/').pop()))
   const unparseable = (Array.isArray(i.unparseable) ? i.unparseable : []).map(f => String(f).split('/').pop())
+  const schemaInvalid = (Array.isArray(i.schemaInvalid) ? i.schemaInvalid : []).map(f => String(f).split('/').pop())
   const missing = expected.filter(f => !existing.has(f))
-  const ok = missing.length === 0 && unparseable.length === 0
+  const ok = missing.length === 0 && unparseable.length === 0 && schemaInvalid.length === 0
   let finalStatus = i.finalStatus
   // unverified persistence must not present as a usable plan
   if (!ok && (finalStatus === 'PASS' || finalStatus === 'PARTIAL')) finalStatus = 'FAILED'
-  return { ok, missing, unparseable, finalStatus }
+  return { ok, missing, unparseable, schemaInvalid, finalStatus }
 }

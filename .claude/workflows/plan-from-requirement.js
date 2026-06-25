@@ -149,11 +149,12 @@ function computePersistOutcome(input) {
   const expected = Array.isArray(i.expectedFiles) ? i.expectedFiles : []
   const existing = new Set((Array.isArray(i.existing) ? i.existing : []).map(f => String(f).split('/').pop()))
   const unparseable = (Array.isArray(i.unparseable) ? i.unparseable : []).map(f => String(f).split('/').pop())
+  const schemaInvalid = (Array.isArray(i.schemaInvalid) ? i.schemaInvalid : []).map(f => String(f).split('/').pop())
   const missing = expected.filter(f => !existing.has(f))
-  const ok = missing.length === 0 && unparseable.length === 0
+  const ok = missing.length === 0 && unparseable.length === 0 && schemaInvalid.length === 0
   let finalStatus = i.finalStatus
   if (!ok && (finalStatus === 'PASS' || finalStatus === 'PARTIAL')) finalStatus = 'FAILED'
-  return { ok, missing, unparseable, finalStatus }
+  return { ok, missing, unparseable, schemaInvalid, finalStatus }
 }
 // <<< PERSIST-OUTCOME-END
 
@@ -240,19 +241,19 @@ const PLAN_REQUIRED = ['approach', 'reuse', 'modify', 'add', 'steps', 'affected'
 const PLAN_SCHEMA = { type: 'object', additionalProperties: false, properties: PLAN_PROPS, required: PLAN_REQUIRED }
 
 const ACCEPT = { type: 'object', additionalProperties: false, properties: { id: { type: 'string' }, criterion: { type: 'string' }, linkedTo: { type: 'string' } }, required: ['id', 'criterion', 'linkedTo'] }
-// 快路径：方案 + 简要风险(带证据) + 验收，单 agent 一次出（省去独立 Analyze/Gap/Risk/TestPlan）
+const TESTCASE = { type: 'object', additionalProperties: false, properties: {
+  id: { type: 'string' }, priority: { type: 'string', enum: ['P0', 'P1', 'P2'] }, riskIds: { type: 'array', items: { type: 'string' } },
+  scenario: { type: 'string' }, steps: { type: 'array', items: { type: 'string' } }, expected: { type: 'string' }, verificationType: { type: 'string' },
+}, required: ['id', 'priority', 'riskIds', 'scenario', 'steps', 'expected', 'verificationType'] }
+// 快路径：方案 + 简要风险(带证据) + 验收 + 至少 1 新功能/1 回归用例，单 agent 一次出（省去独立 Analyze/Gap/Risk/TestPlan）
 const FAST_PLAN_SCHEMA = { type: 'object', additionalProperties: false,
-  properties: Object.assign({}, PLAN_PROPS, { risks: { type: 'array', items: ITEM }, acceptanceCriteria: { type: 'array', items: ACCEPT } }),
-  required: PLAN_REQUIRED.concat(['risks', 'acceptanceCriteria']) }
+  properties: Object.assign({}, PLAN_PROPS, { risks: { type: 'array', items: ITEM }, acceptanceCriteria: { type: 'array', items: ACCEPT }, cases: { type: 'array', items: TESTCASE } }),
+  required: PLAN_REQUIRED.concat(['risks', 'acceptanceCriteria', 'cases']) }
 
 const RISK_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   risks: { type: 'array', items: ITEM }, rollback: { type: 'array', items: { type: 'string' } }, openConcerns: { type: 'array', items: { type: 'string' } },
 }, required: ['risks', 'rollback', 'openConcerns'] }
 
-const TESTCASE = { type: 'object', additionalProperties: false, properties: {
-  id: { type: 'string' }, priority: { type: 'string', enum: ['P0', 'P1', 'P2'] }, riskIds: { type: 'array', items: { type: 'string' } },
-  scenario: { type: 'string' }, steps: { type: 'array', items: { type: 'string' } }, expected: { type: 'string' }, verificationType: { type: 'string' },
-}, required: ['id', 'priority', 'riskIds', 'scenario', 'steps', 'expected', 'verificationType'] }
 const TESTPLAN_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   testStrategy: { type: 'string' }, cases: { type: 'array', items: TESTCASE },
   acceptanceCriteria: { type: 'array', items: ACCEPT }, coverageGaps: { type: 'array', items: { type: 'string' } },
@@ -282,8 +283,9 @@ const PERSIST_SCHEMA = { type: 'object', additionalProperties: false, properties
 // <<< SCHEMA-CONTRACT-END
 
 const READBACK_SCHEMA = { type: 'object', additionalProperties: false, properties: {
-  existing: { type: 'array', items: { type: 'string' } }, unparseable: { type: 'array', items: { type: 'string' } }, note: { type: 'string' },
-}, required: ['existing', 'unparseable', 'note'] }
+  existing: { type: 'array', items: { type: 'string' } }, unparseable: { type: 'array', items: { type: 'string' } },
+  schemaIssues: { type: 'array', items: { type: 'string' }, description: '4 个核心产物缺少必需顶层字段的清单，如 "plan.json: 缺 affected"' }, note: { type: 'string' },
+}, required: ['existing', 'unparseable', 'schemaIssues', 'note'] }
 
 const BASE = `客户需求: ${requirement}\n目标代码仓库: ${target}\n已知约束: ${constraints.length ? JSON.stringify(constraints) : '（无）'}\n` +
   `这是只读分析 + 方案设计：当前阶段**不编写客户项目代码、不提交/合并/部署**。关于现有代码的结论必须基于实际读到的内容并带证据(path/symbol/lineRange)，读不到/不确定要标注，绝不臆测、绝不编造行号(不确定填 "unknown")。中文输出，只返回结构化结果。`
@@ -419,16 +421,16 @@ try {
       // ===== 快路径：架构师直接读相关代码出精简方案(含简要风险+验收)，单次审查，无返工 =====
       phase('Plan')
       const fp = await roleAgent('plan',
-        `${BASE}\n\n本阶段=快路径实现方案（需求简单、无高风险）。直接 Read 下列相关文件后，产出精简但可执行的方案：approach/reuse/modify/add/steps/affected/architectureFit/assumptions/alternatives；并附 risks(简要，每条带 id 'RISK-xxx' 与证据)与 acceptanceCriteria(验收标准)。贴合现有架构、最小改动、不写完整代码。\n` +
+        `${BASE}\n\n本阶段=快路径实现方案（需求简单、无高风险）。直接 Read 下列相关文件后，产出精简但可执行的方案：approach/reuse/modify/add/steps/affected/architectureFit/assumptions/alternatives；并附 risks(简要，每条带 id 'RISK-xxx' 与证据)、acceptanceCriteria(验收标准)、以及 cases(至少 1 个新功能测试 + 1 个回归测试，各含 id/priority/riskIds/scenario/steps/expected/verificationType；新功能测试覆盖本次要实现的行为，回归测试覆盖不该被破坏的既有行为)。贴合现有架构、最小改动、不写完整代码。\n` +
         `参考：可 Read ${REF.delivery} 的实现规则，按实际裁剪。\n相关文件:${JSON.stringify(relevantComps)}\n需求:${JSON.stringify(requirementU)}`,
         { schema: FAST_PLAN_SCHEMA, label: 'fast-plan', phase: 'Plan', required: true, effort: EFFORT.heavy })
       if (!fp.ok) { failedStages.push('Plan'); halt('Plan', fp.error) }
       const fpv = fp.value
       plan = { approach: fpv.approach, reuse: fpv.reuse, modify: fpv.modify, add: fpv.add, steps: fpv.steps, affected: fpv.affected, architectureFit: fpv.architectureFit, assumptions: fpv.assumptions, alternatives: fpv.alternatives }
       risk = { risks: fpv.risks || [], rollback: [], openConcerns: [] }
-      testPlan = { testStrategy: '快路径：以验收标准为主，按需补单测/手测', cases: [], acceptanceCriteria: fpv.acceptanceCriteria || [], coverageGaps: ['快路径未做完整测试用例分解（简单需求）'] }
+      testPlan = { testStrategy: '快路径：最小测试集（新功能+回归）+ 验收标准', cases: fpv.cases || [], acceptanceCriteria: fpv.acceptanceCriteria || [], coverageGaps: (fpv.cases && fpv.cases.length) ? ['快路径仅生成最小测试集（新功能+回归），复杂场景未展开'] : ['快路径未生成测试用例'] }
       gap = { gaps: [], summary: '快路径未单独做差距分析（差距已并入方案）', overallFeasibility: '简单需求，可行' }
-      note(`快路径：精简方案 reuse/modify/add=${plan.reuse.length}/${plan.modify.length}/${plan.add.length}，简要风险 ${risk.risks.length}，验收 ${testPlan.acceptanceCriteria.length}。`)
+      note(`快路径：精简方案 reuse/modify/add=${plan.reuse.length}/${plan.modify.length}/${plan.add.length}，简要风险 ${risk.risks.length}，用例 ${testPlan.cases.length}，验收 ${testPlan.acceptanceCriteria.length}。`)
 
       phase('Review')
       const r0 = await doReview(0, 'fast')
@@ -580,19 +582,20 @@ const pr = await callAgent(persistPrompt, { label: 'persist', phase: 'Persist', 
 const persisted = pr.ok ? pr.value : { ok: false, absOutDir: '(写盘失败)', written: [], note: pr.error }
 const expectedFiles = Object.keys(artifacts)
 // 落盘后由【独立只读子代理】回读校验，不信 persist agent 自报的 written（#4）
-let persistVerify = { existing: [], unparseable: [], note: '(未回读)' }
+let persistVerify = { existing: [], unparseable: [], schemaIssues: [], note: '(未回读)' }
 if (persisted.ok && persisted.absOutDir && persisted.absOutDir !== '(写盘失败)') {
   const rb = await callAgent(
     `你是独立校验者，只读不写。逐个检查目录 ${persisted.absOutDir} 下这些文件是否【真实存在且非空】、且 .json 能被 JSON.parse 成功解析：${JSON.stringify(expectedFiles)}。\n` +
-    `回报 existing(确实存在且非空的文件名)/unparseable(存在但 JSON 解析失败的 .json 文件名)/note。绝不创建或修改任何文件。`,
+    `再对 4 个核心产物做结构校验（schemaIssues）：requirement.json 必含 goal/actors/normalFlow/exceptionFlow/coreOutcome/nonGoals/ambiguities/openQuestions/successCriteria/searchHints；plan.json 必含 approach/reuse/modify/add/steps/affected/architectureFit/assumptions/alternatives；risks.json 必含 risks/rollback/openConcerns；test-plan.json 必含 testStrategy/cases/acceptanceCriteria/coverageGaps。缺哪个顶层字段就记一条到 schemaIssues（如 "plan.json: 缺 affected"）；某产物不存在则跳过它的结构校验（已在 existing/missing 反映）。\n` +
+    `回报 existing(确实存在且非空的文件名)/unparseable(存在但 JSON 解析失败的 .json 文件名)/schemaIssues/note。绝不创建或修改任何文件。`,
     { label: 'persist-readback', phase: 'Persist', agentType: resolveType('persist'), schema: READBACK_SCHEMA, effort: EFFORT.light }, true)
   if (rb.ok) persistVerify = rb.value
   else note(`Persist 回读校验失败：${rb.error}（按未通过校验处理）`)
 }
-const persistOutcome = computePersistOutcome({ expectedFiles, existing: persistVerify.existing, unparseable: persistVerify.unparseable, finalStatus })
+const persistOutcome = computePersistOutcome({ expectedFiles, existing: persistVerify.existing, unparseable: persistVerify.unparseable, schemaInvalid: persistVerify.schemaIssues, finalStatus })
 const missingFiles = persistOutcome.missing
-manifest.persistVerification = { ok: persistOutcome.ok, missing: persistOutcome.missing, unparseable: persistOutcome.unparseable }
-note(`Persist：${persisted.ok ? '已写入 ' + persisted.absOutDir : '失败：' + persisted.note}；回读校验 existing=${(persistVerify.existing || []).length}/${expectedFiles.length}${persistOutcome.missing.length ? '，缺 ' + persistOutcome.missing.join(', ') : ''}${persistOutcome.unparseable.length ? '，损坏 ' + persistOutcome.unparseable.join(', ') : ''}。`)
+manifest.persistVerification = { ok: persistOutcome.ok, missing: persistOutcome.missing, unparseable: persistOutcome.unparseable, schemaIssues: persistVerify.schemaIssues || [] }
+note(`Persist：${persisted.ok ? '已写入 ' + persisted.absOutDir : '失败：' + persisted.note}；回读校验 existing=${(persistVerify.existing || []).length}/${expectedFiles.length}${persistOutcome.missing.length ? '，缺 ' + persistOutcome.missing.join(', ') : ''}${persistOutcome.unparseable.length ? '，损坏 ' + persistOutcome.unparseable.join(', ') : ''}${(persistVerify.schemaIssues || []).length ? '，schema问题 ' + persistVerify.schemaIssues.length : ''}。`)
 if (persistOutcome.finalStatus !== finalStatus) {
   note(`⚠ 落盘未通过回读校验：产物缺失/损坏，最终状态由 ${finalStatus} 降级为 ${persistOutcome.finalStatus}（不以可用状态收尾未可靠落盘的方案）。`)
   finalStatus = persistOutcome.finalStatus
