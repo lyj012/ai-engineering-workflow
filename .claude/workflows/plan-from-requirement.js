@@ -142,6 +142,21 @@ function computeReadiness(finalStatus) {
 }
 // <<< READINESS-END
 
+// >>> PERSIST-OUTCOME-START — 与 core/persist-outcome.mjs 同一逻辑（行为由 scripts/self-check.mjs 比对锁定，单测见 scripts/persist-outcome.test.mjs）；勿删本标记与 END 标记
+// 落盘后据【独立回读】判定产物是否可靠在盘：缺失/损坏则把乐观状态降级（不信 persist agent 自报的 written）
+function computePersistOutcome(input) {
+  const i = input || {}
+  const expected = Array.isArray(i.expectedFiles) ? i.expectedFiles : []
+  const existing = new Set((Array.isArray(i.existing) ? i.existing : []).map(f => String(f).split('/').pop()))
+  const unparseable = (Array.isArray(i.unparseable) ? i.unparseable : []).map(f => String(f).split('/').pop())
+  const missing = expected.filter(f => !existing.has(f))
+  const ok = missing.length === 0 && unparseable.length === 0
+  let finalStatus = i.finalStatus
+  if (!ok && (finalStatus === 'PASS' || finalStatus === 'PARTIAL')) finalStatus = 'FAILED'
+  return { ok, missing, unparseable, finalStatus }
+}
+// <<< PERSIST-OUTCOME-END
+
 // ===================== Schemas =====================
 // >>> SCHEMA-CONTRACT-START — 本区块被 scripts/self-check.mjs 切出求值，与 core/schemas/plan-artifacts.schema.json 结构比对防漂移；勿删本标记与下方 END 标记
 const EVIDENCE = { type: 'object', additionalProperties: false, properties: {
@@ -262,6 +277,10 @@ const PERSIST_SCHEMA = { type: 'object', additionalProperties: false, properties
   ok: { type: 'boolean' }, absOutDir: { type: 'string' }, written: { type: 'array', items: { type: 'string' } }, note: { type: 'string' },
 }, required: ['ok', 'absOutDir', 'written', 'note'] }
 // <<< SCHEMA-CONTRACT-END
+
+const READBACK_SCHEMA = { type: 'object', additionalProperties: false, properties: {
+  existing: { type: 'array', items: { type: 'string' } }, unparseable: { type: 'array', items: { type: 'string' } }, note: { type: 'string' },
+}, required: ['existing', 'unparseable', 'note'] }
 
 const BASE = `客户需求: ${requirement}\n目标代码仓库: ${target}\n已知约束: ${constraints.length ? JSON.stringify(constraints) : '（无）'}\n` +
   `这是只读分析 + 方案设计：当前阶段**不编写客户项目代码、不提交/合并/部署**。关于现有代码的结论必须基于实际读到的内容并带证据(path/symbol/lineRange)，读不到/不确定要标注，绝不臆测、绝不编造行号(不确定填 "unknown")。中文输出，只返回结构化结果。`
@@ -525,7 +544,7 @@ try {
 
 // ===================== Persist =====================
 // readinessForDev 由确定性代码从 finalStatus 推导（不由报告 agent 决定；堵死 FAILED/CONDITIONAL + ready 等非法组合）
-const readinessForDev = computeReadiness(finalStatus)
+let readinessForDev = computeReadiness(finalStatus)
 const manifest = {
   schemaVersion: '1.0',
   workflow: 'plan-from-requirement', requirement, target, constraints, mode: MODE, pathway,
@@ -553,10 +572,32 @@ const persistPrompt =
 const pr = await callAgent(persistPrompt, { label: 'persist', phase: 'Persist', agentType: resolveType('persist'), schema: PERSIST_SCHEMA, effort: EFFORT.light }, true)
 const persisted = pr.ok ? pr.value : { ok: false, absOutDir: '(写盘失败)', written: [], note: pr.error }
 const expectedFiles = Object.keys(artifacts)
-// 取 basename 再比：persist 子代理可能返回绝对路径或裸文件名，避免误报"缺失"
-const writtenBase = (persisted.written || []).map(w => String(w).split('/').pop())
-const missingFiles = expectedFiles.filter(f => !writtenBase.includes(f))
-note(`Persist：${persisted.ok ? '已写入 ' + persisted.absOutDir + '（' + persisted.written.length + ' 文件）' : '失败：' + persisted.note}${missingFiles.length ? '；⚠ 缺 ' + missingFiles.join(', ') : ''}`)
+// 落盘后由【独立只读子代理】回读校验，不信 persist agent 自报的 written（#4）
+let persistVerify = { existing: [], unparseable: [], note: '(未回读)' }
+if (persisted.ok && persisted.absOutDir && persisted.absOutDir !== '(写盘失败)') {
+  const rb = await callAgent(
+    `你是独立校验者，只读不写。逐个检查目录 ${persisted.absOutDir} 下这些文件是否【真实存在且非空】、且 .json 能被 JSON.parse 成功解析：${JSON.stringify(expectedFiles)}。\n` +
+    `回报 existing(确实存在且非空的文件名)/unparseable(存在但 JSON 解析失败的 .json 文件名)/note。绝不创建或修改任何文件。`,
+    { label: 'persist-readback', phase: 'Persist', agentType: resolveType('persist'), schema: READBACK_SCHEMA, effort: EFFORT.light }, true)
+  if (rb.ok) persistVerify = rb.value
+  else note(`Persist 回读校验失败：${rb.error}（按未通过校验处理）`)
+}
+const persistOutcome = computePersistOutcome({ expectedFiles, existing: persistVerify.existing, unparseable: persistVerify.unparseable, finalStatus })
+const missingFiles = persistOutcome.missing
+manifest.persistVerification = { ok: persistOutcome.ok, missing: persistOutcome.missing, unparseable: persistOutcome.unparseable }
+note(`Persist：${persisted.ok ? '已写入 ' + persisted.absOutDir : '失败：' + persisted.note}；回读校验 existing=${(persistVerify.existing || []).length}/${expectedFiles.length}${persistOutcome.missing.length ? '，缺 ' + persistOutcome.missing.join(', ') : ''}${persistOutcome.unparseable.length ? '，损坏 ' + persistOutcome.unparseable.join(', ') : ''}。`)
+if (persistOutcome.finalStatus !== finalStatus) {
+  note(`⚠ 落盘未通过回读校验：产物缺失/损坏，最终状态由 ${finalStatus} 降级为 ${persistOutcome.finalStatus}（不以可用状态收尾未可靠落盘的方案）。`)
+  finalStatus = persistOutcome.finalStatus
+  readinessForDev = computeReadiness(finalStatus)
+  manifest.finalStatus = finalStatus; manifest.readinessForDev = readinessForDev; manifest.persistVerification.ok = false
+  if (persisted.ok && persisted.absOutDir && persisted.absOutDir !== '(写盘失败)') {
+    const pf = await callAgent(
+      `把 ${persisted.absOutDir}/run-manifest.json 覆盖写为下面这个规范 JSON（UTF-8），不要改其它文件。回报 ok/absOutDir/written/note。\nrun-manifest.json:\n${JSON.stringify(manifest)}`,
+      { label: 'persist-manifest-fix', phase: 'Persist', agentType: resolveType('persist'), schema: PERSIST_SCHEMA, effort: EFFORT.light }, true)
+    note(`回写 manifest：${pf.ok ? '已更新为降级状态 ' + finalStatus : '失败：' + pf.error}`)
+  }
+}
 
 log(`plan-from-requirement 完成。路径=${pathway}，mode=${MODE}，最终状态=${finalStatus}，readinessForDev=${readinessForDev}；分级=${triage ? (forceComplexity || triage.complexity) : 'N/A'}/清晰度=${triage ? triage.clarity : 'N/A'}；相关模块 ${componentAnalyses.length}/${relevantComps.length}、风险 ${(risk && risk.risks || []).length}、用例 ${(testPlan && testPlan.cases || []).length}、验收 ${(testPlan && testPlan.acceptanceCriteria || []).length}、评审 ${reviewHistory.length} 轮、返工 ${reworkHistory.length}；失败阶段 [${failedStages.join(', ') || '无'}]。`)
 

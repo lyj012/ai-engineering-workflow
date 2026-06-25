@@ -8,6 +8,8 @@ import { computeDeliverStatus as coreComputeDeliverStatus } from '../core/delive
 import { runDeliverStatusTests, CASES as DELIVER_STATUS_CASES } from './deliver-status.test.mjs'
 import { computeReadiness as coreComputeReadiness } from '../core/readiness.mjs'
 import { runReadinessTests, CASES as READINESS_CASES } from './readiness.test.mjs'
+import { computePersistOutcome as coreComputePersistOutcome } from '../core/persist-outcome.mjs'
+import { runPersistOutcomeTests, CASES as PERSIST_OUTCOME_CASES } from './persist-outcome.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -246,6 +248,31 @@ if (exists(planWf)) {
   }
 }
 
+// persist-outcome logic (#4): run unit tests + behaviour-diff the plan workflow inline copy against core/persist-outcome.mjs.
+for (const failure of runPersistOutcomeTests()) errors.push(failure)
+{
+  const planWf = '.claude/workflows/plan-from-requirement.js'
+  if (exists(planWf)) {
+    const src = read(planWf)
+    const s = src.indexOf('// >>> PERSIST-OUTCOME-START')
+    const e = src.indexOf('// <<< PERSIST-OUTCOME-END')
+    if (s === -1 || e === -1 || e <= s) {
+      errors.push(`${planWf} is missing PERSIST-OUTCOME markers required for the inline-vs-core parity check`)
+    } else {
+      const block = src.slice(src.indexOf('\n', s), e)
+      let inlineFn = null
+      try { inlineFn = new Function(`${block}\n; return computePersistOutcome;`)() } catch (error) { errors.push(`failed to evaluate inline computePersistOutcome in ${planWf}: ${error.message}`) }
+      if (inlineFn) {
+        for (const [name, input] of PERSIST_OUTCOME_CASES) {
+          const a = inlineFn(input)
+          const b = coreComputePersistOutcome(input)
+          if (a.ok !== b.ok || a.finalStatus !== b.finalStatus) errors.push(`persist-outcome drift on "${name}": inline(ok=${a.ok},status=${a.finalStatus}) core(ok=${b.ok},status=${b.finalStatus})`)
+        }
+      }
+    }
+  }
+}
+
 errors.push(...validatePlanArtifacts(path.join(root, 'examples/artifacts/plan-ready')))
 
 for (const file of ['app.sh', 'test.sh']) {
@@ -309,5 +336,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, readiness logic+parity, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, readiness logic+parity, persist-outcome logic+parity, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)
