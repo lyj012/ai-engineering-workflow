@@ -41,6 +41,9 @@ JSON verdict verbatim. (This is what keeps Codex and Claude from drifting.)
 | project type (web vs not, for browser-verify) | `node "$AIEW_HOME/bin/core.mjs" project-type '<json>'` |
 | git red-line guard (run BEFORE every git command) | `node "$AIEW_HOME/bin/core.mjs" git-guard '"<command>"'` |
 | branch-choice resolution | `node "$AIEW_HOME/bin/core.mjs" branch-choice '<json>'` |
+| SCOPE check (changed files vs the plan's SCOPE) | `node "$AIEW_HOME/bin/core.mjs" scope-check '<json>'` |
+| sandbox prepare (copy target→sandbox; strip history/build/secrets/symlinks) | `node "$AIEW_HOME/bin/sandbox-prepare.mjs" --src <target> --dest <sandbox>` |
+| persist artifacts (write a JSON/MD bundle into a fresh timestamped run dir) | `node "$AIEW_HOME/bin/persist-artifacts.mjs" --out-base <dir> [--ts <stamp>]` |
 | validate a PLAN artifact dir (requirement/plan/risks/test-plan.json) | `node "$AIEW_HOME/scripts/validate-plan-artifacts.mjs" <plan-dir>` |
 | validate a DELIVERY dir (delivery-manifest.json) | `node "$AIEW_HOME/scripts/validate-delivery-artifacts.mjs" <delivery-dir>` |
 | validate a PUBLISH record (final-delivery.json) | `node "$AIEW_HOME/scripts/validate-publish-record.mjs" <publish-dir>` |

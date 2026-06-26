@@ -28,8 +28,10 @@ import { classifyGitState } from '../core/git-state.mjs'
 import { classifyProjectType } from '../core/project-type.mjs'
 import { classifyGitCommand } from '../core/git-guard.mjs'
 import { applyPlanPatch } from '../core/plan-patch.mjs'
+import { checkScope } from '../core/scope-check.mjs'
 
 const HANDLERS = {
+  'scope-check': (i) => checkScope(i),
   'readiness': (i) => ({ readinessForDev: computeReadiness(i) }),
   'status-combo': (i) => ({ valid: isValidStatusReadinessCombo(i.finalStatus, i.readiness) }),
   'deliver-status': (i) => computeDeliverStatus(i),

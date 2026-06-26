@@ -24,6 +24,50 @@ The main chain is intentionally split:
 
 `auto-deliver` chains all of the above end to end (`workflow()` one level deep): from a single requirement plus a target repository it runs plan → readiness gate → deliver → delivery gate → publish, stopping only on a NEEDS_CLARIFICATION requirement, a plan red line, or missing push permission. Each gate is deterministic; each engine still persists its own detailed artifacts.
 
+## Capability Matrix
+
+One shared deterministic core (`core/` + `bin/` + `scripts/`), two adapters. The Claude adapter inlines the
+core with `self-check` parity locks; the Codex adapter calls the same core through cross-platform CLIs. No
+business logic, status, schema, or report shape is maintained twice.
+
+| Capability | Claude adapter (`.claude/workflows`) | Codex adapter (`.agents/skills` + `bin/`) | Deterministic source | Verified here |
+|---|---|---|---|---|
+| Requirement → plan (read-only) | `plan-from-requirement.js` | skill stage 1 + `codex exec` | `core/readiness` + schemas | ✅ Claude run |
+| Plan → sandbox diff | `deliver-from-plan.js` | skill stage 2 | `core/deliver-status` | ✅ Claude run |
+| Publish (branch/commit/push) | `publish-delivery.js` | skill stage 3 | `core/publish-status` | ✅ logic; ⚠️ no real-remote e2e |
+| Git state + valid branch options | inline (parity) | `bin/git-state.mjs` | `core/git-state` + `core/branch-choice` | ✅ runs |
+| Status / readiness / persist decisions | inline (parity) | `bin/core.mjs <fn>` | `core/*.mjs` | ✅ runs + parity |
+| Customer git-choice gate | inline (parity) | `bin/git-state.mjs` | `core/branch-choice` | ✅ runs |
+| SCOPE check | `core/changed-files` reconcile | `bin/core.mjs scope-check` | `core/scope-check` | ✅ runs |
+| Sandbox cleanup (strip history/secrets) | subagent / `bin/sandbox-prepare` | `bin/sandbox-prepare.mjs` | cross-platform script | ✅ tested |
+| Persist artifacts (write JSON/MD) | subagent / `bin/persist-artifacts` | `bin/persist-artifacts.mjs` | cross-platform script | ✅ tested |
+| Schema validation (plan / delivery / publish) | `self-check` | `validate-*.mjs` | `core/schemas/` | ✅ runs |
+| Git red-line guard (no force-push, …) | PreToolUse hook | `bin/core.mjs git-guard` | `core/git-guard` | ✅ runs |
+| Codex Desktop recognizes & runs the skill | n/a | `.agents/skills/.../SKILL.md` | — | ⚠️ NOT verified (no Codex Desktop here) |
+
+`✅` = runs and is tested in this repository (`node scripts/self-check.mjs`). `⚠️` = implemented but not yet
+exercised on a real remote / on Codex Desktop / on Windows-macOS — see `codex/README.md` Verified-vs-Pending.
+
+## 3-Minute Quick Experience (no Claude or Codex required)
+
+The deterministic core is plain Node — drive it right now without any AI tool:
+
+```bash
+git clone https://github.com/lyj012/ai-engineering-workflow && cd ai-engineering-workflow
+
+node scripts/self-check.mjs                                          # 1. everything green (logic + parity + schemas + scripts)
+node bin/git-state.mjs --cwd . --mode new-branch                     # 2. git state + which commit options are valid here
+node bin/core.mjs readiness '"PASS"'                                 # 3. a deterministic decision (PASS -> ready)
+node bin/core.mjs git-guard '"git push --force origin main"'        # 4. the git red-line guard (blocked: true)
+node scripts/validate-plan-artifacts.mjs examples/artifacts/plan-ready              # 5. validate an example PLAN
+node scripts/validate-delivery-artifacts.mjs examples/artifacts/delivery-success    # 6. validate an example DELIVERY
+node bin/sandbox-prepare.mjs --src examples/minimal-target --dest /tmp/sb           # 7. prepare a clean sandbox (history/secrets stripped)
+```
+
+On Windows use `$env:AIEW_HOME` (PowerShell) or `%AIEW_HOME%` (CMD) for paths; the Node scripts themselves
+are cross-platform. To then run the *model* stages, use the Claude `Workflow` quick start below, or open the
+project in Codex and invoke the `ai-engineering-delivery` skill.
+
 ## Requirements
 
 - Claude Code with Dynamic Workflows enabled for the stable `.claude/` workflows.
