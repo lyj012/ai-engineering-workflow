@@ -56,6 +56,8 @@ const authorName = A.authorName ? String(A.authorName) : null
 const authorEmail = A.authorEmail ? String(A.authorEmail) : null
 const commitMessageArg = A.commitMessage ? String(A.commitMessage) : null
 const coAuthoredBy = A.coAuthoredBy ? String(A.coAuthoredBy) : null   // 可选模型/协作者署名；省略则默认提交信息不含 Co-Authored-By（保持模型无关，避免错误归属）
+// L1 模型分层：纯 git plumbing/落盘类 agent（clone、push、写报告）用轻模型省成本；安全/验证类（apply 查越界、commit 查禁入、远程核验）一律留默认强模型。可经 args.lightModel 覆盖。
+const LIGHT_MODEL = ['haiku', 'sonnet', 'opus', 'fable'].includes(String(A.lightModel)) ? String(A.lightModel) : 'haiku'
 const allowHighRiskAutoPublish = !!A.allowHighRiskAutoPublish
 const dryRun = !!A.dryRun
 const GP = (A.gitPolicy && typeof A.gitPolicy === 'object') ? A.gitPolicy : {}
@@ -209,7 +211,7 @@ try {
       `2) clone 远程（保留完整 .git）：git clone "${remoteUrl}" "$publishDir/repo"。若 ${remoteUrl} 是本地路径，用 git clone --local。clone 用环境已配置的凭据，不要在命令行内联任何 token。\n` +
       `3) 进入 repo，确认默认分支(git branch --show-current 或 git rev-parse --abbrev-ref HEAD)、工作树干净(git status --porcelain 为空)。\n` +
       `回报 ok/publishDir(绝对)/repoDir(绝对,=publishDir/repo)/defaultBranch/cloneClean/note。`,
-      { schema: CLONE_SCHEMA, label: 'clone-repo', phase: 'Clone', agentType: AT, effort: 'low' }, true)
+      { schema: CLONE_SCHEMA, label: 'clone-repo', phase: 'Clone', agentType: AT, effort: 'low', model: LIGHT_MODEL }, true)
     if (!cl.ok) { failedStages.push('Clone'); halt('Clone', cl.error, 'PUBLISH_BLOCKED') }
     clone = cl.value
     if (!clone.ok || !clone.repoDir) { finalStatus = 'PUBLISH_BLOCKED'; note('clone 失败，无法发布：' + clone.note); halt('Clone', 'clone 未成功', 'PUBLISH_BLOCKED') }
@@ -278,7 +280,7 @@ try {
           `在 ${clone.repoDir} 执行：git push ${pushRemote} "${branch.branchName}"（${branch.isNewBranch ? '新分支首次推送可加 -u' : '推到已存在分支，必须是快进；非快进即停、绝不 -f'}）。用环境已配置的凭据，命令行不内联 token。\n` +
           `若被拒（凭据缺失/权限/非快进），pushRejected=true、pushPerformed=false，如实在 note 写原因与"如何用 ! git push 自行完成"的提示，不要 force、不要重写。成功则 pushPerformed=true。\n` +
           `回报 ok/pushPerformed/pushRejected/remoteRef(refs/heads/${branch.branchName})/pushUrlSafe(不含凭据的远程URL)/note。`,
-          { schema: PUSH_SCHEMA, label: 'push', phase: 'Push', agentType: AT, effort: 'low' }, true)
+          { schema: PUSH_SCHEMA, label: 'push', phase: 'Push', agentType: AT, effort: 'low', model: LIGHT_MODEL }, true)
         if (!pu.ok) { failedStages.push('Push'); push = { ok: false, pushPerformed: false, pushRejected: true, remoteRef: '', pushUrlSafe: remoteUrl, note: pu.error } }
         else push = pu.value
         note(`Push：${push.pushPerformed ? '已推送到 ' + push.remoteRef : '未推送（' + (push.pushRejected ? '被拒' : '失败') + '）：' + push.note}`)
@@ -355,7 +357,7 @@ if (clone && clone.publishDir) {
     `2) 写 ${clone.publishDir}/publish-report.md（中文）：含 1 最终状态(=${finalStatus}) 2 来源交付目录 3 远程与分支(含是否新分支/是否受保护) 4 提交(SHA/作者/文件) 5 push 结果 6 发布后远程核验四项(逐项) 7 开环项 8 回滚指引 9 若未发布/未核验，写明原因与"如何用 ! git push 自行完成"。\n` +
     `3) 写 ${clone.publishDir}/execution-log.md（用下方日志数组）。\n` +
     `回报 ok/absOutDir/written/note。\nfinal-delivery(JSON):\n${JSON.stringify(finalDelivery)}\nexecution-log(JSON):\n${JSON.stringify(execLog)}`,
-    { schema: FINALIZE_SCHEMA, label: 'finalize', phase: 'Finalize', agentType: AT, effort: 'low' }, true)
+    { schema: FINALIZE_SCHEMA, label: 'finalize', phase: 'Finalize', agentType: AT, effort: 'low', model: LIGHT_MODEL }, true)
   finalize = fn.ok ? fn.value : { ok: false, absOutDir: clone.publishDir, written: [], note: fn.error }
   note(`Finalize：${finalize.ok ? '已写入 ' + finalize.absOutDir + '（' + finalize.written.length + ' 文件）' : '失败：' + finalize.note}`)
 } else {

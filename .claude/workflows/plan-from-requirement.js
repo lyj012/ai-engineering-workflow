@@ -65,6 +65,8 @@ const forceComplexity = ['simple', 'medium', 'complex'].includes(String(A.forceC
 const skipClarify = !!A.skipClarificationGate
 const forceFirstVerdict = A.forceFirstVerdict || null
 const injectFailIdx = Number.isInteger(A.injectComponentFailureIndex) ? A.injectComponentFailureIndex : -1
+// L1 模型分层：纯机械/落盘类 agent（preflight 指纹、落盘）用轻模型省成本；推理/验证/安全 agent 一律留默认强模型。可经 args.lightModel 覆盖。
+const LIGHT_MODEL = ['haiku', 'sonnet', 'opus', 'fable'].includes(String(A.lightModel)) ? String(A.lightModel) : 'haiku'
 
 // 深度档位：不传 mode 时由 Triage 复杂度决定；下面先给基线(早期阶段用)，Triage 后按复杂度重算
 let MODE, PRE, MAX, MAX_REWORK, EFFORT
@@ -126,9 +128,10 @@ async function callAgent(prompt, opts, required) {
   }
   return { ok: false, error: lastErr }
 }
-async function roleAgent(roleKey, prompt, { schema, label, phase: ph, required, effort }) {
+async function roleAgent(roleKey, prompt, { schema, label, phase: ph, required, effort, model }) {
   const opts = { schema, label, phase: ph, agentType: resolveType(roleKey) }
   if (effort) opts.effort = effort
+  if (model) opts.model = model   // L1：仅机械/落盘 agent 显式降级，缺省继承会话强模型
   return callAgent(prompt + roleBrief(roleKey), opts, required)
 }
 function halt(stage, reason) { const e = new Error(`HALT@${stage}: ${reason}`); e.__halt = { stage, reason }; throw e }
@@ -371,7 +374,7 @@ try {
   const pf = await roleAgent('preflight',
     `${BASE}\n\n本阶段=前置校验。用 Bash 确认目标仓库存在且可读，判断仓库类型/技术栈；并初判这条需求是否足够清晰(requirementClear)。\n` +
     `另计算目标仓库版本指纹 fingerprint（供后续检测 stale plan）：cd 到目标目录；若为 git 仓库：commit=\`git rev-parse HEAD\`（取不到留空）、treeHash=\`git rev-parse HEAD^{tree}\`（留空亦可）、dirty=\`git status --porcelain\` 是否非空、dirtyDiffHash=dirty 时取 \`git diff HEAD | sha256sum\` 前16位否则留空；若非 git：commit 与 dirtyDiffHash 留空、dirty=false、treeHash 尽量用 \`find . -type f -not -path './.git/*' -print0 | sort -z | xargs -0 sha256sum 2>/dev/null | sha256sum\` 前16位。`,
-    { schema: PREFLIGHT_SCHEMA, label: 'preflight', phase: 'Preflight', required: true, effort: EFFORT.light })
+    { schema: PREFLIGHT_SCHEMA, label: 'preflight', phase: 'Preflight', required: true, effort: EFFORT.light, model: LIGHT_MODEL })
   if (!pf.ok) { failedStages.push('Preflight'); halt('Preflight', pf.error) }
   if (!pf.value.targetExists || !pf.value.isReadable) halt('Preflight', `目标仓库不可用：${pf.value.note}`)
   note(`Preflight ok：${pf.value.repoKind}；需求初判清晰度=${pf.value.requirementClear ? '足够' : '偏模糊'} — ${pf.value.note}`)
@@ -569,9 +572,12 @@ try {
 
     // ---- Report（开发可直接实施的方案；只汇总）----
     phase('Report')
+    // L5 瘦上下文：评审/返工历史以紧凑摘要传给报告（完整历史已各自落盘为 *-history.json），避免把 planPatch/planRefinements 等大对象整坨重复进 report 上下文
+    const reviewSummary = reviewHistory.map(r => ({ round: r.round, verdict: r.verdict, score: r.score, mustFix: (r.mustFix || []).length }))
+    const reworkSummary = reworkHistory.map(r => ({ round: r.round, addressed: (r.addressed || []).length, stillOpen: (r.stillOpen || []).length, refinements: (r.planRefinements || []).length }))
     const rp = await roleAgent('report',
       `${BASE}\n\n本阶段=最终方案报告（只汇总既有分析/方案/评审，**不新增**未经分析的结论）。面向开发可直接实施，中文 markdown，含：1 需求理解(目标/范围/非目标/验收) 2 待向客户确认的问题 3 相关代码现状(带证据) 4 现状与目标差距 5 实现方案总体思路 6 可复用 7 需修改(文件+改什么+为什么) 8 需新增 9 有序实施步骤 10 涉及的模块/文件/接口/数据/状态/权限/前后端影响 11 方案风险与回滚 12 测试方案 13 验收标准 14 风险↔测试、需求↔验收 追踪矩阵 15 评审历史与采纳 16 返工历史 17 最终状态(readinessForDev 由系统按 finalStatus 确定性判定，不在此处自评) 18 遗留与未验证项。本次路径=${pathway}、深度档=${MODE}。\n` +
-      `最终状态:${finalStatus}\n分级:${JSON.stringify(triage)}\n需求:${JSON.stringify(requirementU)}\n定位:${JSON.stringify(locate)}\n现状:${JSON.stringify(componentAnalyses)}\n失败模块:${JSON.stringify(failedComponents)}\n差距:${JSON.stringify(gap)}\n方案:${JSON.stringify(plan)}\n风险:${JSON.stringify(risk)}\n测试验收:${JSON.stringify(testPlan)}\n评审历史:${JSON.stringify(reviewHistory)}\n返工历史:${JSON.stringify(reworkHistory)}\n最终评审:${JSON.stringify(review)}`,
+      `最终状态:${finalStatus}\n分级:${JSON.stringify(triage)}\n需求:${JSON.stringify(requirementU)}\n定位:${JSON.stringify(locate)}\n现状:${JSON.stringify(componentAnalyses)}\n失败模块:${JSON.stringify(failedComponents)}\n差距:${JSON.stringify(gap)}\n方案:${JSON.stringify(plan)}\n风险:${JSON.stringify(risk)}\n测试验收:${JSON.stringify(testPlan)}\n评审历史(摘要):${JSON.stringify(reviewSummary)}\n返工历史(摘要):${JSON.stringify(reworkSummary)}\n最终评审:${JSON.stringify(review)}`,
       { schema: REPORT_SCHEMA, label: 'report', phase: 'Report', required: true, effort: EFFORT.heavy })
     if (!rp.ok) { failedStages.push('Report'); halt('Report', rp.error) }
     report = rp.value
@@ -609,7 +615,7 @@ phase('Persist')
 const persistPrompt =
   `本阶段=落盘。把下列产物写入一个**新的、带时间戳的运行目录**，避免覆盖历史运行。\n` +
   `步骤：(1) Bash 计算 ts=$(date +%Y%m%d-%H%M%S)；(2) 目标目录 = "${outDirBase}/${'${ts}'}"（相对你的 cwd；mkdir -p 并 realpath 取绝对路径回报）；(3) 把 artifacts 每个键作为文件名写入（*.json 规范 JSON、*.md 文本，UTF-8）；(4) 返回 ok/absOutDir/written/note。不要修改目标仓库，只在输出目录内创建文件。\nartifacts(JSON):\n${JSON.stringify(artifacts)}`
-const pr = await callAgent(persistPrompt, { label: 'persist', phase: 'Persist', agentType: resolveType('persist'), schema: PERSIST_SCHEMA, effort: EFFORT.light }, true)
+const pr = await callAgent(persistPrompt, { label: 'persist', phase: 'Persist', agentType: resolveType('persist'), schema: PERSIST_SCHEMA, effort: EFFORT.light, model: LIGHT_MODEL }, true)
 const persisted = pr.ok ? pr.value : { ok: false, absOutDir: '(写盘失败)', written: [], note: pr.error }
 const expectedFiles = Object.keys(artifacts)
 // 落盘后由【独立只读子代理】回读校验，不信 persist agent 自报的 written（#4）
@@ -635,7 +641,7 @@ if (persistOutcome.finalStatus !== finalStatus) {
   if (persisted.ok && persisted.absOutDir && persisted.absOutDir !== '(写盘失败)') {
     const pf = await callAgent(
       `把 ${persisted.absOutDir}/run-manifest.json 覆盖写为下面这个规范 JSON（UTF-8），不要改其它文件。回报 ok/absOutDir/written/note。\nrun-manifest.json:\n${JSON.stringify(manifest)}`,
-      { label: 'persist-manifest-fix', phase: 'Persist', agentType: resolveType('persist'), schema: PERSIST_SCHEMA, effort: EFFORT.light }, true)
+      { label: 'persist-manifest-fix', phase: 'Persist', agentType: resolveType('persist'), schema: PERSIST_SCHEMA, effort: EFFORT.light, model: LIGHT_MODEL }, true)
     note(`回写 manifest：${pf.ok ? '已更新为降级状态 ' + finalStatus : '失败：' + pf.error}`)
   }
 }
