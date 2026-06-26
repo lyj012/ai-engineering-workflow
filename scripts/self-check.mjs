@@ -19,7 +19,8 @@ import { runPlanPatchTests, CASES as PLAN_PATCH_CASES } from './plan-patch.test.
 import { computePublishStatus as coreComputePublishStatus } from '../core/publish-status.mjs'
 import { runPublishStatusTests, CASES as PUBLISH_STATUS_CASES } from './publish-status.test.mjs'
 import { runGitGuardTests } from './git-guard.test.mjs'
-import { runProjectTypeTests } from './project-type.test.mjs'
+import { classifyProjectType as coreClassifyProjectType } from '../core/project-type.mjs'
+import { runProjectTypeTests, CASES as PROJECT_TYPE_CASES } from './project-type.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -386,8 +387,29 @@ for (const failure of runPlanPatchTests()) errors.push(failure)
 // git red-line guard (auto-publish hard enforcement): run classifier tests + confirm the PreToolUse hook is wired.
 for (const failure of runGitGuardTests()) errors.push(failure)
 
-// project-type classifier (for browser-verification scoping): run unit tests.
+// project-type classifier (for browser-verification scoping): run unit tests + behaviour-diff the deliver inline copy against core.
 for (const failure of runProjectTypeTests()) errors.push(failure)
+{
+  const ptWf = '.claude/workflows/deliver-from-plan.js'
+  if (exists(ptWf)) {
+    const src = read(ptWf)
+    const s = src.indexOf('// >>> PROJECT-TYPE-START')
+    const e = src.indexOf('// <<< PROJECT-TYPE-END')
+    if (s === -1 || e === -1 || e <= s) {
+      errors.push(`${ptWf} is missing PROJECT-TYPE markers required for the inline-vs-core parity check`)
+    } else {
+      const block = src.slice(src.indexOf('\n', s), e)
+      let inlineFn = null
+      try { inlineFn = new Function(`${block}\n; return classifyProjectType;`)() } catch (error) { errors.push(`failed to evaluate inline classifyProjectType in ${ptWf}: ${error.message}`) }
+      if (inlineFn) {
+        for (const [name, input] of PROJECT_TYPE_CASES) {
+          const a = inlineFn(input), b = coreClassifyProjectType(input)
+          if (a.type !== b.type || a.isWeb !== b.isWeb) errors.push(`project-type drift on "${name}": inline(${a.type}/${a.isWeb}) core(${b.type}/${b.isWeb})`)
+        }
+      }
+    }
+  }
+}
 if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guard-hook.mjs (git red-line PreToolUse hook entry)')
 if (exists('.claude/settings.json')) {
   let settingsText = ''
@@ -460,5 +482,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type classifier, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)

@@ -28,6 +28,7 @@ export const meta = {
     { title: 'Review', detail: '独立多视角并行审查（实现者不自评）；Fix 后由全新实例重新复审' },
     { title: 'Fix', detail: '仅当 needs-work：由独立修复角色按意见最小修复并重验 DONE 仍绿（禁改测试）' },
     { title: 'Verify', detail: '独立子代理复跑 DONE + 从 test-plan 重物化独立复测 + 核对 diff 仅动 SCOPE（不信实现者自报、防改测试迁就）' },
+    { title: 'BrowserVerify', detail: '仅 web 项目：独立角色判类型→探浏览器能力→起项目→真实交互/控制台/接口/截图→四态（失败=阻断、无能力=如实跳过不伪造）' },
     { title: 'Deliver', detail: '出 diff/报告/manifest 落盘到带时间戳目录' },
   ],
 }
@@ -173,6 +174,55 @@ function reconcileChangedFiles(input) {
 }
 // <<< CHANGED-FILES-END
 
+// >>> PROJECT-TYPE-START — 与 core/project-type.mjs 同一逻辑（行为由 scripts/self-check.mjs 比对锁定，单测见 scripts/project-type.test.mjs）；勿删本标记与 END 标记
+// 确定性项目类型判定：从客观仓库信号判 web/fullstack/non-web/unknown，决定该交付是否需要真实浏览器验证
+const PT_FRONTEND = ['react', 'react-dom', 'vue', 'svelte', '@sveltejs/kit', '@angular/core', 'solid-js', 'preact', 'astro', 'next', 'nuxt', 'remix', '@remix-run/react', 'gatsby', 'vite', 'webpack', 'parcel', '@vitejs/plugin-react']
+const PT_SERVER = ['express', 'koa', 'fastify', '@nestjs/core', 'hapi', '@hapi/hapi', 'next', 'nuxt', 'remix', '@remix-run/node', 'gatsby']
+const PT_FULLSTACK = ['next', 'nuxt', 'remix', '@remix-run/react', '@remix-run/node', 'gatsby', '@sveltejs/kit']
+const PT_PORT_GUESS = [['next', 3000], ['nuxt', 3000], ['gatsby', 8000], ['vite', 5173], ['@vitejs/plugin-react', 5173], ['react-scripts', 3000], ['@sveltejs/kit', 5173], ['astro', 4321]]
+function classifyProjectType(input) {
+  const i = input || {}
+  const deps = (Array.isArray(i.deps) ? i.deps : []).map(d => String(d).toLowerCase())
+  const scripts = (i.scripts && typeof i.scripts === 'object') ? i.scripts : {}
+  const depSet = new Set(deps)
+  const signals = []
+  const matched = list => list.filter(x => depSet.has(x))
+  const frontendHits = matched(PT_FRONTEND)
+  const serverHits = matched(PT_SERVER)
+  const fullstackHits = matched(PT_FULLSTACK)
+  if (frontendHits.length) signals.push('frontend deps: ' + frontendHits.join(', '))
+  if (serverHits.length) signals.push('server deps: ' + serverHits.join(', '))
+  if (i.hasIndexHtml) signals.push('index.html present')
+  if (i.hasServerEntry) signals.push('server entry present')
+  const hasFrontend = frontendHits.length > 0 || !!i.hasIndexHtml
+  const hasServer = serverHits.length > 0 || !!i.hasServerEntry
+  const hasFullstackFramework = fullstackHits.length > 0
+  let startCommand = null
+  if (scripts.dev) startCommand = 'npm run dev'
+  else if (scripts.start) startCommand = 'npm start'
+  else if (scripts.serve) startCommand = 'npm run serve'
+  if (startCommand) signals.push('start via "' + startCommand + '"')
+  let baseUrlGuess = null
+  for (const [name, port] of PT_PORT_GUESS) {
+    if (depSet.has(name)) { baseUrlGuess = 'http://localhost:' + port; break }
+  }
+  let type
+  if (!i.hasPackageJson && !i.hasIndexHtml) {
+    type = 'non-web'
+  } else if (hasFullstackFramework || (hasFrontend && hasServer)) {
+    type = 'fullstack'
+  } else if (hasFrontend) {
+    type = 'web'
+  } else if (i.hasPackageJson) {
+    type = hasServer ? 'non-web' : 'unknown'
+  } else {
+    type = 'unknown'
+  }
+  const isWeb = type === 'web' || type === 'fullstack'
+  return { type, isWeb, signals, startCommand: isWeb ? startCommand : null, baseUrlGuess: isWeb ? baseUrlGuess : null }
+}
+// <<< PROJECT-TYPE-END
+
 const SAFETY = `【硬安全约束】(1) 只在沙箱目录内写文件，绝不修改原仓库 ${targetRepoArg || '(方案目标仓库)'} 之外或之内的任何原始文件；(2) 绝不执行 git commit/push/merge/reset、绝不删库删表、绝不碰支付/权限/密钥/认证/不可逆操作——命中即停并在结构化结果里报告；(3) 只改方案 SCOPE(plan.affected.files)内的文件，越界即停。中文输出，只返回结构化结果。`
 
 // ===================== Schemas =====================
@@ -251,10 +301,40 @@ const DELIVER_SCHEMA = { type: 'object', additionalProperties: false, properties
   ok: { type: 'boolean' }, absOutDir: { type: 'string' }, written: { type: 'array', items: { type: 'string' } }, note: { type: 'string' },
 }, required: ['ok', 'absOutDir', 'written', 'note'] }
 
+// BrowserVerify：客观项目信号（供确定性分类器判 web/非web）
+const BROWSER_SIGNALS_SCHEMA = { type: 'object', additionalProperties: false, properties: {
+  hasPackageJson: { type: 'boolean' },
+  deps: { type: 'array', items: { type: 'string' }, description: 'package.json dependencies+devDependencies 的包名' },
+  devScript: { type: 'string', description: 'scripts.dev 命令，无则空串' },
+  startScript: { type: 'string', description: 'scripts.start 命令，无则空串' },
+  serveScript: { type: 'string', description: 'scripts.serve 命令，无则空串' },
+  hasIndexHtml: { type: 'boolean', description: '根/public/src 有无 index.html' },
+  hasServerEntry: { type: 'boolean', description: '有无 server.js/app.js/app.py/main.go 等 HTTP 服务入口' },
+}, required: ['hasPackageJson', 'deps', 'devScript', 'startScript', 'serveScript', 'hasIndexHtml', 'hasServerEntry'] }
+
+// BrowserVerify：独立真实浏览器验证结果（四态 + 完整证据记录）
+const BROWSER_VERIFY_SCHEMA = { type: 'object', additionalProperties: false, properties: {
+  adapterUsed: { type: 'string', description: '实际使用的浏览器能力：playwright-mcp / playwright-cli / codex / none(skipped)' },
+  projectStarted: { type: 'boolean' }, startLogTail: { type: 'string' },
+  pageOpened: { type: 'boolean' }, baseUrl: { type: 'string' },
+  opsExecuted: { type: 'array', items: { type: 'string' }, description: '已执行的关键用户操作（点击/输入/跳转/刷新…）' },
+  checks: { type: 'array', items: { type: 'object', additionalProperties: false, properties: {
+    name: { type: 'string' }, passed: { type: 'boolean' }, detail: { type: 'string' },
+  }, required: ['name', 'passed', 'detail'] }, description: '表单/按钮/弹窗/跳转/刷新后状态/结果是否符合需求' },
+  consoleErrors: { type: 'array', items: { type: 'string' } },
+  failedKeyRequests: { type: 'array', items: { type: 'object', additionalProperties: false, properties: {
+    url: { type: 'string' }, status: { type: 'number' },
+  }, required: ['url', 'status'] } },
+  screenshots: { type: 'array', items: { type: 'string' }, description: '截图文件路径' },
+  evidenceDir: { type: 'string' },
+  finalBrowserStatus: { type: 'string', enum: ['passed', 'failed', 'skipped-no-capability', 'error'] },
+  note: { type: 'string' },
+}, required: ['adapterUsed', 'projectStarted', 'startLogTail', 'pageOpened', 'baseUrl', 'opsExecuted', 'checks', 'consoleErrors', 'failedKeyRequests', 'screenshots', 'evidenceDir', 'finalBrowserStatus', 'note'] }
+
 // ===================== 状态收集 =====================
 let finalStatus = 'FAILED'
 let gate = null, scaffold = null, materialize = null, implement = null, reviews = [], fix = null, verify = null, deliver = null
-let trustworthy = false, reviewIncomplete = false, halted = false, diffResult = null, staleCmp = null
+let trustworthy = false, reviewIncomplete = false, halted = false, diffResult = null, staleCmp = null, browserResult = null
 const failedStages = [], fixHistory = []
 
 try {
@@ -426,6 +506,49 @@ try {
         // G4 测试/实现职责边界（硬闸门）：独立验证用自己从 test-plan 重物化的测试复测，不过=实现真错或被改测试迁就→BLOCKED（不信在树测试）
         if (verify && verify.independentTestsPassed === false) { finalStatus = 'BLOCKED'; note('⛔ 独立复测未过（Verify 从 test-plan.json 重物化、不复用在树 tests/）：实现未真正满足验收，或曾改测试迁就实现。拒绝交付。') }
         else if (verify && verify.testsIntact === false) { note('⚠ 在树 tests/ 指纹与物化时不一致（疑似被改动）：已记为开环项；终态以独立复测为准。') }
+
+        // ---- BrowserVerify（仅 web 项目）：独立角色判类型→探浏览器能力→起项目→真实交互→四态（失败=阻断、无能力=如实跳过；喂入 computeDeliverStatus 的 browser 闸门）----
+        if (finalStatus !== 'BLOCKED') {
+          phase('BrowserVerify')
+          // 1) 客观信号采集（独立只读 agent）→ 脚本用确定性分类器判 web/非web（同源块 classifyProjectType）
+          const ds = await callAgent(
+            `你是只读项目类型探测者。读取沙箱 ${sandboxDir} 根目录，如实回报客观信号（不臆测、不改文件）：` +
+            `hasPackageJson；deps(package.json 的 dependencies+devDependencies 包名数组，无则[])；` +
+            `devScript/startScript/serveScript(package.json scripts 里 dev/start/serve 的命令，无则空串)；` +
+            `hasIndexHtml(根/public/src 有无 index.html)；hasServerEntry(有无 server.js/app.js/app.py/main.go 等 HTTP 服务入口)。`,
+            { schema: BROWSER_SIGNALS_SCHEMA, label: 'detect-project-type', phase: 'BrowserVerify', agentType: AT, effort: 'low' }, false)
+          const sig = ds.ok ? ds.value : { hasPackageJson: false, deps: [], devScript: '', startScript: '', serveScript: '', hasIndexHtml: false, hasServerEntry: false }
+          const pt = classifyProjectType({ hasPackageJson: sig.hasPackageJson, deps: sig.deps, scripts: { dev: sig.devScript, start: sig.startScript, serve: sig.serveScript }, hasIndexHtml: sig.hasIndexHtml, hasServerEntry: sig.hasServerEntry })
+          note(`BrowserVerify：项目类型=${pt.type}（isWeb=${pt.isWeb}）${pt.startCommand ? '，startCommand=' + pt.startCommand : ''}。`)
+          if (!pt.isWeb) {
+            browserResult = { applicable: false, status: 'not-applicable', finalBrowserStatus: 'not-applicable', value: null, openItems: [] }
+            note('非 web 项目 → 浏览器验证不适用（not-applicable），跳过。')
+          } else {
+            // 2) 独立真实浏览器验证者（工具无关；无能力如实跳过、绝不伪造）
+            const bv = await callAgent(
+              `你是【独立真实浏览器验证者】，未参与实现/修复，对已实现的 web 项目沙箱 ${sandboxDir} 做真实浏览器验证。${SAFETY}\n` +
+              `需求目标：${gate ? gate.requirementGoal : ''}。项目类型=${pt.type}，建议启动命令=${pt.startCommand || '(自行从 package.json 推断)'}。\n` +
+              `【能力探测·按优先级、工具无关】依次探测并选第一个【真的能起浏览器】的能力：(a) 浏览器类 MCP（如 Playwright MCP）——用 ToolSearch 查 "browser playwright"；(b) Playwright CLI（command -v playwright；npx --no-install playwright --version；ls ~/.cache/ms-playwright；必要时 npx playwright install chromium，但必须实跑一次冒烟确认浏览器真能启动）；(c) Codex 内置浏览器（command -v codex）；(d) 其它可控现代浏览器。adapterUsed 记录所用能力。\n` +
+              `【无能力 → 如实跳过，绝不伪造】以上都不可用（或浏览器装了也起不来）则 finalBrowserStatus='skipped-no-capability'，note 写：探测过程与依据、缺失能力、剩余风险（UI/交互/JS 未经真实浏览器验证）、补全建议。严禁用 WebFetch 静态文本冒充浏览器验证。\n` +
+              `【有能力 → 真实验证，像真实用户】(1) 沙箱内起项目（先装依赖，用 ${pt.startCommand || 'npm run dev/start'}，轮询端口就绪、带超时，记 startLogTail/baseUrl/projectStarted）；(2) 打开页面 pageOpened；(3) 执行本次需求涉及的关键交互（表单/按钮/弹窗/跳转/刷新后状态），记 opsExecuted；(4) 逐条核对 checks(name/passed/detail)：页面是否正常加载、交互结果是否符合需求、刷新后状态；(5) 收集 console 错误 consoleErrors、关键接口失败 failedKeyRequests(url/status)；(6) 保存截图 screenshots 到 ${scaffold.runDir}/browser-evidence/（evidenceDir），用低 Token 策略（浅快照/仅 console error/过滤网络/关键步骤截图）；(7) 用完清理启动的进程。\n` +
+              `finalBrowserStatus：关键 checks 全过 且 无 console 错 且 关键接口正常 → 'passed'；否则 'failed'；中途无法完成（崩溃/超时/环境问题、非"实现错"）→ 'error'。\n` +
+              `回报 adapterUsed/projectStarted/startLogTail/pageOpened/baseUrl/opsExecuted/checks/consoleErrors/failedKeyRequests/screenshots/evidenceDir/finalBrowserStatus/note。`,
+              { schema: BROWSER_VERIFY_SCHEMA, label: 'browser-verify', phase: 'BrowserVerify', agentType: AT, effort: 'high' }, false)
+            if (!bv.ok) {
+              browserResult = { applicable: true, status: 'error', finalBrowserStatus: 'error', value: null, openItems: ['浏览器验证子代理失败（未完成，非"已通过"）：' + bv.error] }
+              note(`BrowserVerify：子代理失败，记为 error（不伪造通过）：${bv.error}`)
+            } else {
+              const v = bv.value
+              const mapped = v.finalBrowserStatus === 'skipped-no-capability' ? 'skipped' : v.finalBrowserStatus
+              const openItems = []
+              if (mapped === 'skipped') openItems.push('web 项目但环境无可用浏览器能力，浏览器验证已如实跳过（剩余风险：UI/交互/JS 未经真实浏览器验证）：' + v.note)
+              if (mapped === 'error') openItems.push('浏览器验证未能完成（error）：' + v.note)
+              browserResult = { applicable: true, status: mapped, finalBrowserStatus: v.finalBrowserStatus, value: v, openItems }
+              note(`BrowserVerify：adapter=${v.adapterUsed}，启动=${v.projectStarted}，开页=${v.pageOpened}，checks ${v.checks.filter(c => c.passed).length}/${v.checks.length} 过，console错 ${v.consoleErrors.length}，接口失败 ${v.failedKeyRequests.length}，截图 ${v.screenshots.length} → ${v.finalBrowserStatus}。`)
+              if (mapped === 'failed') { finalStatus = 'BLOCKED'; note('⛔ 真实浏览器验证失败（web 项目页面/交互/控制台/接口未通过），拒绝交付。') }
+            }
+          }
+        }
       }
     }
   }
@@ -468,6 +591,7 @@ if (!halted) {
     gateOpenQuestions: (gate && gate.openQuestions) || [],
     gateRemainingGaps: (gate && gate.remainingGaps) || [],
     diff: (scaffold && scaffold.runDir) ? diffResult : null,
+    browser: browserResult ? { applicable: browserResult.applicable, status: browserResult.status, openItems: browserResult.openItems } : null,
   }
   const sr = computeDeliverStatus(statusInput)
   finalStatus = sr.finalStatus
@@ -504,6 +628,7 @@ const deliverManifest = {
   fixHistory,
   reviewComplete: !reviewIncomplete,
   independentVerify: verify ? { donePassedVerified: verify.donePassedVerified, doneExitCodeVerified: verify.doneExitCodeVerified, redGreenVerified: verify.redGreenVerified, independentTestsPassed: verify.independentTestsPassed, testsIntact: verify.testsIntact, scopeCleanVerified: verify.scopeCleanVerified } : null,
+  browserVerify: browserResult ? { applicable: browserResult.applicable, finalBrowserStatus: browserResult.finalBrowserStatus, adapterUsed: browserResult.value ? browserResult.value.adapterUsed : null, evidenceDir: browserResult.value ? browserResult.value.evidenceDir : null, checksPassed: browserResult.value ? browserResult.value.checks.filter(c => c.passed).length : 0, checksTotal: browserResult.value ? browserResult.value.checks.length : 0, consoleErrorCount: browserResult.value ? browserResult.value.consoleErrors.length : 0, failedKeyRequests: browserResult.value ? browserResult.value.failedKeyRequests : [], screenshots: browserResult.value ? browserResult.value.screenshots : [] } : null,
   openItems: [
     ...(materialize ? materialize.openLoopItems : []),
     ...((gate && gate.openQuestions) || []).map(q => `方案待确认: ${q}`),
@@ -512,6 +637,7 @@ const deliverManifest = {
     ...(verify && verify.redGreenVerified === false ? ['独立"先红后绿"未复现：DONE 可信度未独立确认'] : []),
     ...(verify && verify.independentTestsPassed === false ? ['独立复测未过：实现未满足验收或改测试迁就实现（已 BLOCKED）'] : []),
     ...(verify && verify.testsIntact === false ? ['在树 tests/ 指纹与物化时不一致（疑似被改动），需人工核对'] : []),
+    ...((browserResult && browserResult.openItems) || []),
     ...(diffResult && diffResult.diffApplyCheckPassed === false ? ['diff 未通过 git apply --check'] : []),
     ...(staleCmp && staleCmp.severity === 'soft' ? ['目标仓库 soft stale：有未提交改动差异（方案基于略有不同的工作区）'] : []),
     ...filesReconcile.issues.map(s => `变更文件对账: ${s}`),
