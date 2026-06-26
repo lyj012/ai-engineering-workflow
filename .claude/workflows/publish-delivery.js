@@ -63,17 +63,49 @@ const LIGHT_MODEL = ['haiku', 'sonnet', 'opus', 'fable'].includes(String(A.light
 const allowHighRiskAutoPublish = !!A.allowHighRiskAutoPublish
 const dryRun = !!A.dryRun
 const GP = (A.gitPolicy && typeof A.gitPolicy === 'object') ? A.gitPolicy : {}
-// 客户必须显式选择提交方式（gitPolicy.branchMode）：
-//   "new-branch"      = 从当前分支新建分支后提交推送
-//   "switch-existing" = 切换到客户指定的已有分支（gitPolicy.targetBranch 必填）后提交推送
-//   "current-branch"  = 保持当前分支不变，直接提交推送（旧值 "direct" 兼容映射为本模式）
-// 未显式有效选择（含 switch-existing 缺 targetBranch）→ Preflight 停于 PUBLISH_NEEDS_CHOICE，不 checkout/建分支/commit/push（受保护分支/高风险/敏感文件/禁强推规则不变）。
-let branchChoiceRaw = GP.branchMode ? String(GP.branchMode).toLowerCase() : ''
-if (branchChoiceRaw === 'direct') branchChoiceRaw = 'current-branch'
-const branchChoiceProvided = ['new-branch', 'switch-existing', 'current-branch'].includes(branchChoiceRaw) && !(branchChoiceRaw === 'switch-existing' && !GP.targetBranch)
-const branchMode = branchChoiceProvided ? branchChoiceRaw : 'new-branch'   // 安全缺省仅供代码路径；未选择时不会走到使用它的分支
 const branchPrefix = GP.branchPrefix ? String(GP.branchPrefix) : 'ai/'
 const targetBranch = GP.targetBranch ? String(GP.targetBranch) : null
+// 客户提交策略（new-branch / switch-existing / current-branch；"direct" 兼容）解析复用【共享核】core/branch-choice.mjs，
+// 与 Codex 适配（bin/core branch-choice、bin/git-state）同一逻辑——不再各维护一套（消除漂移）。发布在 clone 工作副本上进行：
+// clone 永在分支上（detachedHead=false）；switch-existing 的目标分支命名即视为可解析，真实存在性在 Branch 阶段确认
+// （本地无→远程 track，远程也无→ok=false）。未做出有效选择 → Preflight 停于 PUBLISH_NEEDS_CHOICE，绝不替客户决定。
+// >>> BRANCH-CHOICE-START — 与 core/branch-choice.mjs 同一逻辑（行为由 scripts/self-check.mjs 比对锁定，单测见 scripts/branch-choice.test.mjs）；勿删本标记与 END 标记
+const BRANCH_MODES = ['new-branch', 'switch-existing', 'current-branch']
+function resolveBranchChoice(input) {
+  const i = input || {}
+  let mode = i.requestedMode ? String(i.requestedMode).toLowerCase() : ''
+  if (mode === 'direct') mode = 'current-branch'   // backward-compat alias
+  const targetBranch = i.targetBranch ? String(i.targetBranch) : null
+  const detached = i.detachedHead === true
+  const targetExists = i.targetBranchExists === true
+  const availableOptions = [
+    { mode: 'new-branch', available: true, reason: '从当前提交新建分支后提交推送' },
+    {
+      mode: 'switch-existing',
+      available: !!targetBranch && targetExists,
+      reason: !targetBranch
+        ? '需指定 gitPolicy.targetBranch（已有分支名）'
+        : (targetExists ? `切换到已有分支 "${targetBranch}" 后提交推送` : `分支 "${targetBranch}" 本地与远程均不存在`),
+    },
+    {
+      mode: 'current-branch',
+      available: !detached,
+      reason: detached ? '当前为 detached HEAD，无当前分支可直接提交' : '保持当前分支不变，直接提交推送',
+    },
+  ]
+  const isKnownMode = BRANCH_MODES.includes(mode)
+  const chosen = availableOptions.find((o) => o.mode === mode) || null
+  const choiceProvided = isKnownMode && !!chosen && chosen.available === true
+  const resolvedMode = choiceProvided ? mode : null
+  let blockedReason = null
+  if (isKnownMode && chosen && !chosen.available) blockedReason = `所选提交方式 "${mode}" 在当前环境不可用：${chosen.reason}`
+  return { availableOptions, choiceProvided, resolvedMode, needsChoice: !choiceProvided, blockedReason }
+}
+// <<< BRANCH-CHOICE-END
+// clone 场景：detachedHead=false；目标分支命名即视为可解析（存在性在 Branch 阶段确认）
+const branchChoice = resolveBranchChoice({ requestedMode: GP.branchMode || '', targetBranch, detachedHead: false, targetBranchExists: !!targetBranch })
+const branchChoiceProvided = branchChoice.choiceProvided
+const branchMode = branchChoice.resolvedMode || 'new-branch'   // 安全缺省仅供代码路径；needsChoice 时不会走到使用它的分支
 const allowMainPush = !!GP.allowMainPush
 const pushRemote = GP.pushRemote ? String(GP.pushRemote) : 'origin'
 

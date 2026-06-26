@@ -22,7 +22,8 @@ import { runGitGuardTests } from './git-guard.test.mjs'
 import { classifyProjectType as coreClassifyProjectType } from '../core/project-type.mjs'
 import { runProjectTypeTests, CASES as PROJECT_TYPE_CASES } from './project-type.test.mjs'
 import { runGitStateTests } from './git-state.test.mjs'
-import { runBranchChoiceTests } from './branch-choice.test.mjs'
+import { resolveBranchChoice as coreResolveBranchChoice } from '../core/branch-choice.mjs'
+import { runBranchChoiceTests, CASES as BRANCH_CHOICE_CASES } from './branch-choice.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -418,6 +419,28 @@ for (const failure of runProjectTypeTests()) errors.push(failure)
 // CLI and the Codex adapter consume core/ directly (single copy), so there is nothing to drift against.
 for (const failure of runGitStateTests()) errors.push(failure)
 for (const failure of runBranchChoiceTests()) errors.push(failure)
+// branch-choice resolution: behaviour-diff the publish workflow inline copy against core/branch-choice.mjs
+// (whole-object deep compare over fixed vectors) so Claude and the Codex adapter cannot drift apart.
+{
+  const bcWf = '.claude/workflows/publish-delivery.js'
+  if (exists(bcWf)) {
+    const src = read(bcWf)
+    const s = src.indexOf('// >>> BRANCH-CHOICE-START')
+    const e = src.indexOf('// <<< BRANCH-CHOICE-END')
+    if (s === -1 || e === -1 || e <= s) {
+      errors.push(`${bcWf} is missing BRANCH-CHOICE markers required for the inline-vs-core parity check`)
+    } else {
+      const block = src.slice(src.indexOf('\n', s), e)
+      let inlineFn = null
+      try { inlineFn = new Function(`${block}\n; return resolveBranchChoice;`)() } catch (error) { errors.push(`failed to evaluate inline resolveBranchChoice in ${bcWf}: ${error.message}`) }
+      if (inlineFn) {
+        for (const [name, input] of BRANCH_CHOICE_CASES) {
+          if (JSON.stringify(inlineFn(input)) !== JSON.stringify(coreResolveBranchChoice(input))) errors.push(`branch-choice drift on "${name}"`)
+        }
+      }
+    }
+  }
+}
 if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guard-hook.mjs (git red-line PreToolUse hook entry)')
 if (exists('.claude/settings.json')) {
   let settingsText = ''
@@ -490,5 +513,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)
