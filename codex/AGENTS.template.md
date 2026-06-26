@@ -5,6 +5,11 @@ target project root from this template; **keep the generated `AGENTS.md` out of 
 repository tracks only the template. It consumes the platform-neutral contracts in `../core/` and must
 **not** fork the engineering methodology into a second independent copy. Full stage contracts: `pipeline.md`.
 
+The **recognizable entry point** is the Codex skill `.agents/skills/ai-engineering-delivery/` — selectable
+via `/skills`, mentionable as `$ai-engineering-delivery`, or auto-selected by its `description`. That skill
+orchestrates the flow (delegating every deterministic decision to `bin/` + `scripts/`) and obeys the hard
+constraints in this `AGENTS.md`.
+
 ## Scope
 
 The complete closed loop, identical in rules/artifacts/statuses to the Claude workflow:
@@ -47,6 +52,19 @@ Never `git push --force`/`-f`; never delete a remote branch or rewrite history (
 `node bin/core.mjs git-guard` first). Never stage `.env`/keys/`*.pem`/personal config. Protected branches
 (main/master/release) require explicit opt-in. High-risk domains (payment/permission/secret/auth/
 irreversible) hit a human gate. Block any change outside the planned SCOPE.
+
+## Delivery Discipline (hard constraints)
+
+- **Only modify SCOPE** — the files the plan declares; any out-of-SCOPE change is blocked.
+- **The implementer never self-reviews** — independent review and independent verification are separate
+  stages run by a fresh role; coding output is never graded by its own author.
+- **Never deliver on failing tests** — the DONE command must pass, and the independent verifier's tests
+  (re-materialized from the test-plan, not the in-tree copy) must pass, before a delivery is anything but
+  BLOCKED.
+- **Customer git-branch choice before any branch op / commit / push** (see the gate above) — never
+  auto-decide; offer only options the current environment actually supports.
+- **The customer project's existing conventions win** — match its code style, structure, test layout and
+  tooling; do not impose this methodology's defaults over established project norms.
 
 ## Non-Goals
 

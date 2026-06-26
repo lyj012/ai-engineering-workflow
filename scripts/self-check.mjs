@@ -442,6 +442,17 @@ for (const failure of runBranchChoiceTests()) errors.push(failure)
   }
 }
 if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guard-hook.mjs (git red-line PreToolUse hook entry)')
+// Codex skill entry point: the recognizable `.agents/skills` entry must exist with valid name+description
+// frontmatter (the format Codex documents), so the entry can't silently break or disappear.
+{
+  const skillFile = '.agents/skills/ai-engineering-delivery/SKILL.md'
+  if (!exists(skillFile)) errors.push(`missing Codex skill entry ${skillFile}`)
+  else {
+    const fm = /^---\n([\s\S]*?)\n---/.exec(read(skillFile))
+    if (!fm) errors.push(`${skillFile} is missing YAML frontmatter`)
+    else if (!/(^|\n)name:\s*\S/.test(fm[1]) || !/(^|\n)description:\s*\S/.test(fm[1])) errors.push(`${skillFile} frontmatter must include name and description`)
+  }
+}
 if (exists('.claude/settings.json')) {
   let settingsText = ''
   try { settingsText = read('.claude/settings.json') } catch { settingsText = '' }
@@ -513,5 +524,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, codex skill entry, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)

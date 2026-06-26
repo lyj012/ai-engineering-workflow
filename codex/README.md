@@ -33,6 +33,9 @@ scripts/
 .claude/workflows/            # Claude Dynamic Workflow adapter (inlines core/ with self-check parity)
   plan-from-requirement.js deliver-from-plan.js publish-delivery.js auto-deliver.js analyze-repo.js
 
+.agents/skills/               # Codex skill entry point (scanned by Codex CLI / IDE / Desktop app)
+  ai-engineering-delivery/SKILL.md
+
 codex/                        # Codex execution shape (no Claude runtime)
   AGENTS.template.md pipeline.md plan-from-requirement.md
 ```
@@ -40,6 +43,20 @@ codex/                        # Codex execution shape (no Claude runtime)
 `core/` owns the shared logic. `bin/` exposes it as cross-platform CLIs so Codex runs the **same** decisions
 without any Claude `Workflow`/`agent()` runtime. `.claude/` inlines the same `core/` logic with
 `self-check.mjs` parity locks. One source of truth, two adapters.
+
+## Skill Entry Point (Codex)
+
+`.agents/skills/ai-engineering-delivery/SKILL.md` is the recognizable Codex entry. Codex (CLI / IDE / app)
+scans `.agents/skills` from the working directory up to the repo root, so a user runs the whole flow via
+`/skills`, `$ai-engineering-delivery`, or implicit selection by the skill's `description` — **without being
+told to read any markdown file** (req: start from the skill, not a manual file pointer). The skill only
+**orchestrates**: it delegates every status / gate / git / validation decision to `bin/` + `scripts/` (no
+logic copied into the prompt) and obeys the hard constraints in `AGENTS.md` (from `AGENTS.template.md`).
+
+To use it in a customer project: make the toolkit reachable (clone this repo and point `AIEW_HOME` at it),
+make the skill discoverable from that project (copy `.agents/skills/ai-engineering-delivery/` into the
+customer repo or a parent dir Codex scans, or install it at the Codex user level), and generate the project
+`AGENTS.md` from `codex/AGENTS.template.md`.
 
 ## First Runnable Target
 
@@ -83,9 +100,15 @@ Verified in this repository (plain Node, runs here):
   `bin/core.mjs <fn>` (every `core/` decision), backed by `core/git-state.mjs` + `core/branch-choice.mjs`
   with unit tests in `scripts/git-state.test.mjs` (10) and `scripts/branch-choice.test.mjs` (12);
 - the git-choice gate logic (three strategies, environment-valid options only, detached-HEAD / worktree /
-  missing-target handling) is unit-tested and exercised live here.
+  missing-target handling) is unit-tested and exercised live here;
+- the Codex skill `.agents/skills/ai-engineering-delivery/SKILL.md` exists as a real, well-formed entry
+  point (valid `name` + `description` frontmatter, the format Codex documents), and every deterministic
+  command it tells Codex to run is verified to work here.
 
 Pending local Codex verification (not yet exercised — do not claim runnable until proven):
+
+- that Codex Desktop actually discovers, auto-selects and runs the skill end to end (no Codex Desktop is
+  available in this environment to verify recognition / `/skills` / implicit selection);
 
 - exact `codex exec` command shape, `--output-schema` sufficiency, and sandbox flags per stage;
 - that Codex Desktop reads a root `AGENTS.md` and one-invocation-per-stage is workable end to end;
