@@ -14,7 +14,8 @@
 //     gitPolicy: { branchMode, branchPrefix, targetBranch, allowMainPush, pushRemote },
 //     authorName, authorEmail, commitMessage,
 //     allowHighRiskAutoPublish: false, dryRunPublish: false,
-//     planArgs: {}, deliverArgs: {}, publishArgs: {}   // 透传给各子引擎的额外参数
+//     planArgs: {}, deliverArgs: {}, publishArgs: {},   // 透传给各子引擎的额外参数
+//     workflowsDir: "<.claude/workflows 绝对路径>"        // 可选：按名解析子引擎失败时回退 scriptPath（非本仓库项目上下文运行时需要）
 //   }})
 // 运行时事实：args 到脚本是 JSON 字符串需 parse；脚本体无文件 IO/时间 API；子引擎各自落盘，编排器只串状态与产物目录。
 
@@ -52,9 +53,26 @@ const dryRunPublish = !!A.dryRunPublish
 const planArgs = (A.planArgs && typeof A.planArgs === 'object') ? A.planArgs : {}
 const deliverArgs = (A.deliverArgs && typeof A.deliverArgs === 'object') ? A.deliverArgs : {}
 const publishArgs = (A.publishArgs && typeof A.publishArgs === 'object') ? A.publishArgs : {}
+// 子引擎脚本所在目录（可选）：用于"按名解析失败时回退 scriptPath"，使编排器在非本仓库项目上下文也能运行。
+const workflowsDir = A.workflowsDir ? String(A.workflowsDir) : null
 
 const execLog = []
 function note(m) { execLog.push(m); log(m) }
+
+// 子工作流解析：优先按名（本仓库作为活动项目时可用，最便携）；按名失败且提供了 workflowsDir，则回退到
+// scriptPath（任意项目上下文都能跑）。子引擎内部都不调用 workflow()，故无论哪条路径都满足"仅一层嵌套"。
+async function runChild(name, childArgs) {
+  try {
+    return await workflow(name, childArgs)
+  } catch (e) {
+    const msg = String((e && e.message) || e)
+    if (workflowsDir && /no workflow with that name|not found|unknown workflow|cannot find|no such workflow/i.test(msg)) {
+      note(`workflow('${name}') 按名解析失败，回退 scriptPath：${workflowsDir}/${name}.js`)
+      return await workflow({ scriptPath: `${workflowsDir}/${name}.js` }, childArgs)
+    }
+    throw e
+  }
+}
 
 // 确定性闸门（纯 JS，不依赖子代理自述）
 function planReady(planRes) {
@@ -74,7 +92,7 @@ try {
   else {
     // ---- Plan ----
     phase('Plan')
-    planRes = await workflow('plan-from-requirement', Object.assign({ requirement, target, constraints, mode }, planArgs))
+    planRes = await runChild('plan-from-requirement', Object.assign({ requirement, target, constraints, mode }, planArgs))
     if (!planRes) { stage = 'Plan'; finalStatus = 'FAILED'; note('plan-from-requirement 未返回结果（子流程失败）。') }
     else {
       planDir = planRes.persisted && planRes.persisted.absOutDir ? planRes.persisted.absOutDir : null
@@ -98,7 +116,7 @@ try {
 
         // ---- Deliver ----
         phase('Deliver')
-        delRes = await workflow('deliver-from-plan', Object.assign({ planDir, targetRepo: target, mode }, deliverArgs))
+        delRes = await runChild('deliver-from-plan', Object.assign({ planDir, targetRepo: target, mode }, deliverArgs))
         if (!delRes) { stage = 'Deliver'; finalStatus = 'FAILED'; note('deliver-from-plan 未返回结果（子流程失败）。') }
         else {
           deliveryDir = delRes.runDir || null
@@ -117,14 +135,14 @@ try {
 
             // ---- Publish ----
             phase('Publish')
-            pubRes = await workflow('publish-delivery', Object.assign({
+            pubRes = await runChild('publish-delivery', Object.assign({
               deliveryDir, targetRepo: target, remoteUrl, gitPolicy,
               authorName, authorEmail, commitMessage, allowHighRiskAutoPublish, dryRun: dryRunPublish,
             }, publishArgs))
             if (!pubRes) { stage = 'Publish'; finalStatus = 'FAILED'; note('publish-delivery 未返回结果（子流程失败）。') }
             else {
               stage = 'Publish'; finalStatus = pubRes.finalStatus
-              note(`Publish：finalStatus=${pubRes.finalStatus}；分支=${pubRes.branch ? pubRes.branch.name : 'N/A'}；push=${!!(pubRes.push && pubRes.push.performed)}。`)
+              note(`Publish：finalStatus=${pubRes.finalStatus}；分支=${pubRes.branch ? pubRes.branch.branchName : 'N/A'}；push=${!!(pubRes.push && pubRes.push.pushPerformed)}。`)
               if (pubRes.finalStatus === 'PUBLISH_BLOCKED') escalation = '发布被闸门拦截（高风险域/受保护分支/缺权限/交付未达标）。见发布报告中的"如何用 ! git push 自行完成"。'
               else if (pubRes.finalStatus === 'PUBLISH_UNVERIFIED') escalation = '已 push 但发布后远程核验未全过，未宣称成功，请人工核对远程状态。'
             }
@@ -148,10 +166,10 @@ const summary = {
   delivery: delRes ? { finalStatus: delRes.finalStatus, deliveryDir, filesChanged: (delRes.manifest && delRes.manifest.filesChanged) || [] } : null,
   publish: pubRes ? {
     finalStatus: pubRes.finalStatus,
-    branch: pubRes.branch ? pubRes.branch.name : null,
-    pushed: !!(pubRes.push && pubRes.push.performed),
+    branch: pubRes.branch ? pubRes.branch.branchName : null,
+    pushed: !!(pubRes.push && pubRes.push.pushPerformed),
     remoteRef: pubRes.push ? pubRes.push.remoteRef : null,
-    commit: pubRes.commit ? pubRes.commit.sha : null,
+    commit: pubRes.commit ? pubRes.commit.commitSha : null,
     remoteVerified: pubRes.remoteVerify || null,
     publishDir: pubRes.publishDir || null,
   } : null,
