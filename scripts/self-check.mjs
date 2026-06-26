@@ -21,6 +21,8 @@ import { runPublishStatusTests, CASES as PUBLISH_STATUS_CASES } from './publish-
 import { runGitGuardTests } from './git-guard.test.mjs'
 import { classifyProjectType as coreClassifyProjectType } from '../core/project-type.mjs'
 import { runProjectTypeTests, CASES as PROJECT_TYPE_CASES } from './project-type.test.mjs'
+import { runGitStateTests } from './git-state.test.mjs'
+import { runBranchChoiceTests } from './branch-choice.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -410,6 +412,12 @@ for (const failure of runProjectTypeTests()) errors.push(failure)
     }
   }
 }
+
+// git-state classification + branch-choice resolution (shared cross-adapter git gate): run unit tests.
+// No inline-vs-core parity yet — these become parity-locked once a workflow inlines them; today the bin/
+// CLI and the Codex adapter consume core/ directly (single copy), so there is nothing to drift against.
+for (const failure of runGitStateTests()) errors.push(failure)
+for (const failure of runBranchChoiceTests()) errors.push(failure)
 if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guard-hook.mjs (git red-line PreToolUse hook entry)')
 if (exists('.claude/settings.json')) {
   let settingsText = ''
@@ -482,5 +490,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)
