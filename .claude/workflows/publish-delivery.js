@@ -15,7 +15,8 @@
 //     deliveryDir: "<deliver-from-plan 的交付目录，必填>",
 //     targetRepo: "<目标仓库本地路径；省略则取 delivery-manifest.targetRepo>",
 //     remoteUrl: "<要 push 的 git 远程；省略则取 targetRepo 的 origin>",
-//     gitPolicy: { branchMode: "new-branch|direct", branchPrefix: "ai/", targetBranch: "main",
+//     gitPolicy: { branchMode: "new-branch|switch-existing|current-branch",  // 必填：客户提交策略选择，未选停于 PUBLISH_NEEDS_CHOICE
+//                  branchPrefix: "ai/", targetBranch: "<switch-existing 时必填：客户指定的已有分支>",
 //                  allowMainPush: false, pushRemote: "origin" },
 //     authorName: "<提交者名；省略则用环境 git 身份>", authorEmail: "<提交者邮箱>",
 //     commitMessage: "<覆盖默认提交信息>",
@@ -56,15 +57,20 @@ const authorName = A.authorName ? String(A.authorName) : null
 const authorEmail = A.authorEmail ? String(A.authorEmail) : null
 const commitMessageArg = A.commitMessage ? String(A.commitMessage) : null
 const coAuthoredBy = A.coAuthoredBy ? String(A.coAuthoredBy) : null   // 可选模型/协作者署名；省略则默认提交信息不含 Co-Authored-By（保持模型无关，避免错误归属）
-// L1 模型分层：纯 git plumbing/落盘类 agent（clone、push、写报告）用轻模型省成本；安全/验证类（apply 查越界、commit 查禁入、远程核验）一律留默认强模型。可经 args.lightModel 覆盖。
+// L1 模型分层：仅 schema 结构化返回的 git plumbing agent（clone、push）用轻模型省成本；安全/验证类（apply 查越界、commit 查禁入、远程核验）一律留默认强模型。
+// **落盘 agent 不降级**：finalize 逐字写 final-delivery.json 等大 JSON，实测轻模型写大 JSON 会漏转义→不可解析，须留强模型保真。可经 args.lightModel 覆盖。
 const LIGHT_MODEL = ['haiku', 'sonnet', 'opus', 'fable'].includes(String(A.lightModel)) ? String(A.lightModel) : 'haiku'
 const allowHighRiskAutoPublish = !!A.allowHighRiskAutoPublish
 const dryRun = !!A.dryRun
 const GP = (A.gitPolicy && typeof A.gitPolicy === 'object') ? A.gitPolicy : {}
-// 客户必须显式选择发布方式（gitPolicy.branchMode："new-branch"=新建分支后提交推送 / "direct"=当前分支直接提交推送）；
-// 未显式选择则在 Preflight 停于 PUBLISH_NEEDS_CHOICE，不执行 commit/push（受保护分支/高风险/禁强推规则不变）。
-const branchChoiceRaw = GP.branchMode ? String(GP.branchMode).toLowerCase() : ''
-const branchChoiceProvided = branchChoiceRaw === 'new-branch' || branchChoiceRaw === 'direct'
+// 客户必须显式选择提交方式（gitPolicy.branchMode）：
+//   "new-branch"      = 从当前分支新建分支后提交推送
+//   "switch-existing" = 切换到客户指定的已有分支（gitPolicy.targetBranch 必填）后提交推送
+//   "current-branch"  = 保持当前分支不变，直接提交推送（旧值 "direct" 兼容映射为本模式）
+// 未显式有效选择（含 switch-existing 缺 targetBranch）→ Preflight 停于 PUBLISH_NEEDS_CHOICE，不 checkout/建分支/commit/push（受保护分支/高风险/敏感文件/禁强推规则不变）。
+let branchChoiceRaw = GP.branchMode ? String(GP.branchMode).toLowerCase() : ''
+if (branchChoiceRaw === 'direct') branchChoiceRaw = 'current-branch'
+const branchChoiceProvided = ['new-branch', 'switch-existing', 'current-branch'].includes(branchChoiceRaw) && !(branchChoiceRaw === 'switch-existing' && !GP.targetBranch)
 const branchMode = branchChoiceProvided ? branchChoiceRaw : 'new-branch'   // 安全缺省仅供代码路径；未选择时不会走到使用它的分支
 const branchPrefix = GP.branchPrefix ? String(GP.branchPrefix) : 'ai/'
 const targetBranch = GP.targetBranch ? String(GP.targetBranch) : null
@@ -144,9 +150,13 @@ const CLONE_SCHEMA = { type: 'object', additionalProperties: false, properties: 
 }, required: ['ok', 'publishDir', 'repoDir', 'defaultBranch', 'cloneClean', 'note'] }
 
 const BRANCH_SCHEMA = { type: 'object', additionalProperties: false, properties: {
-  ok: { type: 'boolean' }, branchName: { type: 'string' }, createdFrom: { type: 'string' },
-  isNewBranch: { type: 'boolean', description: '是否新建分支（false=直接用已存在分支，如 direct 模式的 main）' }, note: { type: 'string' },
-}, required: ['ok', 'branchName', 'createdFrom', 'isNewBranch', 'note'] }
+  ok: { type: 'boolean' }, branchName: { type: 'string', description: '最终提交分支' }, createdFrom: { type: 'string' },
+  originalBranch: { type: 'string', description: 'clone 后所在的原当前分支' },
+  isNewBranch: { type: 'boolean', description: '是否新建分支（= branchCreated）' },
+  branchCreated: { type: 'boolean', description: '是否新建了分支（new-branch=true）' },
+  branchSwitched: { type: 'boolean', description: '是否发生 checkout/switch（new-branch 与 switch-existing=true，current-branch=false）' },
+  note: { type: 'string' },
+}, required: ['ok', 'branchName', 'createdFrom', 'originalBranch', 'isNewBranch', 'branchCreated', 'branchSwitched', 'note'] }
 
 const APPLY_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   ok: { type: 'boolean' }, appliedFiles: { type: 'array', items: { type: 'string' } },
@@ -207,7 +217,7 @@ try {
   else if (!publishable) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 上游交付未达可发布态（需 DELIVERED/带开环项 + apply-check 通过 + diff 存在），拒绝发布。') }
   else if (!remoteUrl) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 解析不到要 push 的远程（targetRepo 无 origin 且未传 remoteUrl），无处可发。请传 args.remoteUrl。') }
   else if (!pre.remoteReachable) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 远程不可达（网络或凭据问题），无法发布。') }
-  else if (!branchChoiceProvided) { finalStatus = 'PUBLISH_NEEDS_CHOICE'; note('⏸ 需客户先选择发布方式，未明确选择前【不执行 commit/push】：(1) 新建分支后提交并推送 → 传 gitPolicy.branchMode="new-branch"；(2) 当前分支直接提交并推送 → 传 gitPolicy.branchMode="direct"。请带选择重跑发布。受保护分支/高风险/禁强推规则不变。') }
+  else if (!branchChoiceProvided) { finalStatus = 'PUBLISH_NEEDS_CHOICE'; note('⏸ 需客户先选择提交方式，未明确选择前【不 checkout/建分支/commit/push】：(1) 新建分支后提交推送 → gitPolicy.branchMode="new-branch"；(2) 切换到已有分支后提交推送 → gitPolicy.branchMode="switch-existing" 且 gitPolicy.targetBranch="<已有分支>"；(3) 当前分支直接提交推送 → gitPolicy.branchMode="current-branch"。请带选择重跑。受保护分支/高风险/敏感文件/禁强推规则不变。') }
   else {
 
     // ---- Clone：clone 远程到隔离发布工作副本（保留 .git）----
@@ -226,19 +236,21 @@ try {
 
     // ---- Branch：据策略建分支（受保护分支需 allowMainPush）----
     phase('Branch')
-    const baseBranch = targetBranch || clone.defaultBranch || pre.defaultBranch || 'main'
     const br = await callAgent(
-      `你负责在发布副本 ${clone.repoDir} 里准备目标分支。${SAFETY}\n` +
-      (branchMode === 'direct'
-        ? `策略=direct（直接用已存在分支）：checkout 分支 "${baseBranch}"（git checkout ${baseBranch}），确保与 ${pushRemote}/${baseBranch} 对齐。branchName="${baseBranch}"，isNewBranch=false，createdFrom="${baseBranch}"。\n`
-        : `策略=new-branch（新建特性分支）：先 checkout 基分支 "${baseBranch}"；ts=$(date +%Y%m%d-%H%M%S)；用需求目标生成简短 slug（小写、空格转-、去特殊字符、≤40字符）；branchName="${branchPrefix}<slug>-$ts"；git checkout -b "$branchName"。isNewBranch=true，createdFrom="${baseBranch}"。需求目标：${pre.requirementGoal}\n`) +
-      `回报 ok/branchName(实际分支名)/createdFrom/isNewBranch/note。`,
+      `你负责在发布副本 ${clone.repoDir} 里按客户选择准备提交分支。${SAFETY}\n` +
+      `先记录原当前分支 originalBranch=clone 后所在分支（git -C "${clone.repoDir}" rev-parse --abbrev-ref HEAD）。\n` +
+      (branchMode === 'new-branch'
+        ? `策略=new-branch（从当前分支新建）：保持在 originalBranch 上，ts=$(date +%Y%m%d-%H%M%S)，用需求目标生成简短 slug（小写/空格转-/去特殊字符/≤40）；git checkout -b "${branchPrefix}<slug>-$ts"。branchName=新分支名、createdFrom=originalBranch、isNewBranch=true、branchCreated=true、branchSwitched=true。需求目标：${pre.requirementGoal}\n`
+        : branchMode === 'switch-existing'
+          ? `策略=switch-existing（切换到客户指定的【已有】分支 "${targetBranch}"）：git checkout "${targetBranch}"；若本地无但远程有，用 git checkout -b "${targetBranch}" --track ${pushRemote}/"${targetBranch}"。该分支必须是已存在分支（不得新建）；若远程也不存在则 ok=false 并在 note 说明。branchName="${targetBranch}"、createdFrom="${targetBranch}"、isNewBranch=false、branchCreated=false、branchSwitched=true。\n`
+          : `策略=current-branch（保持当前分支不变，不 checkout、不建分支）：branchName=originalBranch、createdFrom=originalBranch、isNewBranch=false、branchCreated=false、branchSwitched=false。\n`) +
+      `回报 ok/branchName(最终提交分支)/originalBranch/createdFrom/isNewBranch/branchCreated/branchSwitched/note。`,
       { schema: BRANCH_SCHEMA, label: 'prepare-branch', phase: 'Branch', agentType: AT, effort: 'low' }, true)
     if (!br.ok) { failedStages.push('Branch'); halt('Branch', br.error, 'PUBLISH_BLOCKED') }
     branch = br.value
     // 确定性分支策略闸门（纯 JS）：受保护分支名需 allowMainPush
     branchAllowed = !(isProtectedBranchName(branch.branchName) && !allowMainPush)
-    note(`Branch：${branch.branchName}（${branch.isNewBranch ? '新建' : '复用'}，自 ${branch.createdFrom}）；受保护名=${isProtectedBranchName(branch.branchName)} → 策略允许=${branchAllowed}。`)
+    note(`Branch：原分支=${branch.originalBranch} → 最终=${branch.branchName}（方式=${branchMode}，创建=${branch.branchCreated}/切换=${branch.branchSwitched}）；受保护名=${isProtectedBranchName(branch.branchName)} → 策略允许=${branchAllowed}。`)
     if (!branchAllowed) { finalStatus = 'PUBLISH_BLOCKED'; note(`⛔ 目标分支 ${branch.branchName} 是受保护分支（main/master/release），默认禁止直推；如确需，请传 gitPolicy.allowMainPush:true。已停在 push 前。`) }
     else {
 
@@ -339,14 +351,15 @@ const finalDelivery = {
   schemaVersion: '1.0', workflow: 'publish-delivery', deliveryDir,
   finalStatus, dryRun,
   gitPolicy: { branchMode, branchPrefix, targetBranch, allowMainPush, pushRemote },
-  branchChoice: branchChoiceProvided ? (branchMode === 'direct' ? 'current-branch-direct' : 'new-branch') : null,
+  branchChoice: branchChoiceProvided ? branchMode : null,
   branchChoiceProvided,
   targetRepo: targetRepoArg || (pre && pre.targetRepo) || null,
   remoteUrl: remoteUrlArg || (pre && pre.remoteUrl) || null,
   deliverableStatus: pre ? pre.deliverableStatus : null,
   highRiskDomains: pre ? pre.highRiskDomains : [],
   highRiskBlocked: !!highRiskBlocked,
-  branch: branch ? { name: branch.branchName, isNewBranch: branch.isNewBranch, createdFrom: branch.createdFrom, allowed: branchAllowed } : null,
+  branch: branch ? { name: branch.branchName, originalBranch: branch.originalBranch, finalBranch: branch.branchName, isNewBranch: branch.isNewBranch, branchCreated: branch.branchCreated, branchSwitched: branch.branchSwitched, createdFrom: branch.createdFrom, allowed: branchAllowed } : null,
+  branchChoiceMode: branchChoiceProvided ? branchMode : null,
   commit: commit ? { sha: commit.commitSha, author: commit.authorLine, files: commit.committedFiles } : null,
   push: push ? { performed: push.pushPerformed, rejected: push.pushRejected, remoteRef: push.remoteRef, url: push.pushUrlSafe } : null,
   remoteVerify: remoteVerify || null,
@@ -363,10 +376,10 @@ if (clone && clone.publishDir) {
   const fn = await callAgent(
     `你负责把发布记录落盘（只在 ${clone.publishDir} 内写，绝不再动远程/原仓库）。${SAFETY}\n` +
     `1) 写 ${clone.publishDir}/final-delivery.json（规范 JSON，用下方对象原样写入；最终状态=${finalStatus}，不要更改）。\n` +
-    `2) 写 ${clone.publishDir}/publish-report.md（中文）：含 1 最终状态(=${finalStatus}) 2 来源交付目录 3 【客户选择的发布方式 branchChoice=${branchChoiceProvided ? branchMode : '未选择'}（new-branch=新建分支 / direct=当前分支直接）】 4 远程与分支(含是否新分支/是否受保护) 5 提交(SHA/作者/文件) 6 push 结果 7 发布后远程核验四项(逐项) 8 开环项 9 回滚指引 10 若未发布/未核验，写明原因与"如何用 ! git push 自行完成"。\n` +
+    `2) 写 ${clone.publishDir}/publish-report.md（中文）：含 1 最终状态(=${finalStatus}) 2 来源交付目录 3 【提交策略：方式=${branchChoiceProvided ? branchMode : '未选择'}（new-branch 新建分支 / switch-existing 切到已有分支 / current-branch 当前分支直提）、原当前分支=${branch ? branch.originalBranch : 'N/A'}、最终提交分支=${branch ? branch.branchName : 'N/A'}、是否创建分支=${branch ? branch.branchCreated : 'N/A'}、是否切换=${branch ? branch.branchSwitched : 'N/A'}】 4 远程与分支(含是否受保护) 5 提交(SHA/作者/文件) 6 push 结果 7 发布后远程核验四项(逐项) 8 开环项 9 回滚指引 10 若未发布/未核验，写明原因与"如何用 ! git push 自行完成"。\n` +
     `3) 写 ${clone.publishDir}/execution-log.md（用下方日志数组）。\n` +
     `回报 ok/absOutDir/written/note。\nfinal-delivery(JSON):\n${JSON.stringify(finalDelivery)}\nexecution-log(JSON):\n${JSON.stringify(execLog)}`,
-    { schema: FINALIZE_SCHEMA, label: 'finalize', phase: 'Finalize', agentType: AT, effort: 'low', model: LIGHT_MODEL }, true)
+    { schema: FINALIZE_SCHEMA, label: 'finalize', phase: 'Finalize', agentType: AT, effort: 'low' }, true)   // 落盘逐字写大 JSON：不降级，保真
   finalize = fn.ok ? fn.value : { ok: false, absOutDir: clone.publishDir, written: [], note: fn.error }
   note(`Finalize：${finalize.ok ? '已写入 ' + finalize.absOutDir + '（' + finalize.written.length + ' 文件）' : '失败：' + finalize.note}`)
 } else {

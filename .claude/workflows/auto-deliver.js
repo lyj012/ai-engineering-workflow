@@ -143,7 +143,7 @@ try {
             else {
               stage = 'Publish'; finalStatus = pubRes.finalStatus
               note(`Publish：finalStatus=${pubRes.finalStatus}；分支=${pubRes.branch ? pubRes.branch.branchName : 'N/A'}；push=${!!(pubRes.push && pubRes.push.pushPerformed)}。`)
-              if (pubRes.finalStatus === 'PUBLISH_NEEDS_CHOICE') escalation = '发布前需客户选择发布方式：(1) 新建分支后提交推送 / (2) 当前分支直接提交推送。请带 gitPolicy.branchMode（"new-branch" 或 "direct"）重跑；未选择前不发布。'
+              if (pubRes.finalStatus === 'PUBLISH_NEEDS_CHOICE') escalation = '发布前需客户选择提交方式：(1) 新建分支 / (2) 切到客户指定的已有分支(需 gitPolicy.targetBranch) / (3) 当前分支直提。请带 gitPolicy.branchMode（"new-branch"/"switch-existing"/"current-branch"）重跑；未选择前不发布。'
               else if (pubRes.finalStatus === 'PUBLISH_BLOCKED') escalation = '发布被闸门拦截（高风险域/受保护分支/缺权限/交付未达标）。见发布报告中的"如何用 ! git push 自行完成"。'
               else if (pubRes.finalStatus === 'PUBLISH_UNVERIFIED') escalation = '已 push 但发布后远程核验未全过，未宣称成功，请人工核对远程状态。'
             }

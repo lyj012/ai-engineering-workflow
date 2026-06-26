@@ -13,7 +13,7 @@
     "DELIVERED_WITH_OPEN_ITEMS": "Delivery produced a diff, but some verification remains manual or environment-dependent."
   },
   "publishStatuses": {
-    "PUBLISH_NEEDS_CHOICE": "Stopped before commit/push because the customer has not explicitly chosen the branch mode (new-branch vs commit directly on the current branch). Re-run with gitPolicy.branchMode set to 'new-branch' or 'direct'. Not a failure; protected-branch / high-risk / no-force-push rules still apply once a choice is made.",
+    "PUBLISH_NEEDS_CHOICE": "Stopped before any checkout/switch/branch-create/commit/push because the customer has not explicitly chosen a commit strategy. Re-run with gitPolicy.branchMode set to one of three: 'new-branch' (create a branch off the current branch), 'switch-existing' (switch to the customer-specified existing gitPolicy.targetBranch), or 'current-branch' (commit on the current branch unchanged; legacy 'direct' maps here). The report records the chosen mode, the original branch, the final commit branch, and whether a branch was created or switched. Not a failure; protected-branch / high-risk / sensitive-file / no-force-push rules still apply once a choice is made.",
     "PUBLISH_BLOCKED": "Publish refused by a deterministic gate (delivery not publishable, diff apply-check failed, protected branch without allowMainPush, push not performed, prior block, or a high-risk domain without allowHighRiskAutoPublish).",
     "PUBLISH_DRYRUN": "dryRun: branch and commit prepared, but push intentionally skipped.",
     "PUBLISH_UNVERIFIED": "Pushed, but post-push remote verification did not fully pass (remote SHA / committed files / forbidden files / publish-copy work tree); success is not claimed.",
