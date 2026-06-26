@@ -18,7 +18,7 @@
 
 export const meta = {
   name: 'deliver-from-plan',
-  description: '桥接：plan-from-requirement 的方案 → 在沙箱副本里把代码写到测试全绿 → 出 diff（不改原仓库/不提交）。就绪闸门→脚手架→测试物化(先红后绿)→编码→独立审查→修复→交付。流程真相源为 docs/12 与 vendor/zhuliming-templates。',
+  description: '桥接：plan-from-requirement 的方案 → 在沙箱副本里把代码写到测试全绿 → 出 diff（不改原仓库/不提交）。就绪闸门→脚手架→测试物化(先红后绿)→编码→独立审查→独立修复→独立验证(含从 test-plan 重物化复测防改测试迁就)→交付。流程真相源为 docs/12 与 vendor/zhuliming-templates。',
   whenToUse: '已有一份 readinessForDev=ready 的实现方案，想把它真正实现并跑到测试全绿、产出可审查的 diff，但不希望自动提交或改动原仓库时',
   phases: [
     { title: 'Preflight', detail: '读方案 manifest，确定性就绪闸门（ready 才放行）' },
@@ -26,8 +26,8 @@ export const meta = {
     { title: 'MaterializeTests', detail: '把 test-plan 物化成可运行 tests/+DONE；先红后绿核验 DONE 可信' },
     { title: 'Implement', detail: '沙箱内按方案写码到 DONE 全绿（只改 SCOPE 内文件，越界/红线即停）' },
     { title: 'Review', detail: '独立多视角并行审查（实现者不自评）；Fix 后由全新实例重新复审' },
-    { title: 'Fix', detail: '仅当 needs-work：按意见改并重验 DONE 仍绿' },
-    { title: 'Verify', detail: '独立子代理复跑 DONE + 核对 diff 仅动 SCOPE（不信实现者自报）' },
+    { title: 'Fix', detail: '仅当 needs-work：由独立修复角色按意见最小修复并重验 DONE 仍绿（禁改测试）' },
+    { title: 'Verify', detail: '独立子代理复跑 DONE + 从 test-plan 重物化独立复测 + 核对 diff 仅动 SCOPE（不信实现者自报、防改测试迁就）' },
     { title: 'Deliver', detail: '出 diff/报告/manifest 落盘到带时间戳目录' },
   ],
 }
@@ -194,6 +194,7 @@ const SCAFFOLD_SCHEMA = { type: 'object', additionalProperties: false, propertie
 
 const MATERIALIZE_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   ok: { type: 'boolean' }, doneCommand: { type: 'string' }, testsDir: { type: 'string' },
+  testsFingerprint: { type: 'string', description: 'materialize 后冻结：tests/ 全部测试源文件的合并 sha256（前16位），供 Verify 比对实现/修复阶段是否篡改了测试' },
   redCommand: { type: 'string', description: 'DONE 的 --red 模式：只跑【新功能测试】（未实现时应红）；供 Implement 自检与 Verify 独立复现' },
   regressionCommand: { type: 'string', description: 'DONE 的 --regression 模式：只跑【回归测试】（任何版本都应绿）' },
   newFeatureTestsFailOnCurrent: { type: 'boolean', description: '新功能测试在【未实现的当前沙箱】上是否如预期 FAIL（红）' },
@@ -201,7 +202,7 @@ const MATERIALIZE_SCHEMA = { type: 'object', additionalProperties: false, proper
   redExitCode: { type: 'number' }, autoVerifiableCount: { type: 'number' },
   openLoopItems: { type: 'array', items: { type: 'string' }, description: '无法自动验、转人工核对的项（如无 pwsh 的 .ps1）' },
   note: { type: 'string' },
-}, required: ['ok', 'doneCommand', 'redCommand', 'regressionCommand', 'testsDir', 'newFeatureTestsFailOnCurrent', 'regressionTestsPassOnCurrent', 'redExitCode', 'autoVerifiableCount', 'openLoopItems', 'note'] }
+}, required: ['ok', 'doneCommand', 'testsFingerprint', 'redCommand', 'regressionCommand', 'testsDir', 'newFeatureTestsFailOnCurrent', 'regressionTestsPassOnCurrent', 'redExitCode', 'autoVerifiableCount', 'openLoopItems', 'note'] }
 
 const IMPLEMENT_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   passed: { type: 'boolean', description: 'DONE 命令是否全绿' }, doneExitCode: { type: 'number' },
@@ -227,10 +228,12 @@ const VERIFY_SCHEMA = { type: 'object', additionalProperties: false, properties:
   donePassedVerified: { type: 'boolean', description: '独立复跑最终 DONE 是否真绿（ALL PASSED / exit 0）' },
   doneExitCodeVerified: { type: 'number' },
   redGreenVerified: { type: 'boolean', description: '在未实现版上独立复现"新功能红 + 回归绿"' },
+  independentTestsPassed: { type: 'boolean', description: '从 test-plan.json 独立重物化的新功能验收检查（不复用在树 tests/）在沙箱上是否全过——防"改测试迁就实现"的硬闸门' },
+  testsIntact: { type: 'boolean', description: '在树 tests/ 测试源指纹是否与物化时冻结的一致（false=疑似实现/修复阶段改动了测试）' },
   changedFilesVerified: { type: 'array', items: { type: 'string' }, description: '实测变更的文件' },
   scopeCleanVerified: { type: 'boolean', description: '实测变更是否只落在 SCOPE 内' },
   note: { type: 'string' },
-}, required: ['donePassedVerified', 'doneExitCodeVerified', 'redGreenVerified', 'changedFilesVerified', 'scopeCleanVerified', 'note'] }
+}, required: ['donePassedVerified', 'doneExitCodeVerified', 'redGreenVerified', 'independentTestsPassed', 'testsIntact', 'changedFilesVerified', 'scopeCleanVerified', 'note'] }
 
 const DIFF_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   ok: { type: 'boolean', description: '是否成功生成可用 diff（无任何变更文件时为 false）' },
@@ -310,7 +313,8 @@ try {
       `2) 把测试分两类，并让 DONE 入口支持【按类筛选 + 指定目标】（硬契约：Verify 要靠它在原仓库新副本上独立复现"红/绿"）：①【新功能测试】针对本次要实现的行为（未实现时应红）；②【回归测试】针对既有且不该被破坏的行为（如既有退出码语义，应一直绿）。DONE 入口必须支持开关 \`--red\`（只跑①）与 \`--regression\`（只跑②），并接受一个可选的【目标目录】参数（默认沙箱 ${sandboxDir}），使同一套测试能对任意代码副本运行。\n` +
       `3) verificationType 无法自动验的（如本机无 pwsh 的 .ps1 行为：先 command -v pwsh 探测）→ 不要硬塞进 DONE，列入 openLoopItems 作人工核对，并在 note 说明。\n` +
       `4) **先红后绿核验**（关键）：在当前未实现的沙箱上，用 --red 跑①确认其为红、用 --regression 跑②确认其为绿；报告 newFeatureTestsFailOnCurrent、regressionTestsPassOnCurrent、redExitCode(①的退出码)。\n` +
-      `回报 ok/doneCommand(默认跑全部)/redCommand(只跑新功能,--red 的完整命令)/regressionCommand(只跑回归,--regression 的完整命令)/testsDir/newFeatureTestsFailOnCurrent/regressionTestsPassOnCurrent/redExitCode/autoVerifiableCount/openLoopItems/note。`,
+      `5) **冻结测试基线**（防改测试迁就实现）：上述测试全部跑完后，计算 tests/ 下测试源文件的合并指纹 testsFingerprint（用 find tests -type f 排序后逐个 sha256sum、再对结果整体 sha256sum、取前16位）。务必让测试把临时输出写到 ${taskDir}/state/ 或 mktemp、不要写进 tests/，以保证该指纹在后续实现/修复阶段保持稳定。\n` +
+      `回报 ok/doneCommand(默认跑全部)/testsFingerprint(冻结基线)/redCommand(只跑新功能,--red 的完整命令)/regressionCommand(只跑回归,--regression 的完整命令)/testsDir/newFeatureTestsFailOnCurrent/regressionTestsPassOnCurrent/redExitCode/autoVerifiableCount/openLoopItems/note。`,
       { schema: MATERIALIZE_SCHEMA, label: 'materialize-tests', phase: 'MaterializeTests', agentType: AT, effort: 'high' }, true)
     if (!mt.ok) { failedStages.push('MaterializeTests'); halt('MaterializeTests', mt.error) }
     materialize = mt.value
@@ -332,6 +336,7 @@ try {
           `你是实现工程师，在【沙箱】${sandboxDir} 里写代码。${SAFETY}\n${resume}` +
           `真相源：读 ${scaffold.codingWorkflowPath} 的 §1–§8 严格执行（流程细节以它为准，本提示不重复）。方案在 ${taskDir}/input/（plan.json 的 modify/add/steps/reuse 是落点）。\n` +
           `【SCOPE：只许改这些沙箱内文件】${scopeList}（相对仓库根；对应沙箱路径=${sandboxDir}/<相对路径>）。改到 SCOPE 外即属越界，必须停。\n` +
+          `【测试边界·硬约束】绝不修改/删除/新增 ${taskDir}/tests/ 下任何测试文件——它们由独立测试角色物化、是本次验收基线；通过改测试让 DONE 变绿会被独立验证判定为篡改并 BLOCKED。测试若产生临时输出，写到 ${taskDir}/state/ 或 mktemp，不要写进 tests/。\n` +
           `循环：取下一个未完成 step → 在 state/scratch 想清楚 → 改沙箱内 SCOPE 文件 → 跑 DONE：\`${materialize.doneCommand}\` → 把这一轮写进 ${taskDir}/state/progress.md（追加，不删）。直到 DONE 全绿(exit 0/ALL PASSED)。\n` +
           `回报 passed(DONE是否全绿)/doneExitCode/filesChanged(沙箱内改了哪些，相对仓库根)/scopeViolations(改到SCOPE外的，应空)/redLineHit/redLineReason/summary/progressNote。`,
           { schema: IMPLEMENT_SCHEMA, label: `implement#${implRound}`, phase: 'Implement', agentType: AT, effort: CFG.implEffort }, true)
@@ -362,7 +367,10 @@ try {
               { schema: REVIEW_SCHEMA, label: `review-r${round}:${L.lens}`, phase: 'Review', agentType: AT, effort: CFG.reviewEffort }, true)
               .then(r => r.ok ? r.value : null)
           ))
-          return rv.filter(Boolean)
+          const got = rv.filter(Boolean)
+          // C17（逐轮累计）：任一轮视角不齐即累计标记独立复审缺失，不只看末轮（修正注释强于实现的问题）
+          if (got.length < LENSES.length) { reviewIncomplete = true; note(`⚠ 复审 r${round} 视角不齐：仅 ${got.length}/${LENSES.length} 返回，累计标记独立复审缺失（C17）。`) }
+          return got
         }
 
         phase('Review')
@@ -375,7 +383,8 @@ try {
           const findings = needWork.flatMap(r => r.findings.map(f => `[${r.lens}] ${f}`))
           phase('Fix')   // C6：Fix 是独立阶段，显式起 phase 并记 fixHistory
           const fx = await callAgent(
-            `你是修复工程师，在沙箱 ${sandboxDir} 里改（第 ${fixRound} 轮）。${SAFETY}\n` +
+            `你是【独立修复工程师】（全新实例，未参与本次实现 implement 与评审），在沙箱 ${sandboxDir} 里改（第 ${fixRound} 轮）。${SAFETY}\n` +
+            `职责【仅限】按下列独立评审意见做【最小修复】：先读 ${taskDir}/state/progress.md 与现有改动理解现状，再针对意见改；不得借机重写实现脉络、不得扩大改动范围、不得改动 ${taskDir}/tests/ 下任何测试文件（改测试迁就实现将被独立验证判定为篡改并 BLOCKED）。\n` +
             `按 ${scaffold.codingWorkflowPath} 的 §7.2 修复协议处理以下审查意见，只改 SCOPE 内文件：\n${findings.map((f, i) => `${i + 1}. ${f}`).join('\n')}\n` +
             `改完【必须重跑 DONE 仍全绿】(\`${materialize.doneCommand}\`)——修复不得破坏已通过部分。把改动记进 ${taskDir}/state/progress.md。\n` +
             `回报 passed/donePassed(DONE是否仍绿)/addressed/stillOpen/filesChanged/summary。`,
@@ -390,8 +399,8 @@ try {
           reviews = await doReview(fixRound)
           note(`复审 r${fixRound}：${reviews.length}/${LENSES.length} 视角，needs-work ${reviews.filter(r => r.verdict === 'needs-work').length}。`)
         }
-        // C17：复审完整性闸门——任一轮复审视角不齐（子代理失败致 reviews 残缺）即按"独立复审缺失"处理，不得乐观交付
-        if (reviews.length < LENSES.length) { reviewIncomplete = true; note(`⚠ 独立复审不完整：仅 ${reviews.length}/${LENSES.length} 视角返回，按缺失独立复审处理。`) }
+        // C17：复审完整性闸门已改为【逐轮累计】（见 doReview）——任一轮视角不齐即 reviewIncomplete=true，不只看末轮
+        if (reviewIncomplete) note(`独立复审完整性：曾出现视角不齐（reviewIncomplete=true），computeDeliverStatus 将据此拒绝乐观交付。`)
 
         // ---- 独立 Verify（C4）：全新只读实例亲手复跑 DONE + 独立核对 diff 仅动 SCOPE，不信实现/修复者自报 ----
         phase('Verify')
@@ -400,11 +409,16 @@ try {
           `1) 亲手复跑最终 DONE：\`${materialize.doneCommand}\`，取真实退出码与是否输出 "ALL PASSED"。\n` +
           `2) 先红后绿独立复核：把原仓库 ${targetRepo} 复制到一个 mktemp -d 临时副本（不含本次实现），用 DONE 的 --red 对该副本跑（命令形如 \`${materialize ? materialize.redCommand : '<redCommand>'}\`，把目标目录指向该副本），确认新功能测试在【未实现版】上确为红（非0）；再用 --regression（形如 \`${materialize ? materialize.regressionCommand : '<regressionCommand>'}\`）确认回归为绿（0）。两者都成立才置 redGreenVerified=true。\n` +
           `3) 独立算 diff：diff -ruN "${targetRepo}" "${sandboxDir}"（忽略 .git），列出真正变更的文件，判断是否【只动了 SCOPE】=${JSON.stringify(scaffold.scopeFiles)}（可选 ${JSON.stringify(scaffold.optionalScopeFiles)}）。\n` +
-          `回报 donePassedVerified(最终DONE是否真绿)/doneExitCodeVerified/redGreenVerified(先红后绿是否独立复现)/changedFilesVerified(实测变更文件)/scopeCleanVerified(是否只动SCOPE)/note。`,
+          `4) 【独立复测·防改测试迁就实现，硬闸门】不要复用沙箱旁的 ${taskDir}/tests/。改为从 ${taskDir}/input/test-plan.json 自己重新物化【新功能验收检查】到一个 mktemp -d 全新目录，对沙箱 ${sandboxDir} 跑：沙箱全过则 independentTestsPassed=true，否则 false（=实现未真正满足验收，或在树测试被改弱）。\n` +
+          `5) 【测试基线完整性】重算 ${taskDir}/tests/ 测试源文件的合并 sha256（前16位，算法同物化阶段），与物化时冻结的 testsFingerprint=\`${materialize ? materialize.testsFingerprint : '<none>'}\` 比对：一致则 testsIntact=true，否则 false（疑似实现/修复阶段改动了测试）。\n` +
+          `回报 donePassedVerified(最终DONE是否真绿)/doneExitCodeVerified/redGreenVerified(先红后绿是否独立复现)/independentTestsPassed(从test-plan独立重物化复测沙箱是否全过)/testsIntact(在树tests指纹是否未变)/changedFilesVerified(实测变更文件)/scopeCleanVerified(是否只动SCOPE)/note。`,
           { schema: VERIFY_SCHEMA, label: 'independent-verify', phase: 'Verify', agentType: AT, effort: 'high' }, true)
         if (!vf.ok) { failedStages.push('Verify'); note(`独立验证失败：${vf.error}`) }
         verify = vf.ok ? vf.value : null
-        if (verify) note(`独立验证：DONE真绿=${verify.donePassedVerified}(exit ${verify.doneExitCodeVerified})、先红后绿复现=${verify.redGreenVerified}、只动SCOPE=${verify.scopeCleanVerified}。`)
+        if (verify) note(`独立验证：DONE真绿=${verify.donePassedVerified}(exit ${verify.doneExitCodeVerified})、先红后绿复现=${verify.redGreenVerified}、独立复测过=${verify.independentTestsPassed}、测试未篡改=${verify.testsIntact}、只动SCOPE=${verify.scopeCleanVerified}。`)
+        // G4 测试/实现职责边界（硬闸门）：独立验证用自己从 test-plan 重物化的测试复测，不过=实现真错或被改测试迁就→BLOCKED（不信在树测试）
+        if (verify && verify.independentTestsPassed === false) { finalStatus = 'BLOCKED'; note('⛔ 独立复测未过（Verify 从 test-plan.json 重物化、不复用在树 tests/）：实现未真正满足验收，或曾改测试迁就实现。拒绝交付。') }
+        else if (verify && verify.testsIntact === false) { note('⚠ 在树 tests/ 指纹与物化时不一致（疑似被改动）：已记为开环项；终态以独立复测为准。') }
       }
     }
   }
@@ -470,7 +484,7 @@ const deliverManifest = {
   scope: scaffold ? { scopeFiles: scaffold.scopeFiles, optionalScopeFiles: scaffold.optionalScopeFiles } : null,
   doneCommand: materialize ? materialize.doneCommand : null,
   doneTrustworthy: trustworthy,
-  doneTrustEvidence: materialize ? { redCommand: materialize.redCommand, regressionCommand: materialize.regressionCommand, newFeatureTestsFailOnCurrent: materialize.newFeatureTestsFailOnCurrent, regressionTestsPassOnCurrent: materialize.regressionTestsPassOnCurrent, redExitCode: materialize.redExitCode } : null,
+  doneTrustEvidence: materialize ? { redCommand: materialize.redCommand, regressionCommand: materialize.regressionCommand, newFeatureTestsFailOnCurrent: materialize.newFeatureTestsFailOnCurrent, regressionTestsPassOnCurrent: materialize.regressionTestsPassOnCurrent, redExitCode: materialize.redExitCode, testsFingerprint: materialize.testsFingerprint } : null,
   implementPassed: !!(implement && implement.passed),
   filesChanged: verifiedChanged || (diffResult ? diffResult.filesChanged : []) || (implement ? implement.filesChanged : []),
   filesChangedSource: verifiedChanged ? 'independent-verify' : ((diffResult && diffResult.filesChanged.length) ? 'diff' : 'implementer-self-report'),
@@ -482,13 +496,15 @@ const deliverManifest = {
   fix: fix ? { passed: fix.passed, donePassed: fix.donePassed, stillOpen: fix.stillOpen } : null,
   fixHistory,
   reviewComplete: !reviewIncomplete,
-  independentVerify: verify ? { donePassedVerified: verify.donePassedVerified, doneExitCodeVerified: verify.doneExitCodeVerified, redGreenVerified: verify.redGreenVerified, scopeCleanVerified: verify.scopeCleanVerified } : null,
+  independentVerify: verify ? { donePassedVerified: verify.donePassedVerified, doneExitCodeVerified: verify.doneExitCodeVerified, redGreenVerified: verify.redGreenVerified, independentTestsPassed: verify.independentTestsPassed, testsIntact: verify.testsIntact, scopeCleanVerified: verify.scopeCleanVerified } : null,
   openItems: [
     ...(materialize ? materialize.openLoopItems : []),
     ...((gate && gate.openQuestions) || []).map(q => `方案待确认: ${q}`),
     ...((gate && gate.remainingGaps) || []).map(g => `方案遗留: ${g}`),
     ...reviews.filter(r => r.verdict === 'needs-work').flatMap(r => r.findings.map(f => `审查未关闭[${r.lens}]: ${f}`)),
     ...(verify && verify.redGreenVerified === false ? ['独立"先红后绿"未复现：DONE 可信度未独立确认'] : []),
+    ...(verify && verify.independentTestsPassed === false ? ['独立复测未过：实现未满足验收或改测试迁就实现（已 BLOCKED）'] : []),
+    ...(verify && verify.testsIntact === false ? ['在树 tests/ 指纹与物化时不一致（疑似被改动），需人工核对'] : []),
     ...(diffResult && diffResult.diffApplyCheckPassed === false ? ['diff 未通过 git apply --check'] : []),
     ...(staleCmp && staleCmp.severity === 'soft' ? ['目标仓库 soft stale：有未提交改动差异（方案基于略有不同的工作区）'] : []),
     ...filesReconcile.issues.map(s => `变更文件对账: ${s}`),
