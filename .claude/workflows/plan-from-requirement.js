@@ -30,6 +30,7 @@ export const meta = {
     { title: 'Triage', detail: '分级：清晰度(澄清闸门) + 复杂度(简单/中等/复杂) + 高风险域，参考 Skill 分级' },
     { title: 'Clarify', detail: '需求模糊时：产出待客户确认清单，不出方案' },
     { title: 'Locate', detail: '按需求定位现有相关代码与业务逻辑' },
+    { title: 'ProjectStyle', detail: '识别目标项目既有规范，产出 project-code-style（供方案/编码/审查/修复/验证共用；判不出填 unknown，不臆测）' },
     { title: 'Analyze', detail: '并行分析相关模块现状：行为/接口/数据/状态/权限（带证据）' },
     { title: 'Gap', detail: '现状与客户目标的差距：缺失/部分/冲突' },
     { title: 'Plan', detail: '实现方案：复用/修改/新增 + 影响面 + 步骤' },
@@ -97,6 +98,7 @@ const ROLES = {
   requirement: { custom: 'requirement-analyst', builtin: 'general-purpose', file: 'requirement-analyst.md', title: '客户需求分析专家', brief: '拆解需求为目标/角色/流/核心结果/非目标/歧义/验收，参考 requirement-analysis 维度但动态裁剪。' },
   triage:      { custom: 'requirement-analyst', builtin: 'general-purpose', file: 'requirement-analyst.md', title: '需求分级判定者',   brief: '判定需求清晰度(是否够出方案)与复杂度(简单/中等/复杂)及高风险域，参考 SKILL.md 分级与升级触发器，但按实际判断。' },
   locate:      { custom: 'repo-analyst',        builtin: 'Explore',         file: 'repo-analyst.md',        title: '只读分析专家',   brief: '按需求关键词/符号在仓库定位相关代码与业务逻辑，只读广搜。' },
+  projectstyle:{ custom: 'repo-analyst',        builtin: 'general-purpose', file: 'repo-analyst.md',        title: '只读分析专家',   brief: '基于目标项目真实代码/配置识别既有规范，产出 project-code-style；判不出填 unknown，不臆测。' },
   analyze:     { custom: 'repo-analyst',        builtin: 'general-purpose', file: 'repo-analyst.md',        title: '只读分析专家',   brief: '实际 Read 相关模块，给出现状行为/接口/数据/状态/权限/依赖与证据，不编造行号。' },
   gap:         { custom: 'repo-analyst',        builtin: 'general-purpose', file: 'repo-analyst.md',        title: '只读分析专家',   brief: '对比现状与客户目标，逐项判定 缺失/部分/冲突/已满足。' },
   plan:        { custom: 'solution-architect',  builtin: 'Plan',            file: 'solution-architect.md',  title: '实现方案架构师', brief: '产出贴合现有架构、可直接实施的方案：复用/修改/新增 + 影响面 + 有序步骤，参考 delivery-checklist 实现规则但按实际裁剪，不写代码。' },
@@ -314,6 +316,28 @@ const PERSIST_SCHEMA = { type: 'object', additionalProperties: false, properties
 }, required: ['ok', 'absOutDir', 'written', 'note'] }
 // <<< SCHEMA-CONTRACT-END
 
+// project-code-style（项目规范识别产物；非 parity-locked；供方案/编码/审查/修复/验证共用）
+const STYLE_FIELD = { type: 'object', additionalProperties: false, properties: {
+  value: { type: 'string', description: '该项约定的概括；判不出填 "unknown"' },
+  evidence: { type: 'string', description: '出处文件/配置；无则 "unknown"，绝不编造' },
+}, required: ['value', 'evidence'] }
+const PROJECT_CODE_STYLE_SCHEMA = { type: 'object', additionalProperties: false, properties: {
+  language: { type: 'string' }, buildTool: { type: 'string' },
+  layout: STYLE_FIELD, naming: STYLE_FIELD, domainObjects: STYLE_FIELD, layering: STYLE_FIELD,
+  unifiedResponse: STYLE_FIELD, exceptionModel: STYLE_FIELD, logging: STYLE_FIELD, transaction: STYLE_FIELD,
+  sqlOrm: STYLE_FIELD, commentStyle: STYLE_FIELD, testStructure: STYLE_FIELD,
+  staticTools: { type: 'array', items: { type: 'object', additionalProperties: false, properties: {
+    name: { type: 'string', description: '如 checkstyle/spotless/pmd/sonar/eslint/prettier/stylelint/ruff/black/gofmt/golangci 或 npm/maven/gradle 脚本' },
+    command: { type: 'string', description: '可执行命令；无则 "unknown"' }, configFile: { type: 'string', description: '配置文件路径；无则 "unknown"' },
+  }, required: ['name', 'command', 'configFile'] } },
+  hasProjectOwnConventions: { type: 'boolean', description: '目标是否自带明确规范配置(.editorconfig/checkstyle.xml/.eslintrc 等)' },
+  alibabaSpecLoaded: { type: 'boolean', description: '阿里 Java 规范正文是否真已接入（当前仅占位→应为 false，绝不声称已按其检查）' },
+  specSource: { type: 'string', description: '规范来源优先级实际取值：客户项目规范 > 项目现有风格 > 阿里规范(若接入) > 通用最佳实践' },
+  note: { type: 'string' },
+}, required: ['language', 'buildTool', 'layout', 'naming', 'domainObjects', 'layering', 'unifiedResponse', 'exceptionModel', 'logging', 'transaction', 'sqlOrm', 'commentStyle', 'testStructure', 'staticTools', 'hasProjectOwnConventions', 'alibabaSpecLoaded', 'specSource', 'note'] }
+const EMPTY_STYLE_FIELD = { value: 'unknown', evidence: 'unknown' }
+const EMPTY_PROJECT_STYLE = { language: 'unknown', buildTool: 'unknown', layout: EMPTY_STYLE_FIELD, naming: EMPTY_STYLE_FIELD, domainObjects: EMPTY_STYLE_FIELD, layering: EMPTY_STYLE_FIELD, unifiedResponse: EMPTY_STYLE_FIELD, exceptionModel: EMPTY_STYLE_FIELD, logging: EMPTY_STYLE_FIELD, transaction: EMPTY_STYLE_FIELD, sqlOrm: EMPTY_STYLE_FIELD, commentStyle: EMPTY_STYLE_FIELD, testStructure: EMPTY_STYLE_FIELD, staticTools: [], hasProjectOwnConventions: false, alibabaSpecLoaded: false, specSource: '项目现有风格 > 通用最佳实践（阿里规范未接入/占位）', note: 'project-code-style 识别未产出，降级为 unknown' }
+
 const READBACK_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   existing: { type: 'array', items: { type: 'string' } }, unparseable: { type: 'array', items: { type: 'string' } },
   schemaIssues: { type: 'array', items: { type: 'string' }, description: '4 个核心产物缺少必需顶层字段的清单，如 "plan.json: 缺 affected"' }, note: { type: 'string' },
@@ -355,7 +379,7 @@ function runConsistencyChecks() {
 }
 
 // ===================== 主流程 =====================
-let requirementU = null, locate = null, gap = null, plan = null, risk = null, testPlan = null, review = null, report = null
+let requirementU = null, locate = null, gap = null, plan = null, risk = null, testPlan = null, review = null, report = null, projectCodeStyle = null
 let componentAnalyses = [], failedComponents = [], relevantComps = []
 let repoFingerprint = null
 
@@ -448,6 +472,19 @@ try {
     relevantComps = (locate.relevant || []).slice(0, locCap)
     if ((locate.relevant || []).length > locCap) note(`定位到 ${locate.relevant.length} 处相关，取前 ${locCap} 深入；其余记为可能相关未细看。`)
     note(`Locate：相关 ${relevantComps.length}（${relevantComps.map(c => c.name).join(', ')}）；possiblyRelevant ${(locate.possiblyRelevant || []).length}。`)
+
+    // ===== ProjectStyle（项目规范识别；fast+full 都产，供下游编码/审查/修复/验证共用；成本分档；非必需，失败降级 unknown）=====
+    phase('ProjectStyle')
+    const ps = await roleAgent('projectstyle',
+      `${BASE}\n\n本阶段=项目代码规范识别（不臆测，判不出填 "unknown"，绝不编造）。基于目标仓库**真实**的目录/配置/样例代码，总结其既有规范，产出 project-code-style，每项 {value, evidence(出处文件/配置)}：\n` +
+      `layout(目录与分层) / naming(类·方法·变量·常量命名) / domainObjects(DTO·VO·BO·Entity 用法) / layering(Controller·Service·Mapper 分层) / unifiedResponse(统一返回值结构) / exceptionModel(异常处理体系) / logging(日志格式与级别) / transaction(事务使用方式) / sqlOrm(SQL/ORM 用法) / commentStyle(注释风格) / testStructure(测试结构)；并给 language / buildTool。\n` +
+      `staticTools：检测目标项目【已有】的格式化/静态检查【配置与可执行命令】——checkstyle/spotless/pmd/sonar/eslint/prettier/stylelint/ruff/black/gofmt/golangci，以及 package.json/pom.xml/build.gradle 里的 lint/format/verify/check 脚本（每个给 name/command/configFile，无则 "unknown"）。\n` +
+      `hasProjectOwnConventions=目标是否自带明确规范配置(.editorconfig/checkstyle.xml/.eslintrc/.prettierrc 等)。\n` +
+      `规范来源优先级=客户项目规范 > 项目现有风格 > 阿里巴巴 Java 规范(本流水线当前为占位、未接入正文 → alibabaSpecLoaded=false，绝不声称已按阿里规范检查) > 通用最佳实践；specSource 如实记录实际取值。\n` +
+      `定位概览(可复用):${JSON.stringify(locate.overview)}\n构建测试命令(线索):${JSON.stringify(locate.buildTestCommands)}`,
+      { schema: PROJECT_CODE_STYLE_SCHEMA, label: 'project-style', phase: 'ProjectStyle', required: false, effort: pathway === 'fast' ? EFFORT.light : EFFORT.analyze })
+    projectCodeStyle = ps.ok ? ps.value : EMPTY_PROJECT_STYLE
+    note(`ProjectStyle：language=${projectCodeStyle.language}/${projectCodeStyle.buildTool}，静态工具=${(projectCodeStyle.staticTools || []).map(t => t.name).join(', ') || '无/未检出'}，自带规范=${projectCodeStyle.hasProjectOwnConventions}，阿里规范=${projectCodeStyle.alibabaSpecLoaded ? '已接入' : '未接入(占位)'}。`)
 
     if (pathway === 'fast') {
       // ===== 快路径：架构师直接读相关代码出精简方案(含简要风险+验收)，单次审查，无返工 =====
@@ -601,6 +638,7 @@ const manifest = {
   params: { mode: userMode || `auto:${MODE}`, maxComponents: MAX, maxReworkRounds: MAX_REWORK, effort: EFFORT, skillDir: SKILL_DIR, useCustomAgents: useCustom, forceComplexity, skipClarificationGate: skipClarify, forceFirstVerdict, injectComponentFailureIndex: injectFailIdx },
   finalStatus, readinessForDev, repoFingerprint, failedStages, failedComponents,
   coverage: { located: (locate && locate.relevant || []).length, analyzed: componentAnalyses.length },
+  projectStyle: projectCodeStyle ? { language: projectCodeStyle.language, buildTool: projectCodeStyle.buildTool, staticTools: (projectCodeStyle.staticTools || []).map(t => t.name), hasProjectOwnConventions: projectCodeStyle.hasProjectOwnConventions, alibabaSpecLoaded: projectCodeStyle.alibabaSpecLoaded, specSource: projectCodeStyle.specSource } : null,
   consistency: consistency || { ok: true, checks: [{ name: '(澄清/提前终止路径，未跑完整分析)', ok: true, detail: pathway }] },
   reviewHistory, reworkHistory,
   blockingQuestions: (triage && triage.blockingQuestions) || [],
@@ -609,7 +647,7 @@ const manifest = {
 }
 const artifacts = {
   'run-manifest.json': manifest, 'execution-log.md': execLog,
-  'requirement.json': requirementU, 'triage.json': triage, 'located-code.json': locate, 'component-analyses.json': componentAnalyses,
+  'requirement.json': requirementU, 'triage.json': triage, 'located-code.json': locate, 'project-code-style.json': projectCodeStyle, 'component-analyses.json': componentAnalyses,
   'gap.json': gap, 'plan.json': plan, 'risks.json': risk, 'test-plan.json': testPlan,
   'review-history.json': reviewHistory, 'rework-history.json': reworkHistory,
   [pathway === 'clarify' ? 'clarification.md' : 'final-plan.md']: report ? report.markdown : '(未生成：流程在必需阶段终止)',
@@ -651,4 +689,4 @@ if (persistOutcome.finalStatus !== finalStatus) {
 
 log(`plan-from-requirement 完成。路径=${pathway}，mode=${MODE}，最终状态=${finalStatus}，readinessForDev=${readinessForDev}；分级=${triage ? (forceComplexity || triage.complexity) : 'N/A'}/清晰度=${triage ? triage.clarity : 'N/A'}；相关模块 ${componentAnalyses.length}/${relevantComps.length}、风险 ${(risk && risk.risks || []).length}、用例 ${(testPlan && testPlan.cases || []).length}、验收 ${(testPlan && testPlan.acceptanceCriteria || []).length}、评审 ${reviewHistory.length} 轮、返工 ${reworkHistory.length}；失败阶段 [${failedStages.join(', ') || '无'}]。`)
 
-return { finalStatus, pathway, mode: MODE, triage, readinessForDev, manifest, persisted, missingFiles, consistency, requirement: requirementU, locate, componentAnalyses, failedComponents, gap, plan, risk, testPlan, reviewHistory, reworkHistory, review, report }
+return { finalStatus, pathway, mode: MODE, triage, readinessForDev, manifest, persisted, missingFiles, consistency, requirement: requirementU, locate, projectCodeStyle, componentAnalyses, failedComponents, gap, plan, risk, testPlan, reviewHistory, reworkHistory, review, report }
