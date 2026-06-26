@@ -12,6 +12,21 @@
     "DELIVERED": "Delivery produced a verified sandbox diff with no open items.",
     "DELIVERED_WITH_OPEN_ITEMS": "Delivery produced a diff, but some verification remains manual or environment-dependent."
   },
+  "publishStatuses": {
+    "PUBLISH_BLOCKED": "Publish refused by a deterministic gate (delivery not publishable, diff apply-check failed, protected branch without allowMainPush, push not performed, prior block, or a high-risk domain without allowHighRiskAutoPublish).",
+    "PUBLISH_DRYRUN": "dryRun: branch and commit prepared, but push intentionally skipped.",
+    "PUBLISH_UNVERIFIED": "Pushed, but post-push remote verification did not fully pass (remote SHA / committed files / forbidden files / publish-copy work tree); success is not claimed.",
+    "PUBLISHED": "Pushed and independently remote-verified with no open items.",
+    "PUBLISHED_WITH_OPEN_ITEMS": "Pushed and remote-verified, but the delivery carried non-blocking open items requiring human follow-up."
+  },
+  "autoDeliverStatuses": {
+    "INVALID_ARGS": "Orchestration could not start: required requirement/target argument missing.",
+    "NEEDS_CLARIFICATION": "Readiness gate paused the run and escalated to a human (requirement too ambiguous to implement).",
+    "BLOCKED_AT_PLAN": "Plan did not reach a ready state (needs PASS/PARTIAL + ready); did not enter coding.",
+    "BLOCKED_AT_DELIVER": "Delivery did not reach a publishable state (needs DELIVERED / DELIVERED_WITH_OPEN_ITEMS); did not publish.",
+    "FAILED": "A sub-workflow (plan/deliver/publish) returned no result, or an unexpected error halted orchestration.",
+    "<publishStatus>": "On reaching the publish stage, the overall finalStatus passes through publish-delivery's status (PUBLISH_BLOCKED / PUBLISH_DRYRUN / PUBLISH_UNVERIFIED / PUBLISHED / PUBLISHED_WITH_OPEN_ITEMS)."
+  },
   "readinessForDev": {
     "ready": "A delivery workflow may consume the plan.",
     "needs-clarification": "The requirement is too ambiguous; it must be clarified before any delivery.",

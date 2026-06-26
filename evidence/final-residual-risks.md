@@ -20,6 +20,15 @@
 3. **`changes.diff` 用绝对路径头**：他机 `patch -p1` 命中率低；report 已自述并给 `cp` 兜底，建议后续改产相对路径 diff。
 > 安全侧已独立复核无虞：原仓库逐字节零修改、改动只在沙箱、未 commit/merge、退出码语义无损、停机逻辑齐全。
 
+## 一·续、新增发布与编排（publish-delivery / auto-deliver / git-guard Hook）的遗留项（2026-06-26 补登）
+
+> 阶段2/3 新增 `publish-delivery`（已验证 diff → clone 远程 → 建分支 → commit → push → 远程确定性核验）与 `auto-deliver`（一句需求 → plan→deliver→publish，一层 `workflow()` 端到端编排），并补了 PreToolUse `git-guard` 红线 Hook（硬禁 force-push / 删远程分支 / 历史重写 / 强删本地分支）。以下为其**已知边界（非缺陷，已显式登记）**：
+
+1. **真机端到端尚未冒烟（#17）**：publish / auto-deliver 的 push + 远程核验链路目前仅在**本地一次性临时仓库 + 本地 `file://` remote** 上演练过，**未**在真实 GitHub 的权限 / 网络 / 服务端分支保护下跑过。fail-safe 已就位：`computePublishStatus` 保证"未达可发布态 / 分支不被策略允许 / push 未成功 / 远程四项核验不全过"分别短路为 `PUBLISH_BLOCKED / PUBLISH_UNVERIFIED`，**绝不**在未真推或未核验时谎称 `PUBLISHED`；缺的只是真机冒烟样本。
+2. **沙箱去敏未在真带 `.git`+密钥的目标仓库实跑（#18）**：deliver 的 Scaffold 去敏（剥 `.git`、删 `.env / *.key / *.pem / id_rsa*` 等）目前是给子代理的命令序列，尚未在"真实含 `.git` 与敏感文件"的目标上验证**删净 + 源码留存**（尤其无 `rsync` 时的 `cp` 兜底分支）。建议加 `scripts/sandbox-cleanup.test.mjs` fixture 实跑闭合。
+3. **明文凭据按内容识别仍是 best-effort（#13）**：禁入判定以**文件名**模式为主；`application-prod.yml / config.json / *.sh / Java 常量`里的明文 `password= / apiKey:` 不在文件名白名单内，发布/交付的"按内容 grep"为非确定性尽力而为，须如实标注，不可宣称确定性拦截。
+> **建议验证方式**：在受控环境对**一次性 throwaway repo + 独立 sandbox remote**（PAT 由可信人托管）跑一次 `auto-deliver` 的 `dryRun`→真推冒烟以闭合 #17/#18。**注意红线**：不要把自动 push 塞进 CI（撞本仓 no-auto-git 不变量与 `git-guard` Hook，`scripts/self-check.mjs` 还专门断言 Hook 会拦 push）。
+
 ## 二、展示前需对齐
 - **评分口径（8→4 折叠）**：方法论把工程交付 Skill 的 8 阶段折叠为 4 个 phase。对外"排名评估"时是否仍要求按 8 阶段逐项打分，需与负责人确认（见 `docs/09`、`03-decision-log.md` 未确认第 7 条）。属口径选择、非缺陷。
 - **复用同事成果署名**：`vendor/zhuliming-templates/`（朱立明模板）已取得授权并署名（见其 `ATTRIBUTION.md`）；后续如同步上游模板，应继续保留授权与署名要求。

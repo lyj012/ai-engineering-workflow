@@ -19,6 +19,7 @@
 //                  allowMainPush: false, pushRemote: "origin" },
 //     authorName: "<提交者名；省略则用环境 git 身份>", authorEmail: "<提交者邮箱>",
 //     commitMessage: "<覆盖默认提交信息>",
+//     coAuthoredBy: "<可选；传 '名 <email>' 则在默认提交信息追加 Co-Authored-By 行；省略则不署任何模型名（保持模型无关）>",
 //     allowHighRiskAutoPublish: false,   // 高风险域是否允许自动发布（默认 false=人工闸门）
 //     dryRun: false,                     // true=准备分支/提交但不真正 push
 //     outDir: "evidence/publishes"
@@ -36,7 +37,7 @@ export const meta = {
     { title: 'Apply', detail: 'git apply 已验证 changes.diff；核对变更文件与交付一致' },
     { title: 'Commit', detail: '以指定身份提交；拒绝暂存 .env/密钥/个人配置等禁入文件' },
     { title: 'Push', detail: 'git push 到分支（绝不 force；dryRun 则跳过）' },
-    { title: 'RemoteVerify', detail: '独立只读核验：远程分支 SHA==本地、提交文件==交付、无禁入文件、工作树干净' },
+    { title: 'RemoteVerify', detail: '独立只读核验：远程分支 SHA(git ls-remote)==本地提交、提交文件==交付、无禁入文件、发布副本本地工作树干净' },
     { title: 'Finalize', detail: '写 final-delivery.json + 报告到带时间戳目录' },
   ],
 }
@@ -54,6 +55,7 @@ const outDirBase = A.outDir ? String(A.outDir) : 'evidence/publishes'
 const authorName = A.authorName ? String(A.authorName) : null
 const authorEmail = A.authorEmail ? String(A.authorEmail) : null
 const commitMessageArg = A.commitMessage ? String(A.commitMessage) : null
+const coAuthoredBy = A.coAuthoredBy ? String(A.coAuthoredBy) : null   // 可选模型/协作者署名；省略则默认提交信息不含 Co-Authored-By（保持模型无关，避免错误归属）
 const allowHighRiskAutoPublish = !!A.allowHighRiskAutoPublish
 const dryRun = !!A.dryRun
 const GP = (A.gitPolicy && typeof A.gitPolicy === 'object') ? A.gitPolicy : {}
@@ -248,13 +250,14 @@ try {
       // ---- Commit：以指定身份提交；拦截禁入文件 ----
       phase('Commit')
       const idLine = (authorName && authorEmail) ? `${authorName} <${authorEmail}>` : '(环境 git 身份)'
-      const defaultMsg = `${pre.requirementGoal || '自动交付'}\n\n由 publish-delivery 自动发布：应用经独立验证的交付 diff（来源 ${deliveryDir}）。\n变更文件：${(pre.manifestFilesChanged || []).join(', ')}。${(pre.openItems || []).length ? '\n开环项：' + pre.openItems.length + ' 项（见交付报告）。' : ''}\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`
+      const coAuthorLine = coAuthoredBy ? `\n\nCo-Authored-By: ${coAuthoredBy}` : ''   // 默认不署模型名，避免错误归属/与 Codex 等适配不一致
+      const defaultMsg = `${pre.requirementGoal || '自动交付'}\n\n由 publish-delivery 自动发布：应用经独立验证的交付 diff（来源 ${deliveryDir}）。\n变更文件：${(pre.manifestFilesChanged || []).join(', ')}。${(pre.openItems || []).length ? '\n开环项：' + pre.openItems.length + ' 项（见交付报告）。' : ''}${coAuthorLine}`
       const commitMessage = commitMessageArg || defaultMsg
       const cm = await callAgent(
         `你负责在发布副本 ${clone.repoDir} 提交本次变更。${SAFETY}\n` +
         ((authorName && authorEmail) ? `1) 设置提交身份：git config user.name "${authorName}"；git config user.email "${authorEmail}"。\n` : `1) 使用环境已配置的 git user.name/user.email（不覆盖）。\n`) +
         `2) 暂存前禁入核查：确认暂存区不含 .env/.env.*/*.key/*.pem/*.p12/*.pfx/id_rsa*/*credential*/*secret*、.claude/settings.local.json、AGENTS.md 等禁入文件；命中则 git reset 取消其暂存并记入 forbiddenStaged。只提交 diff 应用产生的 SCOPE 变更。\n` +
-        `3) 提交：git commit 用如下信息（原样，含 Co-Authored-By 行）：\n<<<MSG\n${commitMessage}\nMSG\n` +
+        `3) 提交：git commit 用如下信息（原样、逐字，勿增删署名行）：\n<<<MSG\n${commitMessage}\nMSG\n` +
         `4) 取 commitSha=git rev-parse HEAD；committedFiles=git show --stat --name-only --pretty=format: HEAD；authorLine=git show -s --format='%an <%ae>' HEAD。\n` +
         `回报 ok/commitSha/committedFiles/forbiddenStaged(被拦下的,应空)/authorLine/note。期望提交者=${idLine}。`,
         { schema: COMMIT_SCHEMA, label: 'commit', phase: 'Commit', agentType: AT, effort: 'medium' }, true)
@@ -282,7 +285,7 @@ try {
         if (!push.pushPerformed) finalStatus = 'PUBLISH_BLOCKED'
       }
 
-      // ---- RemoteVerify：独立只读核验远程事实（不信执行者自报）----
+      // ---- RemoteVerify：独立只读核验（branchShaMatches 用 git ls-remote 取远程事实；committedFiles/禁入/工作树为发布副本本地核查；均不信执行者自报）----
       if (push.pushPerformed) {
         phase('RemoteVerify')
         const rv = await callAgent(
@@ -291,7 +294,7 @@ try {
           `1) branchShaMatches：git ls-remote ${pushRemote} refs/heads/${branch.branchName} 的 SHA 是否 == ${commit.commitSha}。\n` +
           `2) committedFilesMatch：本次提交实际改动文件(git show --stat --name-only --pretty=format: ${commit.commitSha})是否与交付声明 ${JSON.stringify(pre.manifestFilesChanged)} 完全一致（多一个少一个都为 false）。remoteFiles 填实际提交文件。\n` +
           `3) noForbiddenFiles：提交内不含 .env/密钥/*.key/*.pem/凭据/.claude/settings.local.json/AGENTS.md 等禁入文件。\n` +
-          `4) workTreeClean：git status --porcelain 是否为空。\n` +
+          `4) workTreeClean：发布副本本地 git status --porcelain 是否为空（本地工作树核查，非远程）。\n` +
           `回报 branchShaMatches/committedFilesMatch/noForbiddenFiles/workTreeClean/remoteSha/remoteFiles/note。`,
           { schema: REMOTEVERIFY_SCHEMA, label: 'remote-verify', phase: 'RemoteVerify', agentType: AT, effort: 'medium' }, true)
         if (!rv.ok) { failedStages.push('RemoteVerify'); note(`远程核验失败：${rv.error}`); remoteVerify = null }
@@ -340,7 +343,7 @@ const finalDelivery = {
   openItems: (pre && pre.openItems) || [],
   failedStages,
   rollback: branch && push && push.pushPerformed
-    ? `如需回滚：git push ${pushRemote} --delete ${branch.branchName}（删远程分支）${branch.isNewBranch ? '' : '；直推分支的回滚需人工评估（涉及已存在分支历史）'}`
+    ? `如需回滚，请人工在终端亲自执行（会话内 git-guard 硬禁删远程分支，自动化无法代为执行；在 Claude Code 中可用 ! 前缀）：git push ${pushRemote} --delete ${branch.branchName}（删远程分支）。${branch.isNewBranch ? '' : '直推已存在分支的回滚需人工评估历史影响，勿用删分支方式。'}`
     : '未 push，无需远程回滚',
 }
 

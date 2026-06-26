@@ -8,12 +8,18 @@
 |---|---|---|
 | **`plan-from-requirement.js`** ⭐主 | **客户需求 → 现有代码分析 → 可执行实现方案**（只读，不写客户代码） | 客户提出开发/改造需求，要产出开发可直接实施的方案报告 |
 | **`deliver-from-plan.js`** 🔗桥接 | **方案 → 沙箱内写码到测试全绿 → 出 diff**（不改原仓库/不提交） | 已有 `readinessForDev=ready` 的方案，想真正实现并跑到测试全绿、产出可审查的 diff |
+| **`publish-delivery.js`** 🚀发布 | **已验证交付 diff → clone 远程→应用 diff→建分支→commit→push→远程确定性核验**（不建 PR；默认禁直推 main、高风险域人工闸门、绝不 force/不提交密钥） | 已有 `DELIVERED` / `DELIVERED_WITH_OPEN_ITEMS` 的交付，想自动落地到远程一个分支且要求发布结果可被独立核验 |
+| **`auto-deliver.js`** 🧭编排 | **一句需求 → plan→deliver→publish 端到端编排**（一层 `workflow()` 串三子引擎 + 确定性门控；NEEDS_CLARIFICATION/高风险/缺推送权限自动短路停机） | 想从需求一键跑到 push、且接受 auto-deliver 的内置闸门姿态（详见下方"完整链路"两条路径说明） |
 | `analyze-repo.js` | 通用**仓库审计**：理解→扫描→优选→分析→风险→测试方案→独立审查→报告 | 只想体检一个仓库/评估外部代码（不针对某条需求） |
 | `wf-methodology-research.js` / `wf-docs-generation.js` | 一次性**元流程**：生产本方法论文档（研究/文档流水线） | 复刻/更新本方法论文档库时 |
 
 > `plan-from-requirement` 与 `analyze-repo` 共享同一套引擎（lite/standard/deep 分档、证据链、确定性一致性校验、有界返工、独立审查、失败降级、带时间戳落盘），但 `plan-from-requirement` 全程围绕**一条客户需求**产出实现方案，`analyze-repo` 是不带需求的通用审计。
 >
-> **完整链路**：`plan-from-requirement`（需求→方案，只读）→ 就绪闸门 → `deliver-from-plan`（方案→编码到测试全绿，沙箱内，出 diff）→ 人工审 diff 决定落地。桥接把"写码闭环"的流程真相源交给 `vendor/zhuliming-templates/`（朱立明模板，已署名授权），脚本只编排。设计见 `docs/12-plan-to-coding-bridge.md`。
+> **完整链路（两条路径并存）**：
+> - **单独使用各引擎（保留人工闸门）**：`plan-from-requirement`（需求→方案，只读）→ 就绪闸门 →（人工审方案）→ `deliver-from-plan`（方案→编码到测试全绿，沙箱内，出 diff）→ **人工审 diff 决定落地** →（如需自动落地再单独跑）`publish-delivery`（应用已验证 diff→建分支→push→远程核验）。
+> - **端到端编排（`auto-deliver`，有意的安全契约反转）**：用一层 `workflow()` 把上面三段串成"一句需求→自动到 push"，把"人工审"折叠为**引擎内确定性闸门**——`NEEDS_CLARIFICATION`（需求模糊）/ 高风险域（支付·权限·密钥·认证·不可逆）/ 缺推送权限会**自动短路停机交人工**，其余自动推进。两条路径取舍详见 `docs/12-plan-to-coding-bridge.md` §1。
+>
+> 桥接把"写码闭环"的流程真相源交给 `vendor/zhuliming-templates/`（朱立明模板，已署名授权），脚本只编排。设计见 `docs/12-plan-to-coding-bridge.md`。
 
 ---
 
@@ -86,7 +92,7 @@ args: { target: "/path/to/repo", mode: "lite", runVerification: true,
 | 6 最小示例 | `analyze-repo.js`（7 阶段只读分析 demo） | `evidence/demo-run-report.md`、`demo-run-raw.json` |
 | 7 验证 | 独立 `workflow-reviewer` 评审门禁（≤2 轮返工） | `evidence/review-report-round*.md`、`rework-log.md` |
 
-> 设计说明：任务要求的 7 阶段被**有意拆成 3 个可独立运行/恢复的脚本** + 1 个评审门禁，而非塞进一个巨型脚本——因为 `workflow()` 仅一层嵌套（不能父串多子，见 `docs/09`），且分段脚本更易断点恢复与单独复用。运行元数据（runId/taskId/agent 数）见 `evidence/demo-run-meta.json`。
+> 设计说明：任务要求的 7 阶段被**有意拆成 3 个可独立运行/恢复的脚本** + 1 个评审门禁，而非塞进一个巨型脚本——主因是分段脚本更易断点恢复与单独复用。`workflow()` 仅一层嵌套，但父引擎可用**一层** `workflow()` 串**自身不再嵌套**的子引擎（这正是后来 `auto-deliver` 串 plan→deliver→publish 的做法，见 `docs/09` 与 `auto-deliver.js`）。运行元数据（runId/taskId/agent 数）见 `evidence/demo-run-meta.json`。
 
 ## 运行方式
 
