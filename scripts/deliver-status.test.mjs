@@ -48,6 +48,7 @@ export const CASES = [
   ['no browser field -> DELIVERED (backward compatible)', { ...clean }, 'DELIVERED'],
   // --- code quality (S3): compile fail BLOCKS (P0); non-compile static items downgrade; no-tools/clean = no effect ---
   ['codeQuality compile failed -> BLOCKED', { ...clean, codeQuality: { applicable: true, compileRan: true, compilePassed: false, openItems: [] } }, 'BLOCKED'],
+  ['codeQuality P0 static failure -> BLOCKED', { ...clean, codeQuality: { applicable: true, compileRan: true, compilePassed: true, hasP0Failure: true, openItems: ['critical security finding'] } }, 'BLOCKED'],
   ['codeQuality compile passed clean -> DELIVERED', { ...clean, codeQuality: { applicable: true, compileRan: true, compilePassed: true, openItems: [] } }, 'DELIVERED'],
   ['codeQuality static failures -> WITH_OPEN_ITEMS', { ...clean, codeQuality: { applicable: true, compileRan: false, compilePassed: false, openItems: ['checkstyle 3 violations'] } }, 'DELIVERED_WITH_OPEN_ITEMS'],
   ['codeQuality not-applicable (no tools) -> DELIVERED', { ...clean, codeQuality: { applicable: false, compileRan: false, compilePassed: false, openItems: [] } }, 'DELIVERED'],

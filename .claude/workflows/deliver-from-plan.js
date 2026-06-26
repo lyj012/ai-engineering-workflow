@@ -56,8 +56,8 @@ const LIGHT_MODEL = ['haiku', 'sonnet', 'opus', 'fable'].includes(String(A.light
 const userMode = ['lite', 'standard', 'deep'].includes(String(A.mode || '').toLowerCase()) ? String(A.mode).toLowerCase() : null
 const MODE_CFG = {
   lite:     { lenses: ['correctness', 'scope-conformance'], implEffort: 'medium', reviewEffort: 'medium', maxFix: 1 },
-  standard: { lenses: ['correctness', 'robustness', 'scope-conformance', 'risk-coverage'], implEffort: 'high', reviewEffort: 'high', maxFix: 2 },
-  deep:     { lenses: ['correctness', 'robustness', 'scope-conformance', 'risk-coverage'], implEffort: 'high', reviewEffort: 'high', maxFix: 2 },
+  standard: { lenses: ['correctness', 'robustness', 'scope-conformance', 'risk-coverage', 'readability', 'maintainability'], implEffort: 'high', reviewEffort: 'high', maxFix: 2 },
+  deep:     { lenses: ['correctness', 'robustness', 'scope-conformance', 'risk-coverage', 'readability', 'maintainability', 'code-style', 'project-convention'], implEffort: 'high', reviewEffort: 'high', maxFix: 2 },
 }
 let mode = 'standard', CFG = MODE_CFG.standard, MAX_FIX = argMaxFix !== null ? argMaxFix : 2
 
@@ -107,6 +107,7 @@ function computeDeliverStatus(input) {
   const codeQuality = i.codeQuality || null
   const codeQualityOpenItems = (codeQuality && Array.isArray(codeQuality.openItems)) ? codeQuality.openItems : []
   const codeQualityCompileFailed = !!(codeQuality && codeQuality.applicable === true && codeQuality.compileRan === true && codeQuality.compilePassed === false)
+  const codeQualityP0 = !!(codeQuality && codeQuality.applicable === true && codeQuality.hasP0Failure === true)
   const hasOpenItems = materializeOpenLoopItems.length > 0 ||
     reviews.some(r => r && r.verdict === 'needs-work') ||
     redGreenUnconfirmed ||
@@ -121,6 +122,7 @@ function computeDeliverStatus(input) {
   if (blockingReview) { reasons.push('存在阻断性审查意见未关闭。'); return { finalStatus: 'BLOCKED', reasons } }
   if (browser && browser.applicable === true && browser.status === 'failed') { reasons.push('真实浏览器验证失败（web 项目：页面/交互/控制台/接口未通过），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (codeQualityCompileFailed) { reasons.push('项目编译/构建失败（P0），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (codeQualityP0) { reasons.push('代码质量检查存在 P0 级静态问题（必阻断），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
 
   const diff = i.diff || null
   if (!diff || diff.ok !== true) { reasons.push('交付 diff 生成/落盘失败，状态降级 BLOCKED（不以 DELIVERED 收尾）。'); return { finalStatus: 'BLOCKED', reasons } }
@@ -281,8 +283,9 @@ const IMPLEMENT_SCHEMA = { type: 'object', additionalProperties: false, properti
 const REVIEW_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   lens: { type: 'string' }, verdict: { type: 'string', enum: ['ok', 'needs-work'] },
   findings: { type: 'array', items: { type: 'string' } },
-  blocking: { type: 'boolean', description: '是否阻断性（correctness/scope 越界等）' }, note: { type: 'string' },
-}, required: ['lens', 'verdict', 'findings', 'blocking', 'note'] }
+  severity: { type: 'string', enum: ['P0', 'P1', 'P2', 'none'], description: '本视角最高问题级别：P0=必须阻断（正确性错误/SCOPE 越界/架构分层破坏等）→blocking 必须为 true；P1=应修但不必阻断→verdict=needs-work 非阻断（计开环）；P2=轻微/建议→不单独阻断（verdict 可 ok，写进 note）；无问题=none' },
+  blocking: { type: 'boolean', description: '是否阻断性（severity=P0 时必为 true；correctness/scope 越界等）' }, note: { type: 'string' },
+}, required: ['lens', 'verdict', 'findings', 'severity', 'blocking', 'note'] }
 
 const FIX_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   passed: { type: 'boolean', description: '修复后 needs-work 是否清零' }, donePassed: { type: 'boolean', description: '修复后 DONE 是否仍全绿' },
@@ -449,6 +452,7 @@ try {
         const im = await callAgent(
           `你是实现工程师，在【沙箱】${sandboxDir} 里写代码。${SAFETY}\n${resume}` +
           `真相源：读 ${scaffold.codingWorkflowPath} 的 §1–§8 严格执行（流程细节以它为准，本提示不重复）。方案在 ${taskDir}/input/（plan.json 的 modify/add/steps/reuse 是落点）。\n` +
+          `【遵循项目既有规范】先读 ${taskDir}/input/project-code-style.json（若有）：新代码遵循其识别的命名/分层/统一响应/异常/日志/注释等既有风格；优先复用既有 Service/Util/组件/枚举，不重复造轮子；规范优先级 客户>项目>阿里[仅当真接入]>通用（阿里占位按未接入）；不做无据重构、不引入与既有分层冲突的结构、只动 SCOPE；与既有规范确有冲突在 ${taskDir}/state/progress.md 记录，不擅自大范围重写。\n` +
           `【SCOPE：只许改这些沙箱内文件】${scopeList}（相对仓库根；对应沙箱路径=${sandboxDir}/<相对路径>）。改到 SCOPE 外即属越界，必须停。\n` +
           `【测试边界·硬约束】绝不修改/删除/新增 ${taskDir}/tests/ 下任何测试文件——它们由独立测试角色物化、是本次验收基线；通过改测试让 DONE 变绿会被独立验证判定为篡改并 BLOCKED。测试若产生临时输出，写到 ${taskDir}/state/ 或 mktemp，不要写进 tests/。\n` +
           `循环：取下一个未完成 step → 在 state/scratch 想清楚 → 改沙箱内 SCOPE 文件 → 跑 DONE：\`${materialize.doneCommand}\` → 把这一轮写进 ${taskDir}/state/progress.md（追加，不删）。直到 DONE 全绿(exit 0/ALL PASSED)。\n` +
@@ -470,6 +474,10 @@ try {
           { lens: 'robustness', focus: '异常/边界/坏输入是否会崩溃、卡死或被吞' },
           { lens: 'scope-conformance', focus: '是否只改了 plan.affected.files、是否符合 plan.modify 的 why、有无夹带无关改动' },
           { lens: 'risk-coverage', focus: 'risks.json 高危项是否被测试真覆盖、既有退出码等语义是否被破坏' },
+          { lens: 'readability', focus: '命名/结构/复杂度：是否清晰达意、无过深嵌套与重复，贴合项目既有可读性风格' },
+          { lens: 'maintainability', focus: '是否复用既有 Service/Util/组件/枚举而非重复造轮子、职责单一低耦合、无无据重构扩大维护面' },
+          { lens: 'code-style', focus: '对照 input/project-code-style.json 识别出的项目规范核对编码风格（命名/分层/统一响应/异常模型/日志/注释等）；规范优先级 客户>项目>阿里[仅当真接入]>通用，阿里占位按未接入不据其判定' },
+          { lens: 'project-convention', focus: '是否遵循目标项目既有约定（目录布局/分层落点/DTO-VO-Entity/统一返回/事务/SQL-ORM 用法），新代码贴合而非引入冲突分层；与既有规范冲突应记录而非大范围重构' },
         ]
         const LENSES = LENSES_ALL.filter(L => CFG.lenses.includes(L.lens))   // 按档位裁剪复审视角（lite 仅 correctness+scope-conformance）
         // L2 增量复审：doReview 接受可选 lensSubset；Fix 后只重审上一轮 needs-work 的视角，已 ok 的视角沿用结论（独立性不破——被触及关切仍由全新独立实例审）。显式注入 lens 保证 carry-forward/合并可靠。
@@ -479,7 +487,8 @@ try {
             callAgent(
               `你是独立审查者（视角=${L.lens}，第 ${round} 轮），未参与实现/修复，只读不许改。${SAFETY}\n` +
               `按 ${scaffold.codingWorkflowPath} 的 §7.1 与 ${bridgeDoc} §5.5 的「${L.lens}」视角，审查沙箱 ${sandboxDir} 的当前改动（对照 ${taskDir}/input/ 的方案）。聚焦：${L.focus}。\n` +
-              `可只读跑 DONE（\`${materialize.doneCommand}\`）佐证。给 findings + verdict(ok/needs-work) + blocking(是否阻断性) + note。`,
+              `${['readability', 'maintainability', 'code-style', 'project-convention'].includes(L.lens) ? `本视角属风格/规范类：先读 ${taskDir}/input/project-code-style.json（若有）按其识别的项目既有风格与分层判定；规范优先级 客户>项目>阿里[仅当真接入]>通用，阿里规范当前占位按未接入、绝不据其判定；不得据低优先级规范要求对客户既有代码做大范围重构，冲突记为 finding 而非"应重写"。\n` : ''}` +
+              `可只读跑 DONE（\`${materialize.doneCommand}\`）佐证。给 findings + verdict(ok/needs-work) + severity(P0/P1/P2/none) + blocking + note。【分级】P0=必阻断（须 blocking=true 且 verdict=needs-work）；P1=应修不必阻断（verdict=needs-work、blocking=false，计开环）；P2=轻微建议（verdict 可 ok，仅写 note、不必判 needs-work）；无问题=none。`,
               { schema: REVIEW_SCHEMA, label: `review-r${round}:${L.lens}`, phase: 'Review', agentType: AT, effort: CFG.reviewEffort }, true)
               .then(r => r.ok ? { ...r.value, lens: L.lens } : null)
           ))
@@ -501,6 +510,7 @@ try {
           const fx = await callAgent(
             `你是【独立修复工程师】（全新实例，未参与本次实现 implement 与评审），在沙箱 ${sandboxDir} 里改（第 ${fixRound} 轮）。${SAFETY}\n` +
             `职责【仅限】按下列独立评审意见做【最小修复】：先读 ${taskDir}/state/progress.md 与现有改动理解现状，再针对意见改；不得借机重写实现脉络、不得扩大改动范围、不得改动 ${taskDir}/tests/ 下任何测试文件（改测试迁就实现将被独立验证判定为篡改并 BLOCKED）。\n` +
+            `修复同样遵循 ${taskDir}/input/project-code-style.json（若有）的项目既有风格与分层、优先复用既有能力，不无据重构、不引入冲突分层。\n` +
             `按 ${scaffold.codingWorkflowPath} 的 §7.2 修复协议处理以下审查意见，只改 SCOPE 内文件：\n${findings.map((f, i) => `${i + 1}. ${f}`).join('\n')}\n` +
             `改完【必须重跑 DONE 仍全绿】(\`${materialize.doneCommand}\`)——修复不得破坏已通过部分。把改动记进 ${taskDir}/state/progress.md。\n` +
             `回报 passed/donePassed(DONE是否仍绿)/addressed/stillOpen/filesChanged/summary。`,
@@ -591,7 +601,7 @@ try {
             `【规范优先级】客户项目规范 > 项目现有风格 > 阿里 Java 规范【仅当真接入】> 通用最佳实践；阿里规范当前为占位 → 一律按"未接入"，specSource 写"阿里规范：未接入（占位）"，绝不声称已按其检查。\n` +
             `【只跑既有、绝不引新工具/批量改格式】仅运行项目【本来就配置了】的静态工具与其【既有命令】；严禁安装/引入项目原本没有的格式化或静态工具，严禁 --fix/--write/格式化批量改写源码（introducedNewTool 必须=false；若你确实动了则如实置 true 并说明，供人工复核）。\n` +
             `【编译/构建】若项目有明确且不依赖缺失环境的编译/构建命令（如 mvn -q compile、gradle compileJava、tsc --noEmit、go build ./...、cargo check），执行一次：记 compileRan/compileCommand/compileExitCode/compileOutputTail(真实输出尾)/compilePassed。无法跑（无命令/缺环境）则 compileRan=false 并在 note 说明，绝不臆断通过。\n` +
-            `【静态工具】对每个既有工具跑其既有命令，逐个记 staticChecks(tool/command/exitCode/status/severity/outputTail/note)：能跑且退出码0→passed；能跑但退出码非0（有告警/错误）→failed；工具存在但本环境跑不起来→unverified；本档主动略过→skipped；项目没有该类工具→不必列。severity 先粗判（编译/构建类=P0，其余 lint/风格先标 P1 或 P2），精细分级在后续审查阶段。outputTail 必须是真实输出截断，绝不编造。\n` +
+            `【静态工具】对每个既有工具跑其既有命令，逐个记 staticChecks(tool/command/exitCode/status/severity/outputTail/note)：能跑且退出码0→passed；能跑但退出码非0（有告警/错误）→failed；工具存在但本环境跑不起来→unverified；本档主动略过→skipped；项目没有该类工具→不必列。severity 先粗判（编译/构建类、以及致命级静态问题[安全漏洞/必崩溃/数据损坏]=P0；一般 lint/风格问题 P1 或 P2），精细分级在后续审查阶段。outputTail 必须是真实输出截断，绝不编造。\n` +
             `【成本】这是确定性工具执行，不要为此再派生子代理。${mode === 'lite' ? '当前 lite 档：只跑项目自带的主 lint/检查命令 + 编译，重型扫描可记 skipped。' : '逐个跑项目已配置的静态工具。'}\n` +
             `【无能力/无工具 → 如实跳过】项目没有任何既有静态工具且无可跑编译命令 → applicable=false，note 写明依据与剩余风险（静态质量未经工具校验），绝不伪造已检查。\n` +
             `回报 applicable/specSource/language/buildTool/compileRan/compilePassed/compileCommand/compileExitCode/compileOutputTail/staticChecks/introducedNewTool/summary/note。`,
@@ -605,6 +615,7 @@ try {
             note(`CodeQuality：specSource=${codeQuality.specSource}；编译 ${codeQuality.compileRan ? (codeQuality.compilePassed ? '通过' : '未过') : '未跑'}；静态工具 ${codeQuality.staticChecks.length} 个（failed ${cqFailed.length}），引入新工具=${codeQuality.introducedNewTool}。`)
             if (codeQuality.introducedNewTool === true) note('⚠ CodeQuality 报告引入了项目原本没有的工具或批量改了格式：违反"只跑既有"约束，需人工复核（已如实记录，不据此判过）。')
             if (codeQuality.applicable === true && codeQuality.compileRan === true && codeQuality.compilePassed === false) { finalStatus = 'BLOCKED'; note('⛔ 项目编译/构建失败（P0），拒绝交付。') }
+            else if (codeQuality.applicable === true && codeQuality.staticChecks.some(c => c.status === 'failed' && c.severity === 'P0')) { finalStatus = 'BLOCKED'; note('⛔ 静态检查存在 P0 级问题（必阻断），拒绝交付。') }
           }
         }
       }
@@ -657,7 +668,7 @@ if (!halted) {
     gateRemainingGaps: (gate && gate.remainingGaps) || [],
     diff: (scaffold && scaffold.runDir) ? diffResult : null,
     browser: browserResult ? { applicable: browserResult.applicable, status: browserResult.status, openItems: browserResult.openItems } : null,
-    codeQuality: codeQuality ? { applicable: codeQuality.applicable, compileRan: codeQuality.compileRan, compilePassed: codeQuality.compilePassed, openItems: cqOpenItems } : null,
+    codeQuality: codeQuality ? { applicable: codeQuality.applicable, compileRan: codeQuality.compileRan, compilePassed: codeQuality.compilePassed, hasP0Failure: codeQuality.staticChecks.some(c => c.status === 'failed' && c.severity === 'P0'), openItems: cqOpenItems } : null,
   }
   const sr = computeDeliverStatus(statusInput)
   finalStatus = sr.finalStatus
@@ -689,7 +700,7 @@ const deliverManifest = {
   redLine: implement && implement.redLineHit ? implement.redLineReason : null,
   diffApplyCheckPassed: diffResult ? diffResult.diffApplyCheckPassed : null,
   diffStat: diffResult ? diffResult.diffStat : null,
-  reviewVerdicts: reviews.map(r => ({ lens: r.lens, verdict: r.verdict, blocking: r.blocking })),
+  reviewVerdicts: reviews.map(r => ({ lens: r.lens, verdict: r.verdict, severity: r.severity, blocking: r.blocking })),
   fix: fix ? { passed: fix.passed, donePassed: fix.donePassed, stillOpen: fix.stillOpen } : null,
   fixHistory,
   reviewComplete: !reviewIncomplete,
@@ -700,7 +711,7 @@ const deliverManifest = {
     ...(materialize ? materialize.openLoopItems : []),
     ...((gate && gate.openQuestions) || []).map(q => `方案待确认: ${q}`),
     ...((gate && gate.remainingGaps) || []).map(g => `方案遗留: ${g}`),
-    ...reviews.filter(r => r.verdict === 'needs-work').flatMap(r => r.findings.map(f => `审查未关闭[${r.lens}]: ${f}`)),
+    ...reviews.filter(r => r.verdict === 'needs-work').flatMap(r => r.findings.map(f => `审查未关闭[${r.lens}/${r.severity}]: ${f}`)),
     ...(verify && verify.redGreenVerified === false ? ['独立"先红后绿"未复现：DONE 可信度未独立确认'] : []),
     ...(verify && verify.independentTestsPassed === false ? ['独立复测未过：实现未满足验收或改测试迁就实现（已 BLOCKED）'] : []),
     ...(verify && verify.testsIntact === false ? ['在树 tests/ 指纹与物化时不一致（疑似被改动），需人工核对'] : []),

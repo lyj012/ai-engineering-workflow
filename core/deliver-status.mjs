@@ -27,11 +27,11 @@
 //   browser,                           // { applicable, status:'passed'|'failed'|'skipped'|'error', openItems[] } | null
 //                                      //   web only: applicable+failed -> BLOCKED; skipped/error or openItems
 //                                      //   -> WITH_OPEN_ITEMS (honest skip, never faked); null/not-applicable -> no effect
-//   codeQuality,                       // { applicable, compileRan, compilePassed, openItems[] } | null
+//   codeQuality,                       // { applicable, compileRan, compilePassed, hasP0Failure, openItems[] } | null
 //                                      //   applicable+compileRan+!compilePassed -> BLOCKED (P0 compile/build break);
-//                                      //   openItems (non-compile static failures / unverified tools / new-tool warning)
-//                                      //   -> WITH_OPEN_ITEMS; null/not-applicable -> no effect. Per-issue P0/P1/P2
-//                                      //   severity refinement + style review lenses land in the review stage (S4).
+//                                      //   applicable+hasP0Failure -> BLOCKED (a static check graded P0, e.g. critical
+//                                      //   security/crash finding); openItems (non-compile P1/P2 failures / unverified
+//                                      //   tools / new-tool warning) -> WITH_OPEN_ITEMS; null/not-applicable -> no effect.
 // }
 export function computeDeliverStatus(input) {
   const i = input || {}
@@ -58,6 +58,7 @@ export function computeDeliverStatus(input) {
   const codeQuality = i.codeQuality || null
   const codeQualityOpenItems = (codeQuality && Array.isArray(codeQuality.openItems)) ? codeQuality.openItems : []
   const codeQualityCompileFailed = !!(codeQuality && codeQuality.applicable === true && codeQuality.compileRan === true && codeQuality.compilePassed === false)
+  const codeQualityP0 = !!(codeQuality && codeQuality.applicable === true && codeQuality.hasP0Failure === true)
   const hasOpenItems = materializeOpenLoopItems.length > 0 ||
     reviews.some(r => r && r.verdict === 'needs-work') ||
     redGreenUnconfirmed ||
@@ -72,6 +73,7 @@ export function computeDeliverStatus(input) {
   if (blockingReview) { reasons.push('存在阻断性审查意见未关闭。'); return { finalStatus: 'BLOCKED', reasons } }
   if (browser && browser.applicable === true && browser.status === 'failed') { reasons.push('真实浏览器验证失败（web 项目：页面/交互/控制台/接口未通过），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (codeQualityCompileFailed) { reasons.push('项目编译/构建失败（P0），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (codeQualityP0) { reasons.push('代码质量检查存在 P0 级静态问题（必阻断），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
 
   // #1/#2: the delivered, apply-checked diff is the final fact — never settle on DELIVERED without it.
   const diff = i.diff || null
