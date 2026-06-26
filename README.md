@@ -22,6 +22,8 @@ The main chain is intentionally split:
 3. `deliver-from-plan`: copy the target repo into a sandbox, materialize tests, implement inside the sandbox, review, verify, and emit a diff.
 4. `publish-delivery` (optional): clone the remote into an isolated working copy, apply the verified diff, branch/commit/push, then verify the remote independently. Never force-pushes; refuses protected branches (`main`/`master`/`release`) and high-risk domains unless explicitly opted in; creates no PR.
 
+`auto-deliver` chains all of the above end to end (`workflow()` one level deep): from a single requirement plus a target repository it runs plan → readiness gate → deliver → delivery gate → publish, stopping only on a NEEDS_CLARIFICATION requirement, a plan red line, or missing push permission. Each gate is deterministic; each engine still persists its own detailed artifacts.
+
 ## Requirements
 
 - Claude Code with Dynamic Workflows enabled for the stable `.claude/` workflows.

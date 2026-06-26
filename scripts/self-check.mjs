@@ -137,6 +137,7 @@ const workflowFiles = [
   '.claude/workflows/plan-from-requirement.js',
   '.claude/workflows/deliver-from-plan.js',
   '.claude/workflows/publish-delivery.js',
+  '.claude/workflows/auto-deliver.js',
   '.claude/workflows/analyze-repo.js',
   '.claude/workflows/wf-methodology-research.js',
   '.claude/workflows/wf-docs-generation.js',
