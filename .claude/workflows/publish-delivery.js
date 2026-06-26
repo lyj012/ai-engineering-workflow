@@ -31,7 +31,7 @@ export const meta = {
   description: '已验证交付 → 自动建分支/commit/push + 发布后远程确定性核验（不建 PR）。clone 远程→应用已验证 diff→落地分支→push→独立核验远程。绝不 force、默认禁直推 main、高风险人工闸门、绝不提交密钥。',
   whenToUse: '已有一份 deliver-from-plan 产出的、finalStatus 为 DELIVERED / DELIVERED_WITH_OPEN_ITEMS 的交付（含通过 apply-check 的 changes.diff），希望自动把它发布到目标仓库远程的一个分支（不建 PR），且要求发布结果可被独立核验时',
   phases: [
-    { title: 'Preflight', detail: '读 delivery-manifest，确定性发布闸门：可发布态 + apply-check + 高风险/分支策略 + 解析远程' },
+    { title: 'Preflight', detail: '读 delivery-manifest，确定性发布闸门：可发布态 + apply-check + 高风险/分支策略 + 解析远程 + 客户发布方式选择（未选停于 PUBLISH_NEEDS_CHOICE，不 commit/push）' },
     { title: 'Clone', detail: 'clone 远程到隔离发布工作副本（保留 .git，原仓库零改动）' },
     { title: 'Branch', detail: '据策略建分支（默认新特性分支；禁直推 main/master/release 除非 allowMainPush）' },
     { title: 'Apply', detail: 'git apply 已验证 changes.diff；核对变更文件与交付一致' },
@@ -61,7 +61,11 @@ const LIGHT_MODEL = ['haiku', 'sonnet', 'opus', 'fable'].includes(String(A.light
 const allowHighRiskAutoPublish = !!A.allowHighRiskAutoPublish
 const dryRun = !!A.dryRun
 const GP = (A.gitPolicy && typeof A.gitPolicy === 'object') ? A.gitPolicy : {}
-const branchMode = GP.branchMode === 'direct' ? 'direct' : 'new-branch'
+// 客户必须显式选择发布方式（gitPolicy.branchMode："new-branch"=新建分支后提交推送 / "direct"=当前分支直接提交推送）；
+// 未显式选择则在 Preflight 停于 PUBLISH_NEEDS_CHOICE，不执行 commit/push（受保护分支/高风险/禁强推规则不变）。
+const branchChoiceRaw = GP.branchMode ? String(GP.branchMode).toLowerCase() : ''
+const branchChoiceProvided = branchChoiceRaw === 'new-branch' || branchChoiceRaw === 'direct'
+const branchMode = branchChoiceProvided ? branchChoiceRaw : 'new-branch'   // 安全缺省仅供代码路径；未选择时不会走到使用它的分支
 const branchPrefix = GP.branchPrefix ? String(GP.branchPrefix) : 'ai/'
 const targetBranch = GP.targetBranch ? String(GP.targetBranch) : null
 const allowMainPush = !!GP.allowMainPush
@@ -95,6 +99,8 @@ function computePublishStatus(input) {
   const i = input || {}
   const reasons = []
   if (i.priorStatus === 'PUBLISH_BLOCKED') return { finalStatus: 'PUBLISH_BLOCKED', reasons }
+  // customer must explicitly choose the branch mode before any commit/push; absence stops here, not BLOCKED
+  if (i.priorStatus === 'PUBLISH_NEEDS_CHOICE') return { finalStatus: 'PUBLISH_NEEDS_CHOICE', reasons }
 
   if (i.highRiskBlocked) { reasons.push('高风险域（支付/权限/密钥/认证/不可逆）默认人工闸门，不自动发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
 
@@ -201,6 +207,7 @@ try {
   else if (!publishable) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 上游交付未达可发布态（需 DELIVERED/带开环项 + apply-check 通过 + diff 存在），拒绝发布。') }
   else if (!remoteUrl) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 解析不到要 push 的远程（targetRepo 无 origin 且未传 remoteUrl），无处可发。请传 args.remoteUrl。') }
   else if (!pre.remoteReachable) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 远程不可达（网络或凭据问题），无法发布。') }
+  else if (!branchChoiceProvided) { finalStatus = 'PUBLISH_NEEDS_CHOICE'; note('⏸ 需客户先选择发布方式，未明确选择前【不执行 commit/push】：(1) 新建分支后提交并推送 → 传 gitPolicy.branchMode="new-branch"；(2) 当前分支直接提交并推送 → 传 gitPolicy.branchMode="direct"。请带选择重跑发布。受保护分支/高风险/禁强推规则不变。') }
   else {
 
     // ---- Clone：clone 远程到隔离发布工作副本（保留 .git）----
@@ -313,7 +320,7 @@ try {
 
 // ===================== 确定性发布终态（纯函数；priorStatus 短路保留前置 BLOCKED）=====================
 const statusInput = {
-  priorStatus: finalStatus === 'PUBLISH_BLOCKED' ? 'PUBLISH_BLOCKED' : null,
+  priorStatus: (finalStatus === 'PUBLISH_BLOCKED' || finalStatus === 'PUBLISH_NEEDS_CHOICE') ? finalStatus : null,
   highRiskBlocked: !!highRiskBlocked,
   deliverableStatus: pre ? pre.deliverableStatus : null,
   diffApplyCheckPassed: pre ? pre.diffApplyCheckPassed : false,
@@ -332,6 +339,8 @@ const finalDelivery = {
   schemaVersion: '1.0', workflow: 'publish-delivery', deliveryDir,
   finalStatus, dryRun,
   gitPolicy: { branchMode, branchPrefix, targetBranch, allowMainPush, pushRemote },
+  branchChoice: branchChoiceProvided ? (branchMode === 'direct' ? 'current-branch-direct' : 'new-branch') : null,
+  branchChoiceProvided,
   targetRepo: targetRepoArg || (pre && pre.targetRepo) || null,
   remoteUrl: remoteUrlArg || (pre && pre.remoteUrl) || null,
   deliverableStatus: pre ? pre.deliverableStatus : null,
@@ -354,7 +363,7 @@ if (clone && clone.publishDir) {
   const fn = await callAgent(
     `你负责把发布记录落盘（只在 ${clone.publishDir} 内写，绝不再动远程/原仓库）。${SAFETY}\n` +
     `1) 写 ${clone.publishDir}/final-delivery.json（规范 JSON，用下方对象原样写入；最终状态=${finalStatus}，不要更改）。\n` +
-    `2) 写 ${clone.publishDir}/publish-report.md（中文）：含 1 最终状态(=${finalStatus}) 2 来源交付目录 3 远程与分支(含是否新分支/是否受保护) 4 提交(SHA/作者/文件) 5 push 结果 6 发布后远程核验四项(逐项) 7 开环项 8 回滚指引 9 若未发布/未核验，写明原因与"如何用 ! git push 自行完成"。\n` +
+    `2) 写 ${clone.publishDir}/publish-report.md（中文）：含 1 最终状态(=${finalStatus}) 2 来源交付目录 3 【客户选择的发布方式 branchChoice=${branchChoiceProvided ? branchMode : '未选择'}（new-branch=新建分支 / direct=当前分支直接）】 4 远程与分支(含是否新分支/是否受保护) 5 提交(SHA/作者/文件) 6 push 结果 7 发布后远程核验四项(逐项) 8 开环项 9 回滚指引 10 若未发布/未核验，写明原因与"如何用 ! git push 自行完成"。\n` +
     `3) 写 ${clone.publishDir}/execution-log.md（用下方日志数组）。\n` +
     `回报 ok/absOutDir/written/note。\nfinal-delivery(JSON):\n${JSON.stringify(finalDelivery)}\nexecution-log(JSON):\n${JSON.stringify(execLog)}`,
     { schema: FINALIZE_SCHEMA, label: 'finalize', phase: 'Finalize', agentType: AT, effort: 'low', model: LIGHT_MODEL }, true)

@@ -21,6 +21,7 @@ const clean = {
 export const CASES = [
   ['clean publish -> PUBLISHED', clean, 'PUBLISHED'],
   ['prior PUBLISH_BLOCKED short-circuits', { ...clean, priorStatus: 'PUBLISH_BLOCKED' }, 'PUBLISH_BLOCKED'],
+  ['prior PUBLISH_NEEDS_CHOICE short-circuits', { ...clean, priorStatus: 'PUBLISH_NEEDS_CHOICE' }, 'PUBLISH_NEEDS_CHOICE'],
   ['high-risk gated -> PUBLISH_BLOCKED', { ...clean, highRiskBlocked: true }, 'PUBLISH_BLOCKED'],
   ['upstream not delivered -> PUBLISH_BLOCKED', { ...clean, deliverableStatus: 'BLOCKED' }, 'PUBLISH_BLOCKED'],
   ['upstream FAILED -> PUBLISH_BLOCKED', { ...clean, deliverableStatus: 'FAILED' }, 'PUBLISH_BLOCKED'],

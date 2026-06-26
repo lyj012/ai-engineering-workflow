@@ -38,6 +38,8 @@ export function computePublishStatus(input) {
   const i = input || {}
   const reasons = []
   if (i.priorStatus === 'PUBLISH_BLOCKED') return { finalStatus: 'PUBLISH_BLOCKED', reasons }
+  // customer must explicitly choose the branch mode before any commit/push; absence stops here, not BLOCKED
+  if (i.priorStatus === 'PUBLISH_NEEDS_CHOICE') return { finalStatus: 'PUBLISH_NEEDS_CHOICE', reasons }
 
   if (i.highRiskBlocked) { reasons.push('高风险域（支付/权限/密钥/认证/不可逆）默认人工闸门，不自动发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
 
