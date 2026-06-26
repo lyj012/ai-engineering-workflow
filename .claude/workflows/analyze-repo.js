@@ -68,7 +68,8 @@ const outDirBase = A.outDir ? String(A.outDir) : 'evidence/runs'
 const useCustom = !!A.useCustomAgents
 const runVerification = !!A.runVerification
 const MAX_REWORK = (Number.isFinite(Number(A.maxReworkRounds)) && Number(A.maxReworkRounds) >= 0) ? Number(A.maxReworkRounds) : P.maxRework
-// L1 模型分层：纯机械/落盘类 agent（前置校验、落盘）用轻模型省成本；理解/分析/审查/验证类一律留默认强模型。可经 args.lightModel 覆盖。
+// L1 模型分层：仅 schema 结构化返回的机械 agent（如 preflight 前置校验）用轻模型省成本；理解/分析/审查/验证类一律留默认强模型。
+// **落盘 agent 不降级**：persist 逐字写大 JSON，实测 haiku 会漏转义内嵌引号→readback 判 unparseable→降级，须留强模型保真。可经 args.lightModel 覆盖。
 const LIGHT_MODEL = ['haiku', 'sonnet', 'opus', 'fable'].includes(String(A.lightModel)) ? String(A.lightModel) : 'haiku'
 const forceFirstVerdict = A.forceFirstVerdict || null
 const injectFailIdx = Number.isInteger(A.injectComponentFailureIndex) ? A.injectComponentFailureIndex : -1
@@ -499,7 +500,7 @@ const persistPrompt =
   `本阶段=落盘。请把下面的产物写入一个**新的、带时间戳的运行目录**，避免覆盖历史运行。\n` +
   `步骤：(1) 用 Bash 计算时间戳 ts=$(date +%Y%m%d-%H%M%S)；(2) 目标目录 = "${outDirBase}/${'${ts}'}"（相对路径相对你的当前工作目录；请 mkdir -p 并用 realpath 取绝对路径回报）；(3) 把 artifacts 里每个键作为文件名写入该目录（*.json 用规范 JSON、*.md 直接写文本，UTF-8）；(4) 返回 ok / absOutDir(绝对路径) / written(文件名列表) / note。\n` +
   `不要修改目标仓库；只在输出目录内创建文件。\nartifacts(JSON):\n${JSON.stringify(artifacts)}`
-const pr = await callAgent(persistPrompt, { label: 'persist', phase: 'Persist', agentType: resolveType('persist'), schema: PERSIST_SCHEMA, effort: EFFORT.light, model: LIGHT_MODEL }, true)
+const pr = await callAgent(persistPrompt, { label: 'persist', phase: 'Persist', agentType: resolveType('persist'), schema: PERSIST_SCHEMA, effort: EFFORT.light }, true)   // 落盘逐字写大 JSON：不降级，保真
 const persisted = pr.ok ? pr.value : { ok: false, absOutDir: '(写盘失败)', written: [], note: pr.error }
 note(`Persist：${persisted.ok ? '已写入 ' + persisted.absOutDir + '（' + persisted.written.length + ' 个文件）' : '失败：' + persisted.note}`)
 

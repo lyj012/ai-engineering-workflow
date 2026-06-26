@@ -65,7 +65,10 @@ const forceComplexity = ['simple', 'medium', 'complex'].includes(String(A.forceC
 const skipClarify = !!A.skipClarificationGate
 const forceFirstVerdict = A.forceFirstVerdict || null
 const injectFailIdx = Number.isInteger(A.injectComponentFailureIndex) ? A.injectComponentFailureIndex : -1
-// L1 模型分层：纯机械/落盘类 agent（preflight 指纹、落盘）用轻模型省成本；推理/验证/安全 agent 一律留默认强模型。可经 args.lightModel 覆盖。
+// L1 模型分层：仅 schema 结构化返回的机械 agent（如 preflight 仓库指纹）用轻模型省成本；
+// 推理/验证/安全 agent 一律留默认强模型。**落盘 agent 不降级**：persist 的活是把一大坨
+// JSON.stringify(artifacts) 逐字写进文件，实测 haiku 写大段带内嵌引号的 JSON 会漏转义→readback
+// 判 unparseable→FAILED；保真度要求高，必须留强模型。可经 args.lightModel 覆盖。
 const LIGHT_MODEL = ['haiku', 'sonnet', 'opus', 'fable'].includes(String(A.lightModel)) ? String(A.lightModel) : 'haiku'
 
 // 深度档位：不传 mode 时由 Triage 复杂度决定；下面先给基线(早期阶段用)，Triage 后按复杂度重算
@@ -615,7 +618,7 @@ phase('Persist')
 const persistPrompt =
   `本阶段=落盘。把下列产物写入一个**新的、带时间戳的运行目录**，避免覆盖历史运行。\n` +
   `步骤：(1) Bash 计算 ts=$(date +%Y%m%d-%H%M%S)；(2) 目标目录 = "${outDirBase}/${'${ts}'}"（相对你的 cwd；mkdir -p 并 realpath 取绝对路径回报）；(3) 把 artifacts 每个键作为文件名写入（*.json 规范 JSON、*.md 文本，UTF-8）；(4) 返回 ok/absOutDir/written/note。不要修改目标仓库，只在输出目录内创建文件。\nartifacts(JSON):\n${JSON.stringify(artifacts)}`
-const pr = await callAgent(persistPrompt, { label: 'persist', phase: 'Persist', agentType: resolveType('persist'), schema: PERSIST_SCHEMA, effort: EFFORT.light, model: LIGHT_MODEL }, true)
+const pr = await callAgent(persistPrompt, { label: 'persist', phase: 'Persist', agentType: resolveType('persist'), schema: PERSIST_SCHEMA, effort: EFFORT.light }, true)   // 落盘逐字写大 JSON：不降级，保真
 const persisted = pr.ok ? pr.value : { ok: false, absOutDir: '(写盘失败)', written: [], note: pr.error }
 const expectedFiles = Object.keys(artifacts)
 // 落盘后由【独立只读子代理】回读校验，不信 persist agent 自报的 written（#4）
@@ -641,7 +644,7 @@ if (persistOutcome.finalStatus !== finalStatus) {
   if (persisted.ok && persisted.absOutDir && persisted.absOutDir !== '(写盘失败)') {
     const pf = await callAgent(
       `把 ${persisted.absOutDir}/run-manifest.json 覆盖写为下面这个规范 JSON（UTF-8），不要改其它文件。回报 ok/absOutDir/written/note。\nrun-manifest.json:\n${JSON.stringify(manifest)}`,
-      { label: 'persist-manifest-fix', phase: 'Persist', agentType: resolveType('persist'), schema: PERSIST_SCHEMA, effort: EFFORT.light, model: LIGHT_MODEL }, true)
+      { label: 'persist-manifest-fix', phase: 'Persist', agentType: resolveType('persist'), schema: PERSIST_SCHEMA, effort: EFFORT.light }, true)   // 落盘逐字写大 JSON：不降级，保真
     note(`回写 manifest：${pf.ok ? '已更新为降级状态 ' + finalStatus : '失败：' + pf.error}`)
   }
 }
