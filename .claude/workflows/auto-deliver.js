@@ -163,7 +163,7 @@ const summary = {
   requirement, target, mode: mode || 'auto',
   reachedStage: stage, finalStatus, escalation,
   plan: planRes ? { finalStatus: planRes.finalStatus, readinessForDev: planRes.readinessForDev, planDir } : null,
-  delivery: delRes ? { finalStatus: delRes.finalStatus, deliveryDir, filesChanged: (delRes.manifest && delRes.manifest.filesChanged) || [] } : null,
+  delivery: delRes ? { finalStatus: delRes.finalStatus, deliveryDir, filesChanged: (delRes.manifest && delRes.manifest.filesChanged) || [], browserVerify: (delRes.manifest && delRes.manifest.browserVerify) || null } : null,
   publish: pubRes ? {
     finalStatus: pubRes.finalStatus,
     branch: pubRes.branch ? pubRes.branch.branchName : null,
@@ -182,7 +182,7 @@ if (okToWrite) {
     `你负责把端到端编排总结落盘（只写文件、绝不动远程或原仓库、绝不 commit/push）。\n` +
     `1) ts=$(date +%Y%m%d-%H%M%S)；dir="evidence/auto/$ts"；mkdir -p "$dir"；realpath 取绝对路径。\n` +
     `2) 写 "$dir/auto-deliver-summary.json"（规范 JSON，用下方对象原样）。\n` +
-    `3) 写 "$dir/auto-deliver-report.md"（中文）：含 最终状态/到达阶段/各子阶段状态与产物目录/若 NEEDS_CLARIFICATION 列澄清去向/若发布失败列"如何自行完成"/各子引擎明细目录指引。\n` +
+    `3) 写 "$dir/auto-deliver-report.md"（中文）：含 最终状态/到达阶段/各子阶段状态与产物目录/【真实浏览器验证：delivery.browserVerify 的 applicable 与 finalBrowserStatus（passed/failed/skipped-no-capability/not-applicable/error）、adapter、证据目录；非 web 写 not-applicable，无能力写 skipped 并注明剩余风险】/若 NEEDS_CLARIFICATION 列澄清去向/若发布失败列"如何自行完成"/各子引擎明细目录指引。\n` +
     `4) 写 "$dir/execution-log.md"（用下方日志数组）。\n` +
     `回报 ok/absOutDir/written/note。\nsummary(JSON):\n${JSON.stringify(summary)}\nexecution-log(JSON):\n${JSON.stringify(execLog)}`,
     { schema: { type: 'object', additionalProperties: false, properties: {
