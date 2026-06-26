@@ -10,6 +10,7 @@
 //   priorStatus already BLOCKED                                            -> BLOCKED
 //   implement not green / no independent Verify / Verify not green /
 //   review incomplete / blocking review unresolved                        -> BLOCKED
+//   code-quality compile/build failed (applicable + ran + !passed)         -> BLOCKED   (P0)
 //   diff missing or not ok / git apply --check failed / no changed files   -> BLOCKED   (issues #1 / #2)
 //   else                                                                   -> DELIVERED_WITH_OPEN_ITEMS if any
 //                                                                             open item, else DELIVERED
@@ -26,6 +27,11 @@
 //   browser,                           // { applicable, status:'passed'|'failed'|'skipped'|'error', openItems[] } | null
 //                                      //   web only: applicable+failed -> BLOCKED; skipped/error or openItems
 //                                      //   -> WITH_OPEN_ITEMS (honest skip, never faked); null/not-applicable -> no effect
+//   codeQuality,                       // { applicable, compileRan, compilePassed, openItems[] } | null
+//                                      //   applicable+compileRan+!compilePassed -> BLOCKED (P0 compile/build break);
+//                                      //   openItems (non-compile static failures / unverified tools / new-tool warning)
+//                                      //   -> WITH_OPEN_ITEMS; null/not-applicable -> no effect. Per-issue P0/P1/P2
+//                                      //   severity refinement + style review lenses land in the review stage (S4).
 // }
 export function computeDeliverStatus(input) {
   const i = input || {}
@@ -47,11 +53,17 @@ export function computeDeliverStatus(input) {
   const browser = i.browser || null
   const browserOpenItems = (browser && Array.isArray(browser.openItems)) ? browser.openItems : []
   const browserDeferred = !!(browser && browser.applicable === true && (browser.status === 'skipped' || browser.status === 'error'))
+  // code quality (all projects): applicable+compileRan+!compilePassed BLOCKS below (P0); non-compile static
+  // failures / unverified tools / new-tool warning ride openItems -> WITH_OPEN_ITEMS; null/not-applicable = no effect.
+  const codeQuality = i.codeQuality || null
+  const codeQualityOpenItems = (codeQuality && Array.isArray(codeQuality.openItems)) ? codeQuality.openItems : []
+  const codeQualityCompileFailed = !!(codeQuality && codeQuality.applicable === true && codeQuality.compileRan === true && codeQuality.compilePassed === false)
   const hasOpenItems = materializeOpenLoopItems.length > 0 ||
     reviews.some(r => r && r.verdict === 'needs-work') ||
     redGreenUnconfirmed ||
     gateOpenQuestions.length > 0 || gateRemainingGaps.length > 0 ||
-    browserOpenItems.length > 0 || browserDeferred
+    browserOpenItems.length > 0 || browserDeferred ||
+    codeQualityOpenItems.length > 0
 
   if (!i.implementPassed) { reasons.push('实现未达全绿，不交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (!verify) { reasons.push('缺独立验证（Verify 失败），不乐观交付。'); return { finalStatus: 'BLOCKED', reasons } }
@@ -59,6 +71,7 @@ export function computeDeliverStatus(input) {
   if (i.reviewIncomplete) { reasons.push('独立复审视角不齐，不乐观交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (blockingReview) { reasons.push('存在阻断性审查意见未关闭。'); return { finalStatus: 'BLOCKED', reasons } }
   if (browser && browser.applicable === true && browser.status === 'failed') { reasons.push('真实浏览器验证失败（web 项目：页面/交互/控制台/接口未通过），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (codeQualityCompileFailed) { reasons.push('项目编译/构建失败（P0），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
 
   // #1/#2: the delivered, apply-checked diff is the final fact — never settle on DELIVERED without it.
   const diff = i.diff || null

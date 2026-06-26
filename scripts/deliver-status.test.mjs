@@ -46,6 +46,13 @@ export const CASES = [
   ['browser error (web) -> WITH_OPEN_ITEMS', { ...clean, browser: { applicable: true, status: 'error', openItems: [] } }, 'DELIVERED_WITH_OPEN_ITEMS'],
   ['browser not-applicable (non-web) -> DELIVERED', { ...clean, browser: { applicable: false, status: null, openItems: [] } }, 'DELIVERED'],
   ['no browser field -> DELIVERED (backward compatible)', { ...clean }, 'DELIVERED'],
+  // --- code quality (S3): compile fail BLOCKS (P0); non-compile static items downgrade; no-tools/clean = no effect ---
+  ['codeQuality compile failed -> BLOCKED', { ...clean, codeQuality: { applicable: true, compileRan: true, compilePassed: false, openItems: [] } }, 'BLOCKED'],
+  ['codeQuality compile passed clean -> DELIVERED', { ...clean, codeQuality: { applicable: true, compileRan: true, compilePassed: true, openItems: [] } }, 'DELIVERED'],
+  ['codeQuality static failures -> WITH_OPEN_ITEMS', { ...clean, codeQuality: { applicable: true, compileRan: false, compilePassed: false, openItems: ['checkstyle 3 violations'] } }, 'DELIVERED_WITH_OPEN_ITEMS'],
+  ['codeQuality not-applicable (no tools) -> DELIVERED', { ...clean, codeQuality: { applicable: false, compileRan: false, compilePassed: false, openItems: [] } }, 'DELIVERED'],
+  ['codeQuality compile not-run no-items -> DELIVERED', { ...clean, codeQuality: { applicable: true, compileRan: false, compilePassed: false, openItems: [] } }, 'DELIVERED'],
+  ['no codeQuality field -> DELIVERED (backward compatible)', { ...clean }, 'DELIVERED'],
 ]
 
 export function runDeliverStatusTests() {

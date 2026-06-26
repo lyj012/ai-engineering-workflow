@@ -103,11 +103,16 @@ function computeDeliverStatus(input) {
   const browser = i.browser || null
   const browserOpenItems = (browser && Array.isArray(browser.openItems)) ? browser.openItems : []
   const browserDeferred = !!(browser && browser.applicable === true && (browser.status === 'skipped' || browser.status === 'error'))
+  // 代码质量（全项目）：applicable+compileRan+!compilePassed 阻断（P0）；非编译类静态失败/未验证工具/引入新工具告警走 openItems→带开环；null/不适用=无影响
+  const codeQuality = i.codeQuality || null
+  const codeQualityOpenItems = (codeQuality && Array.isArray(codeQuality.openItems)) ? codeQuality.openItems : []
+  const codeQualityCompileFailed = !!(codeQuality && codeQuality.applicable === true && codeQuality.compileRan === true && codeQuality.compilePassed === false)
   const hasOpenItems = materializeOpenLoopItems.length > 0 ||
     reviews.some(r => r && r.verdict === 'needs-work') ||
     redGreenUnconfirmed ||
     gateOpenQuestions.length > 0 || gateRemainingGaps.length > 0 ||
-    browserOpenItems.length > 0 || browserDeferred
+    browserOpenItems.length > 0 || browserDeferred ||
+    codeQualityOpenItems.length > 0
 
   if (!i.implementPassed) { reasons.push('实现未达全绿，不交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (!verify) { reasons.push('缺独立验证（Verify 失败），不乐观交付。'); return { finalStatus: 'BLOCKED', reasons } }
@@ -115,6 +120,7 @@ function computeDeliverStatus(input) {
   if (i.reviewIncomplete) { reasons.push('独立复审视角不齐，不乐观交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (blockingReview) { reasons.push('存在阻断性审查意见未关闭。'); return { finalStatus: 'BLOCKED', reasons } }
   if (browser && browser.applicable === true && browser.status === 'failed') { reasons.push('真实浏览器验证失败（web 项目：页面/交互/控制台/接口未通过），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (codeQualityCompileFailed) { reasons.push('项目编译/构建失败（P0），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
 
   const diff = i.diff || null
   if (!diff || diff.ok !== true) { reasons.push('交付 diff 生成/落盘失败，状态降级 BLOCKED（不以 DELIVERED 收尾）。'); return { finalStatus: 'BLOCKED', reasons } }
@@ -334,10 +340,28 @@ const BROWSER_VERIFY_SCHEMA = { type: 'object', additionalProperties: false, pro
   note: { type: 'string' },
 }, required: ['adapterUsed', 'projectStarted', 'startLogTail', 'pageOpened', 'baseUrl', 'opsExecuted', 'checks', 'consoleErrors', 'failedKeyRequests', 'screenshots', 'evidenceDir', 'finalBrowserStatus', 'note'] }
 
+// CodeQuality（S3）：跑项目【既有】静态工具 + 编译/构建，记录真实命令/退出码/输出尾；无工具如实跳过，绝不引新工具或批量改格式
+const CODE_QUALITY_SCHEMA = { type: 'object', additionalProperties: false, properties: {
+  applicable: { type: 'boolean', description: '项目是否有可运行的既有静态工具或编译/构建命令；都没有则 false（→ 如实跳过）' },
+  specSource: { type: 'string', description: '本次风格判定依据的优先级实际取值（客户规范 > 项目现有风格 > 阿里 Java[仅当真接入] > 通用最佳实践）；阿里规范当前占位未接入须如实写"阿里规范：未接入（占位）"' },
+  language: { type: 'string', description: '主语言，判不出填 unknown' }, buildTool: { type: 'string', description: '构建工具，判不出填 unknown' },
+  compileRan: { type: 'boolean', description: '是否真的执行了项目的编译/构建命令' },
+  compilePassed: { type: 'boolean', description: '编译/构建是否通过（compileRan=false 时本字段无意义，置 false 并在 note 说明未跑）' },
+  compileCommand: { type: 'string' }, compileExitCode: { type: 'number', description: '未跑填 -1' }, compileOutputTail: { type: 'string', description: '真实输出尾（截断），绝不编造' },
+  staticChecks: { type: 'array', items: { type: 'object', additionalProperties: false, properties: {
+    tool: { type: 'string' }, command: { type: 'string' }, exitCode: { type: 'number' },
+    status: { type: 'string', enum: ['passed', 'failed', 'skipped', 'unverified'], description: '能跑且退出码0=passed；能跑但非0=failed；工具在但本环境跑不起来=unverified；本档主动跳过=skipped' },
+    severity: { type: 'string', enum: ['P0', 'P1', 'P2', 'unknown'], description: '初判严重度（精细 P0/P1/P2 分级在审查阶段 S4 接管）；编译/构建类=P0' },
+    outputTail: { type: 'string', description: '真实输出尾（截断），绝不编造' }, note: { type: 'string' },
+  }, required: ['tool', 'command', 'exitCode', 'status', 'severity', 'outputTail', 'note'] }, description: '逐个已运行/跳过的项目既有静态工具' },
+  introducedNewTool: { type: 'boolean', description: '是否引入了项目原本没有的格式化/静态工具或做了批量改格式（必须为 false：S3 只跑既有工具、不引新工具、不 --fix/批量改写）' },
+  summary: { type: 'string' }, note: { type: 'string', description: '探测/执行过程；无能力时写明依据与剩余风险' },
+}, required: ['applicable', 'specSource', 'language', 'buildTool', 'compileRan', 'compilePassed', 'compileCommand', 'compileExitCode', 'compileOutputTail', 'staticChecks', 'introducedNewTool', 'summary', 'note'] }
+
 // ===================== 状态收集 =====================
 let finalStatus = 'FAILED'
 let gate = null, scaffold = null, materialize = null, implement = null, reviews = [], fix = null, verify = null, deliver = null
-let trustworthy = false, reviewIncomplete = false, halted = false, diffResult = null, staleCmp = null, browserResult = null
+let trustworthy = false, reviewIncomplete = false, halted = false, diffResult = null, staleCmp = null, browserResult = null, codeQuality = null
 const failedStages = [], fixHistory = []
 
 try {
@@ -378,7 +402,7 @@ try {
       `1) ts=$(date +%Y%m%d-%H%M%S)；runDir="${outDirBase}/$ts"（相对你的 cwd）；mkdir -p "$runDir"；用 realpath 取绝对路径。\n` +
       `2) 沙箱：把目标仓库复制进沙箱。优先使用 rsync -a --delete --exclude .git --exclude node_modules --exclude dist --exclude build --exclude .next --exclude coverage --exclude .env --exclude ".env.*" --exclude "*.pem" --exclude "*.key" --exclude "id_rsa*" --exclude "*.p12" --exclude "*.pfx" "${targetRepo}/" "$runDir/sandbox/"；无 rsync 时才用 mkdir -p "$runDir/sandbox" && cp -a "${targetRepo}/." "$runDir/sandbox/"。复制后立即清除沙箱内版本历史、构建产物与敏感物：rm -rf 沙箱内的 .git/node_modules/dist/build/.next/coverage，并用 find 删除 .env/.env.*/*.pem/*.key/id_rsa*/*.p12/*.pfx/.npmrc/.pypirc/*credentials*.json/*secret*.json/*.bak/*.dump/*.sql.gz/*.log。不要跟随符号链接到沙箱外；发现指向沙箱外的 symlink 要删除或停下报告。校验沙箱关键文件仍在、且 .git/.env/密钥/日志不在。\n` +
       `3) task 目录：mkdir -p "$runDir/task-workflow/"{input,output,tests,state}；mkdir -p "$runDir/task-workflow/state/scratch"。\n` +
-      `4) 把方案产物（final-plan.md 若有、plan.json、test-plan.json、requirement.json、risks.json）从 ${planDir} 复制到 "$runDir/task-workflow/input/"。\n` +
+      `4) 把方案产物（final-plan.md 若有、plan.json、test-plan.json、requirement.json、risks.json、project-code-style.json 若有）从 ${planDir} 复制到 "$runDir/task-workflow/input/"。\n` +
       `5) 读 vendored 模板 ${vendorDir}/build-workflow.md，按其结构生成一份**填好的** "$runDir/task-workflow/coding-workflow.md"：\n` +
       `   - §1 GOAL=需求目标；§2 VARIABLES：INPUT=task-workflow/input/、OUTPUT=沙箱内被改文件、DONE=见 MaterializeTests 产出的命令（先写占位"见 tests/，由桥接物化；入口支持 --red/--regression 按类筛选与可选目标目录"）、SCOPE=【只许改下列文件】、CONTRACT=保持 .sh/.ps1 行为一致与既有退出码语义；\n` +
       `   - §3 在通用红线外，追加本任务红线（来自 risks.json 高危项）；§4 LOOP 的 todo 用 plan.json.steps；\n` +
@@ -557,6 +581,32 @@ try {
             }
           }
         }
+
+        // ---- CodeQuality（S3）：跑项目【既有】静态工具 + 编译/构建，记录真实命令/退出码/输出尾；无工具如实跳过、绝不引新工具/批量改格式。编译失败=P0→BLOCKED；非编译类静态失败/未验证/引新工具→开环项（喂入 computeDeliverStatus 的 codeQuality 闸门）。精细 P0/P1/P2 分级与 style 审查视角在 S4 接管。----
+        if (finalStatus !== 'BLOCKED') {
+          phase('CodeQuality')
+          const cq = await callAgent(
+            `你是【独立代码质量检查者】，未参与实现/修复，对沙箱 ${sandboxDir} 的产出做静态质量检查（只读+只跑工具，绝不改源码、绝不动原仓库、绝不 commit/push）。${SAFETY}\n` +
+            `【既有工具清单与规范来源】优先读 ${taskDir}/input/project-code-style.json（plan 阶段产出的项目规范识别，若存在）取其 staticTools[]（name/command/configFile）与 specSource；不存在则自行在沙箱探测既有工具：pom.xml/build.gradle 的 checkstyle/spotless/pmd 插件、package.json scripts 的 lint/format 与 eslint/prettier/stylelint 配置、ruff/black/flake8、gofmt/golangci-lint、以及项目自带的 lint/check 脚本。\n` +
+            `【规范优先级】客户项目规范 > 项目现有风格 > 阿里 Java 规范【仅当真接入】> 通用最佳实践；阿里规范当前为占位 → 一律按"未接入"，specSource 写"阿里规范：未接入（占位）"，绝不声称已按其检查。\n` +
+            `【只跑既有、绝不引新工具/批量改格式】仅运行项目【本来就配置了】的静态工具与其【既有命令】；严禁安装/引入项目原本没有的格式化或静态工具，严禁 --fix/--write/格式化批量改写源码（introducedNewTool 必须=false；若你确实动了则如实置 true 并说明，供人工复核）。\n` +
+            `【编译/构建】若项目有明确且不依赖缺失环境的编译/构建命令（如 mvn -q compile、gradle compileJava、tsc --noEmit、go build ./...、cargo check），执行一次：记 compileRan/compileCommand/compileExitCode/compileOutputTail(真实输出尾)/compilePassed。无法跑（无命令/缺环境）则 compileRan=false 并在 note 说明，绝不臆断通过。\n` +
+            `【静态工具】对每个既有工具跑其既有命令，逐个记 staticChecks(tool/command/exitCode/status/severity/outputTail/note)：能跑且退出码0→passed；能跑但退出码非0（有告警/错误）→failed；工具存在但本环境跑不起来→unverified；本档主动略过→skipped；项目没有该类工具→不必列。severity 先粗判（编译/构建类=P0，其余 lint/风格先标 P1 或 P2），精细分级在后续审查阶段。outputTail 必须是真实输出截断，绝不编造。\n` +
+            `【成本】这是确定性工具执行，不要为此再派生子代理。${mode === 'lite' ? '当前 lite 档：只跑项目自带的主 lint/检查命令 + 编译，重型扫描可记 skipped。' : '逐个跑项目已配置的静态工具。'}\n` +
+            `【无能力/无工具 → 如实跳过】项目没有任何既有静态工具且无可跑编译命令 → applicable=false，note 写明依据与剩余风险（静态质量未经工具校验），绝不伪造已检查。\n` +
+            `回报 applicable/specSource/language/buildTool/compileRan/compilePassed/compileCommand/compileExitCode/compileOutputTail/staticChecks/introducedNewTool/summary/note。`,
+            { schema: CODE_QUALITY_SCHEMA, label: 'code-quality', phase: 'CodeQuality', agentType: AT, effort: 'low', model: LIGHT_MODEL }, false)
+          if (!cq.ok) {
+            codeQuality = { applicable: false, specSource: '阿里规范：未接入（占位）', language: 'unknown', buildTool: 'unknown', compileRan: false, compilePassed: false, compileCommand: '', compileExitCode: -1, compileOutputTail: '', staticChecks: [], introducedNewTool: false, summary: '代码质量检查子代理失败', note: '代码质量检查未完成（非"已通过"）：' + cq.error }
+            note(`CodeQuality：子代理失败，记为未检查（不伪造通过）：${cq.error}`)
+          } else {
+            codeQuality = cq.value
+            const cqFailed = codeQuality.staticChecks.filter(c => c.status === 'failed')
+            note(`CodeQuality：specSource=${codeQuality.specSource}；编译 ${codeQuality.compileRan ? (codeQuality.compilePassed ? '通过' : '未过') : '未跑'}；静态工具 ${codeQuality.staticChecks.length} 个（failed ${cqFailed.length}），引入新工具=${codeQuality.introducedNewTool}。`)
+            if (codeQuality.introducedNewTool === true) note('⚠ CodeQuality 报告引入了项目原本没有的工具或批量改了格式：违反"只跑既有"约束，需人工复核（已如实记录，不据此判过）。')
+            if (codeQuality.applicable === true && codeQuality.compileRan === true && codeQuality.compilePassed === false) { finalStatus = 'BLOCKED'; note('⛔ 项目编译/构建失败（P0），拒绝交付。') }
+          }
+        }
       }
     }
   }
@@ -586,6 +636,13 @@ if (scaffold && scaffold.runDir && finalStatus !== 'BLOCKED' && !halted) {
   note('未建立 runDir（就绪闸门或前置失败），无 diff 可生成。')
 }
 
+// CodeQuality 开环项（S3）：仅当 applicable 时把非编译类静态失败/未验证工具/引新工具告警计为开环（编译失败已在阶段内 BLOCKED；无工具=如实跳过不降级）。供 status 闸门与 manifest.openItems 共用，保持"有开环↔带开环态"一致。
+const cqOpenItems = (codeQuality && codeQuality.applicable === true) ? [
+  ...codeQuality.staticChecks.filter(c => c.status === 'failed').map(c => `静态检查未通过[${c.severity}] ${c.tool}：${c.note || c.command}`),
+  ...codeQuality.staticChecks.filter(c => c.status === 'unverified').map(c => `静态工具本环境未能运行（未验证）${c.tool}：${c.note || c.command}`),
+  ...(codeQuality.introducedNewTool === true ? ['代码质量检查报告引入了项目原本没有的工具或批量改了格式（违反"只跑既有"约束），需人工复核'] : []),
+] : []
+
 // step 2：确定性终态（纯函数；非 halt 路径才重算；diff 也是判定输入 —— #1/#2 不再以 DELIVERED 收尾失败交付）
 let statusInput = null
 if (!halted) {
@@ -600,6 +657,7 @@ if (!halted) {
     gateRemainingGaps: (gate && gate.remainingGaps) || [],
     diff: (scaffold && scaffold.runDir) ? diffResult : null,
     browser: browserResult ? { applicable: browserResult.applicable, status: browserResult.status, openItems: browserResult.openItems } : null,
+    codeQuality: codeQuality ? { applicable: codeQuality.applicable, compileRan: codeQuality.compileRan, compilePassed: codeQuality.compilePassed, openItems: cqOpenItems } : null,
   }
   const sr = computeDeliverStatus(statusInput)
   finalStatus = sr.finalStatus
@@ -637,6 +695,7 @@ const deliverManifest = {
   reviewComplete: !reviewIncomplete,
   independentVerify: verify ? { donePassedVerified: verify.donePassedVerified, doneExitCodeVerified: verify.doneExitCodeVerified, redGreenVerified: verify.redGreenVerified, independentTestsPassed: verify.independentTestsPassed, testsIntact: verify.testsIntact, scopeCleanVerified: verify.scopeCleanVerified } : null,
   browserVerify: browserResult ? { applicable: browserResult.applicable, finalBrowserStatus: browserResult.finalBrowserStatus, adapterUsed: browserResult.value ? browserResult.value.adapterUsed : null, evidenceDir: browserResult.value ? browserResult.value.evidenceDir : null, checksPassed: browserResult.value ? browserResult.value.checks.filter(c => c.passed).length : 0, checksTotal: browserResult.value ? browserResult.value.checks.length : 0, consoleErrorCount: browserResult.value ? browserResult.value.consoleErrors.length : 0, failedKeyRequests: browserResult.value ? browserResult.value.failedKeyRequests : [], screenshots: browserResult.value ? browserResult.value.screenshots : [] } : null,
+  codeQuality: codeQuality ? { applicable: codeQuality.applicable, specSource: codeQuality.specSource, language: codeQuality.language, buildTool: codeQuality.buildTool, compileRan: codeQuality.compileRan, compilePassed: codeQuality.compilePassed, compileCommand: codeQuality.compileCommand, compileExitCode: codeQuality.compileExitCode, staticChecks: codeQuality.staticChecks.map(c => ({ tool: c.tool, command: c.command, exitCode: c.exitCode, status: c.status, severity: c.severity })), introducedNewTool: codeQuality.introducedNewTool, summary: codeQuality.summary } : null,
   openItems: [
     ...(materialize ? materialize.openLoopItems : []),
     ...((gate && gate.openQuestions) || []).map(q => `方案待确认: ${q}`),
@@ -646,6 +705,7 @@ const deliverManifest = {
     ...(verify && verify.independentTestsPassed === false ? ['独立复测未过：实现未满足验收或改测试迁就实现（已 BLOCKED）'] : []),
     ...(verify && verify.testsIntact === false ? ['在树 tests/ 指纹与物化时不一致（疑似被改动），需人工核对'] : []),
     ...((browserResult && browserResult.openItems) || []),
+    ...cqOpenItems,
     ...(diffResult && diffResult.diffApplyCheckPassed === false ? ['diff 未通过 git apply --check'] : []),
     ...(staleCmp && staleCmp.severity === 'soft' ? ['目标仓库 soft stale：有未提交改动差异（方案基于略有不同的工作区）'] : []),
     ...filesReconcile.issues.map(s => `变更文件对账: ${s}`),
