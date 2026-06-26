@@ -6,8 +6,11 @@
 evidence/runs/
 evidence/plans/
 evidence/deliveries/
+evidence/publishes/
+evidence/auto/
 # 说明：evidence/ 下"策展"的方法论证据（00-03/评审报告/决策日志/遗留风险/research-raw 等
-# 顶层 *.md、*.json）是有意保留发布的，不在忽略之列；仅忽略上面三个"动态运行目录"。
+# 顶层 *.md、*.json）是有意保留发布的，不在忽略之列；仅忽略上面这些"动态运行目录"
+# （publishes=publish-delivery 输出、auto=auto-deliver 总结，同样可能含目标仓库信息）。
 
 # ============================================================
 # 个人 / 敏感 harness 配置（遵全局规则 15/9）

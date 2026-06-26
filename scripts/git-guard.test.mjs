@@ -18,6 +18,9 @@ const BLOCK = [
   'git push --mirror origin',
   'git reset --hard origin/main',
   'git reset --hard upstream/dev',
+  'git filter-repo --path secret --invert-paths',     // history rewrite
+  'git filter-branch --tree-filter rm HEAD',          // history rewrite
+  'git branch -D feature',                            // force-delete a branch
   'git checkout x && git push --force origin main',   // forbidden part in a compound command
 ]
 const ALLOW = [
@@ -31,6 +34,9 @@ const ALLOW = [
   'git log --oneline -5',
   'git fetch origin',
   'git status',
+  'git push origin main && rm -f /tmp/x',    // unrelated -f after && must not false-positive
+  'git push origin main && grep -f pats file',  // unrelated -f after && must not false-positive
+  'git branch -d merged',                    // safe delete of a merged branch
   '',
 ]
 
