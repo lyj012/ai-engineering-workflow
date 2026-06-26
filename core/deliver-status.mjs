@@ -23,6 +23,9 @@
 //   materializeOpenLoopItems,          // string[]
 //   gateOpenQuestions, gateRemainingGaps,   // string[]
 //   diff,                              // { ok, diffApplyCheckPassed, filesChanged } | null
+//   browser,                           // { applicable, status:'passed'|'failed'|'skipped'|'error', openItems[] } | null
+//                                      //   web only: applicable+failed -> BLOCKED; skipped/error or openItems
+//                                      //   -> WITH_OPEN_ITEMS (honest skip, never faked); null/not-applicable -> no effect
 // }
 export function computeDeliverStatus(input) {
   const i = input || {}
@@ -39,16 +42,23 @@ export function computeDeliverStatus(input) {
   const materializeOpenLoopItems = Array.isArray(i.materializeOpenLoopItems) ? i.materializeOpenLoopItems : []
   const gateOpenQuestions = Array.isArray(i.gateOpenQuestions) ? i.gateOpenQuestions : []
   const gateRemainingGaps = Array.isArray(i.gateRemainingGaps) ? i.gateRemainingGaps : []
+  // browser verification (web projects only): applicable+failed BLOCKS below; skipped/error or carried open
+  // items only downgrade to WITH_OPEN_ITEMS (honest skip, never faked); null / not-applicable = no effect.
+  const browser = i.browser || null
+  const browserOpenItems = (browser && Array.isArray(browser.openItems)) ? browser.openItems : []
+  const browserDeferred = !!(browser && browser.applicable === true && (browser.status === 'skipped' || browser.status === 'error'))
   const hasOpenItems = materializeOpenLoopItems.length > 0 ||
     reviews.some(r => r && r.verdict === 'needs-work') ||
     redGreenUnconfirmed ||
-    gateOpenQuestions.length > 0 || gateRemainingGaps.length > 0
+    gateOpenQuestions.length > 0 || gateRemainingGaps.length > 0 ||
+    browserOpenItems.length > 0 || browserDeferred
 
   if (!i.implementPassed) { reasons.push('实现未达全绿，不交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (!verify) { reasons.push('缺独立验证（Verify 失败），不乐观交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (!verifiedGreen) { reasons.push('独立验证未确认 DONE 真绿 / 只动 SCOPE，不交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (i.reviewIncomplete) { reasons.push('独立复审视角不齐，不乐观交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (blockingReview) { reasons.push('存在阻断性审查意见未关闭。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (browser && browser.applicable === true && browser.status === 'failed') { reasons.push('真实浏览器验证失败（web 项目：页面/交互/控制台/接口未通过），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
 
   // #1/#2: the delivered, apply-checked diff is the final fact — never settle on DELIVERED without it.
   const diff = i.diff || null

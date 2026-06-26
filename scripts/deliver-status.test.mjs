@@ -39,6 +39,13 @@ export const CASES = [
   ['non-blocking needs-work -> WITH_OPEN_ITEMS', { ...clean, reviews: [{ verdict: 'needs-work', blocking: false }] }, 'DELIVERED_WITH_OPEN_ITEMS'],
   ['redGreen unconfirmed -> WITH_OPEN_ITEMS', { ...clean, verify: { donePassedVerified: true, scopeCleanVerified: true, redGreenVerified: false } }, 'DELIVERED_WITH_OPEN_ITEMS'],
   ['gate open question -> WITH_OPEN_ITEMS', { ...clean, gateOpenQuestions: ['confirm field shape'] }, 'DELIVERED_WITH_OPEN_ITEMS'],
+  // --- real-browser verification (web projects only): four states ---
+  ['browser passed (web) -> DELIVERED', { ...clean, browser: { applicable: true, status: 'passed', openItems: [] } }, 'DELIVERED'],
+  ['browser failed (web) -> BLOCKED', { ...clean, browser: { applicable: true, status: 'failed', openItems: [] } }, 'BLOCKED'],
+  ['browser skipped no-capability -> WITH_OPEN_ITEMS', { ...clean, browser: { applicable: true, status: 'skipped', openItems: ['web project but no browser capability'] } }, 'DELIVERED_WITH_OPEN_ITEMS'],
+  ['browser error (web) -> WITH_OPEN_ITEMS', { ...clean, browser: { applicable: true, status: 'error', openItems: [] } }, 'DELIVERED_WITH_OPEN_ITEMS'],
+  ['browser not-applicable (non-web) -> DELIVERED', { ...clean, browser: { applicable: false, status: null, openItems: [] } }, 'DELIVERED'],
+  ['no browser field -> DELIVERED (backward compatible)', { ...clean }, 'DELIVERED'],
 ]
 
 export function runDeliverStatusTests() {
