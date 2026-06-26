@@ -4,6 +4,8 @@ import path from 'node:path'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { validatePlanArtifacts } from './validate-plan-artifacts.mjs'
+import { validateDeliveryArtifacts } from './validate-delivery-artifacts.mjs'
+import { validatePublishRecord } from './validate-publish-record.mjs'
 import { computeDeliverStatus as coreComputeDeliverStatus } from '../core/deliver-status.mjs'
 import { runDeliverStatusTests, CASES as DELIVER_STATUS_CASES } from './deliver-status.test.mjs'
 import { computeReadiness as coreComputeReadiness } from '../core/readiness.mjs'
@@ -452,6 +454,13 @@ if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guar
     if (!fm) errors.push(`${skillFile} is missing YAML frontmatter`)
     else if (!/(^|\n)name:\s*\S/.test(fm[1]) || !/(^|\n)description:\s*\S/.test(fm[1])) errors.push(`${skillFile} frontmatter must include name and description`)
   }
+  // the skill + AGENTS template orchestrate these shared assets — none may be a dangling reference
+  for (const ref of [
+    'bin/core.mjs', 'bin/git-state.mjs',
+    'scripts/validate-plan-artifacts.mjs', 'scripts/validate-delivery-artifacts.mjs', 'scripts/validate-publish-record.mjs',
+    'core/schemas/plan-artifacts.schema.json', 'core/schemas/delivery-artifacts.schema.json', 'core/schemas/publish-record.schema.json',
+    'codex/pipeline.md', 'codex/plan-from-requirement.md', 'codex/AGENTS.template.md',
+  ]) if (!exists(ref)) errors.push(`Codex skill/AGENTS references a missing file: ${ref}`)
 }
 if (exists('.claude/settings.json')) {
   let settingsText = ''
@@ -462,6 +471,8 @@ if (exists('.claude/settings.json')) {
 }
 
 errors.push(...validatePlanArtifacts(path.join(root, 'examples/artifacts/plan-ready')))
+errors.push(...validateDeliveryArtifacts(path.join(root, 'examples/artifacts/delivery-success')))
+errors.push(...validatePublishRecord(path.join(root, 'examples/artifacts/publish-record-example')))
 
 for (const file of ['app.sh', 'test.sh']) {
   const plan = JSON.parse(read('examples/artifacts/plan-ready/plan.json'))
@@ -524,5 +535,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, codex skill entry, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, codex skill entry + refs, delivery+publish schema, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)

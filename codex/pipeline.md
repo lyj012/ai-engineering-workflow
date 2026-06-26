@@ -33,7 +33,9 @@ Codex calls `core/` through the CLIs below. One source of truth.
 | `node bin/core.mjs project-type '<json>'` | web vs non-web (browser-verify scoping) | `core/project-type.mjs` |
 | `node bin/core.mjs git-guard '"<command>"'` | red-line git command guard (force-push, delete remote, …) | `core/git-guard.mjs` |
 | `node bin/core.mjs branch-choice '<json>'` | resolve the customer commit-strategy choice | `core/branch-choice.mjs` |
-| `node scripts/validate-plan-artifacts.mjs <dir>` | validate a plan artifact directory against the shared schema | `core/schemas/` |
+| `node scripts/validate-plan-artifacts.mjs <plan-dir>` | validate PLAN artifacts (requirement/plan/risks/test-plan) | `core/schemas/plan-artifacts.schema.json` |
+| `node scripts/validate-delivery-artifacts.mjs <delivery-dir>` | validate the DELIVERY contract (delivery-manifest.json) | `core/schemas/delivery-artifacts.schema.json` |
+| `node scripts/validate-publish-record.mjs <publish-dir>` | validate the PUBLISH record (final-delivery.json) | `core/schemas/publish-record.schema.json` |
 
 All read JSON in / print JSON out, run on bare `node` (Windows / macOS / Linux), and contain no author paths.
 
@@ -102,5 +104,7 @@ commands run on Windows and macOS.
 Assumed and **pending a local Codex smoke run**: that Codex Desktop reads a root `AGENTS.md`; the exact
 `codex exec` invocation and output-schema/sandbox flags; that one Codex invocation per stage is workable.
 Per the repo discipline: **do not claim the Codex adapter is runnable until a real Codex run has produced a
-plan/delivery directory and `node scripts/validate-plan-artifacts.mjs <dir>` + `node scripts/self-check.mjs`
-pass.** The deterministic surface (`bin/`, `scripts/`, `core/`) is already verified in this repository.
+plan/delivery directory that passes the matching validator** (`validate-plan-artifacts.mjs` for plan,
+`validate-delivery-artifacts.mjs` for delivery, `validate-publish-record.mjs` for the publish record) **+
+`node scripts/self-check.mjs`.** The deterministic surface (`bin/`, `scripts/`, `core/`) is already verified
+in this repository.

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "final-delivery.json — publish-delivery output record (shared by Claude + Codex)",
+  "type": "object",
+  "required": [
+    "schemaVersion", "workflow", "finalStatus", "dryRun", "gitPolicy",
+    "branchChoiceProvided", "highRiskBlocked", "filesChanged", "openItems",
+    "failedStages", "rollback"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string" },
+    "workflow": { "type": "string" },
+    "deliveryDir": { "type": "string" },
+    "finalStatus": { "type": "string", "enum": ["PUBLISH_NEEDS_CHOICE", "PUBLISH_BLOCKED", "PUBLISH_DRYRUN", "PUBLISH_UNVERIFIED", "PUBLISHED", "PUBLISHED_WITH_OPEN_ITEMS"] },
+    "dryRun": { "type": "boolean" },
+    "gitPolicy": {
+      "type": "object",
+      "required": ["branchMode", "pushRemote"],
+      "properties": {
+        "branchMode": { "type": "string", "enum": ["new-branch", "switch-existing", "current-branch"] },
+        "branchPrefix": { "type": "string" },
+        "allowMainPush": { "type": "boolean" },
+        "pushRemote": { "type": "string" }
+      }
+    },
+    "branchChoiceProvided": { "type": "boolean" },
+    "highRiskDomains": { "type": "array", "items": { "type": "string" } },
+    "highRiskBlocked": { "type": "boolean" },
+    "filesChanged": { "type": "array", "items": { "type": "string" } },
+    "openItems": { "type": "array", "items": { "type": "string" } },
+    "failedStages": { "type": "array", "items": { "type": "string" } },
+    "rollback": { "type": "string" }
+  }
+}

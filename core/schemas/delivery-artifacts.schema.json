@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "delivery-manifest — deliver-from-plan output contract (shared by Claude + Codex)",
+  "type": "object",
+  "required": [
+    "schemaVersion", "workflow", "finalStatus", "gate", "scope",
+    "filesChanged", "scopeViolations", "reviewVerdicts", "reviewComplete",
+    "independentVerify", "diffApplyCheckPassed", "openItems"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string" },
+    "workflow": { "type": "string" },
+    "sourcePlan": { "type": "string" },
+    "targetRepo": { "type": "string" },
+    "finalStatus": { "type": "string", "enum": ["DELIVERED", "DELIVERED_WITH_OPEN_ITEMS", "BLOCKED", "FAILED"] },
+    "gate": {
+      "type": "object",
+      "required": ["finalStatus", "readinessForDev"],
+      "properties": {
+        "finalStatus": { "type": "string", "enum": ["PASS", "PARTIAL", "CONDITIONAL", "FAILED_WITH_FINDINGS", "FAILED", "NEEDS_CLARIFICATION"] },
+        "readinessForDev": { "type": "string", "enum": ["ready", "needs-clarification", "blocked"] },
+        "requirementGoal": { "type": "string" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "required": ["scopeFiles"],
+      "properties": {
+        "scopeFiles": { "type": "array", "items": { "type": "string" } },
+        "optionalScopeFiles": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "doneCommand": { "type": "string" },
+    "doneTrustworthy": { "type": "boolean" },
+    "implementPassed": { "type": "boolean" },
+    "filesChanged": { "type": "array", "items": { "type": "string" } },
+    "scopeViolations": { "type": "array", "items": { "type": "string" } },
+    "reviewVerdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["lens", "verdict", "blocking"],
+        "properties": {
+          "lens": { "type": "string" },
+          "verdict": { "type": "string", "enum": ["ok", "needs-work"] },
+          "blocking": { "type": "boolean" }
+        }
+      }
+    },
+    "fixHistory": { "type": "array" },
+    "reviewComplete": { "type": "boolean" },
+    "independentVerify": { "type": "object" },
+    "diffApplyCheckPassed": { "type": "boolean" },
+    "openItems": { "type": "array", "items": { "type": "string" } }
+  }
+}

@@ -19,7 +19,10 @@ anything the core already decides, and must not copy business logic into the pro
 
 - The shared toolkit (this methodology repo: `core/` + `bin/` + `scripts/` + `codex/`) must be available.
   Resolve its path into `AIEW_HOME`: use `$AIEW_HOME` if set, else the repo that contains this skill, else
-  ask the user for the checkout path. All deterministic calls below use `"$AIEW_HOME/..."`.
+  ask the user for the checkout path. All deterministic calls below use `"$AIEW_HOME/..."` (POSIX form; on
+  Windows use `"$env:AIEW_HOME\..."` in PowerShell or `"%AIEW_HOME%\..."` in CMD — the Node scripts are
+  cross-platform, only the shell variable syntax differs). Never use a bare `bin/...`: it would look inside
+  the customer project and fail.
 - A project `AGENTS.md` (generated from `$AIEW_HOME/codex/AGENTS.template.md`) carries the **hard
   constraints**. Read it first and obey it; it overrides anything here on conflict.
 - Sanity-check the toolkit: `node "$AIEW_HOME/scripts/self-check.mjs"` must pass before relying on it.
@@ -38,7 +41,9 @@ JSON verdict verbatim. (This is what keeps Codex and Claude from drifting.)
 | project type (web vs not, for browser-verify) | `node "$AIEW_HOME/bin/core.mjs" project-type '<json>'` |
 | git red-line guard (run BEFORE every git command) | `node "$AIEW_HOME/bin/core.mjs" git-guard '"<command>"'` |
 | branch-choice resolution | `node "$AIEW_HOME/bin/core.mjs" branch-choice '<json>'` |
-| validate a plan/delivery artifact dir against the shared schema | `node "$AIEW_HOME/scripts/validate-plan-artifacts.mjs" <dir>` |
+| validate a PLAN artifact dir (requirement/plan/risks/test-plan.json) | `node "$AIEW_HOME/scripts/validate-plan-artifacts.mjs" <plan-dir>` |
+| validate a DELIVERY dir (delivery-manifest.json) | `node "$AIEW_HOME/scripts/validate-delivery-artifacts.mjs" <delivery-dir>` |
+| validate a PUBLISH record (final-delivery.json) | `node "$AIEW_HOME/scripts/validate-publish-record.mjs" <publish-dir>` |
 
 You do the **judgment** work (understanding, analysis, planning, coding, review, fixing, verifying); the
 CLIs do the **decisions**. If you ever feel like computing a status or a branch option in your head — stop
@@ -58,10 +63,10 @@ reference checklists and the requirement→plan flow live in `codex/pipeline.md`
 2. **deliver-from-plan** (sandbox copy, never touches the target) → scaffold (strip `.git`+secrets) →
    materialize tests (red→green) → implement → independent review → fix → independent verify (re-materialize
    tests from test-plan) → `changes.diff` + `delivery-manifest.json`. **Status** from `bin/core
-   deliver-status`. **Stops at the verified diff. No commit, no push.**
+   deliver-status`; validate the dir with `validate-delivery-artifacts.mjs`. **Stops at the verified diff. No commit, no push.**
 3. **publish-delivery** (the only stage that writes git) → see §3 gate first → clone/prepare → branch op →
    `git apply` the verified diff → commit → push → independent remote verify. **Status** from `bin/core
-   publish-status`.
+   publish-status`; the `final-delivery.json` record is validated by `validate-publish-record.mjs`.
 
 ## 3. STOP and ask the customer — these are mandatory pauses
 

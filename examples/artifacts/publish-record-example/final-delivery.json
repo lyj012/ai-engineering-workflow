@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "1.0",
+  "workflow": "publish-delivery",
+  "deliveryDir": "examples/artifacts/delivery-success",
+  "finalStatus": "PUBLISHED_WITH_OPEN_ITEMS",
+  "dryRun": false,
+  "gitPolicy": {
+    "branchMode": "new-branch",
+    "branchPrefix": "ai/",
+    "targetBranch": null,
+    "allowMainPush": false,
+    "pushRemote": "origin"
+  },
+  "branchChoice": "new-branch",
+  "branchChoiceProvided": true,
+  "targetRepo": "examples/minimal-target",
+  "remoteUrl": "origin",
+  "deliverableStatus": "DELIVERED_WITH_OPEN_ITEMS",
+  "highRiskDomains": [],
+  "highRiskBlocked": false,
+  "branch": {
+    "name": "ai/add-greet-20260626-000000",
+    "originalBranch": "main",
+    "finalBranch": "ai/add-greet-20260626-000000",
+    "isNewBranch": true,
+    "branchCreated": true,
+    "branchSwitched": true,
+    "createdFrom": "main",
+    "allowed": true
+  },
+  "branchChoiceMode": "new-branch",
+  "commit": {
+    "sha": "0000000000000000000000000000000000000000",
+    "author": "Example Dev <dev@example.com>",
+    "files": ["app.sh", "test.sh"]
+  },
+  "push": {
+    "performed": true,
+    "rejected": false,
+    "remoteRef": "refs/heads/ai/add-greet-20260626-000000",
+    "url": "https://example.invalid/repo.git"
+  },
+  "remoteVerify": {
+    "branchShaMatches": true,
+    "committedFilesMatch": true,
+    "noForbiddenFiles": true,
+    "workTreeClean": true,
+    "remoteSha": "0000000000000000000000000000000000000000",
+    "remoteFiles": ["app.sh", "test.sh"],
+    "note": "remote SHA matches the local commit; committed files match the delivery."
+  },
+  "filesChanged": ["app.sh", "test.sh"],
+  "openItems": ["manual: confirm `--greet` with a missing name argument behaves as intended"],
+  "failedStages": [],
+  "rollback": "If rollback is needed, a human must run it in a terminal: git push origin --delete ai/add-greet-20260626-000000"
+}
