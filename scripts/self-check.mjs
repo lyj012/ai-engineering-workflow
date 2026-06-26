@@ -16,6 +16,8 @@ import { reconcileChangedFiles as coreReconcileChangedFiles } from '../core/chan
 import { runChangedFilesTests, CASES as CHANGED_FILES_CASES } from './changed-files.test.mjs'
 import { applyPlanPatch as coreApplyPlanPatch } from '../core/plan-patch.mjs'
 import { runPlanPatchTests, CASES as PLAN_PATCH_CASES } from './plan-patch.test.mjs'
+import { computePublishStatus as coreComputePublishStatus } from '../core/publish-status.mjs'
+import { runPublishStatusTests, CASES as PUBLISH_STATUS_CASES } from './publish-status.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -134,6 +136,7 @@ for (const file of trackedFiles) {
 const workflowFiles = [
   '.claude/workflows/plan-from-requirement.js',
   '.claude/workflows/deliver-from-plan.js',
+  '.claude/workflows/publish-delivery.js',
   '.claude/workflows/analyze-repo.js',
   '.claude/workflows/wf-methodology-research.js',
   '.claude/workflows/wf-docs-generation.js',
@@ -225,6 +228,31 @@ if (exists(deliverWf)) {
         const inlineStatus = inlineFn(input).finalStatus
         const coreStatus = coreComputeDeliverStatus(input).finalStatus
         if (inlineStatus !== coreStatus) errors.push(`deliver-status drift on "${name}": inline=${inlineStatus} core=${coreStatus}`)
+      }
+    }
+  }
+}
+
+// publish final-status logic: run the unit tests, and behaviour-diff the publish workflow's inline copy
+// against the canonical core/publish-status.mjs over fixed vectors so they cannot drift.
+for (const failure of runPublishStatusTests()) errors.push(failure)
+
+const publishWf = '.claude/workflows/publish-delivery.js'
+if (exists(publishWf)) {
+  const src = read(publishWf)
+  const s = src.indexOf('// >>> PUBLISH-STATUS-START')
+  const e = src.indexOf('// <<< PUBLISH-STATUS-END')
+  if (s === -1 || e === -1 || e <= s) {
+    errors.push(`${publishWf} is missing PUBLISH-STATUS markers required for the inline-vs-core parity check`)
+  } else {
+    const block = src.slice(src.indexOf('\n', s), e)
+    let inlineFn = null
+    try { inlineFn = new Function(`${block}\n; return computePublishStatus;`)() } catch (error) { errors.push(`failed to evaluate inline computePublishStatus in ${publishWf}: ${error.message}`) }
+    if (inlineFn) {
+      for (const [name, input] of PUBLISH_STATUS_CASES) {
+        const inlineStatus = inlineFn(input).finalStatus
+        const coreStatus = coreComputePublishStatus(input).finalStatus
+        if (inlineStatus !== coreStatus) errors.push(`publish-status drift on "${name}": inline=${inlineStatus} core=${coreStatus}`)
       }
     }
   }
@@ -415,5 +443,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)

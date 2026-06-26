@@ -12,6 +12,7 @@ The Claude Code Dynamic Workflows adapter is the stable implementation. The Code
 |---|---|---|
 | A user requirement plus a target repository | `plan-from-requirement` | `final-plan.md`, `plan.json`, risks, tests, and `readinessForDev` |
 | A ready plan plus the same target repository | `deliver-from-plan` | sandboxed implementation, `changes.diff`, delivery report, verification notes |
+| A verified delivery (diff + `DELIVERED` manifest) plus a git remote | `publish-delivery` | automatic branch/commit/push (no PR) with independent post-push remote verification |
 | A repository audit request | `analyze-repo` | evidence-backed risk report and test plan |
 
 The main chain is intentionally split:
@@ -19,6 +20,7 @@ The main chain is intentionally split:
 1. `plan-from-requirement`: read-only requirement analysis and implementation plan.
 2. Human gate: review `final-plan.md`; continue only when `readinessForDev=ready`.
 3. `deliver-from-plan`: copy the target repo into a sandbox, materialize tests, implement inside the sandbox, review, verify, and emit a diff.
+4. `publish-delivery` (optional): clone the remote into an isolated working copy, apply the verified diff, branch/commit/push, then verify the remote independently. Never force-pushes; refuses protected branches (`main`/`master`/`release`) and high-risk domains unless explicitly opted in; creates no PR.
 
 ## Requirements
 
