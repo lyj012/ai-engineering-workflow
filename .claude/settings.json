@@ -1,0 +1,16 @@
+{
+  "$comment": "Project-shared settings (committed). Hard-enforcement layer for the auto-publish chain: a PreToolUse hook blocks forbidden git commands (force-push / reset --hard <remote> / delete remote branch / push --mirror) before the Bash tool runs, so the publish/auto-deliver engines' git red lines are physically enforced, not merely requested in a prompt. Personal overrides go in .claude/settings.local.json (gitignored).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/git-guard-hook.mjs\""
+          }
+        ]
+      }
+    ]
+  }
+}

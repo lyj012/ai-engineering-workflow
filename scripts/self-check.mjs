@@ -18,6 +18,7 @@ import { applyPlanPatch as coreApplyPlanPatch } from '../core/plan-patch.mjs'
 import { runPlanPatchTests, CASES as PLAN_PATCH_CASES } from './plan-patch.test.mjs'
 import { computePublishStatus as coreComputePublishStatus } from '../core/publish-status.mjs'
 import { runPublishStatusTests, CASES as PUBLISH_STATUS_CASES } from './publish-status.test.mjs'
+import { runGitGuardTests } from './git-guard.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -381,6 +382,17 @@ for (const failure of runPlanPatchTests()) errors.push(failure)
   }
 }
 
+// git red-line guard (auto-publish hard enforcement): run classifier tests + confirm the PreToolUse hook is wired.
+for (const failure of runGitGuardTests()) errors.push(failure)
+if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guard-hook.mjs (git red-line PreToolUse hook entry)')
+if (exists('.claude/settings.json')) {
+  let settingsText = ''
+  try { settingsText = read('.claude/settings.json') } catch { settingsText = '' }
+  if (!settingsText.includes('git-guard-hook')) errors.push('.claude/settings.json exists but does not wire the git-guard PreToolUse hook (auto-publish git red lines would be unenforced)')
+} else {
+  warn.push('.claude/settings.json absent: the git red-line PreToolUse hook is not installed; auto-publish runs without hard git enforcement')
+}
+
 errors.push(...validatePlanArtifacts(path.join(root, 'examples/artifacts/plan-ready')))
 
 for (const file of ['app.sh', 'test.sh']) {
@@ -444,5 +456,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)
