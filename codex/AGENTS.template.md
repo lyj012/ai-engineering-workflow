@@ -1,29 +1,61 @@
-# Codex Adapter Guidance
+# Codex Adapter Guidance (AGENTS.md template)
 
-This template is for a local OpenAI Codex `AGENTS.md`. Keep the generated `AGENTS.md` out of git; this public repository tracks only the template. It consumes the platform-neutral contracts in `../core/` and must not fork the engineering methodology into a second independent copy.
+This template is for a local OpenAI Codex `AGENTS.md` (Desktop or CLI). Generate the real `AGENTS.md` at the
+target project root from this template; **keep the generated `AGENTS.md` out of git** — this public
+repository tracks only the template. It consumes the platform-neutral contracts in `../core/` and must
+**not** fork the engineering methodology into a second independent copy. Full stage contracts: `pipeline.md`.
 
-## Current Scope
+## Scope
 
-The first supported target is `plan-from-requirement`: a read-only requirement-to-plan flow that emits artifacts compatible with the Claude workflow examples.
+The complete closed loop, identical in rules/artifacts/statuses to the Claude workflow:
+requirement → code-base analysis → plan → coding → tests → independent review → fix → independent verify →
+diff → **customer git-choice** → commit → push.
 
-Do not implement the full delivery chain here until the plan flow has been run against a real target repository with Codex and its artifacts pass `node scripts/validate-plan-artifacts.mjs <plan-dir>`.
+Build it up in verified order: do not claim a stage runnable in Codex until a real `codex exec` run has
+produced its artifacts and `node scripts/validate-plan-artifacts.mjs <dir>` + `node scripts/self-check.mjs`
+pass. `plan-from-requirement` (read-only) is the safe first target; `deliver-from-plan` (sandbox) and
+`publish-delivery` (git) follow.
 
 ## Execution Rules
 
-- Prefer one Codex invocation per stage, with JSON files passed between stages.
-- Use `codex exec` only for model work: requirement understanding, code analysis, implementation planning, risk identification, test planning, and independent review.
-- Use normal programs for deterministic work: JSON validation, path checks, status calculation, artifact writing, diff generation, and `git apply --check`.
+- One Codex invocation per stage; pass JSON files between stages in a timestamped run directory.
+- Use `codex exec` **only** for model work: requirement understanding, code analysis, implementation
+  planning, risk identification, test planning, coding, independent review, fixing, independent verification.
+- Use plain Node for **all** deterministic work — never ask the model to do bookkeeping:
+  - decisions: `node bin/core.mjs <readiness|deliver-status|publish-status|persist-outcome|repo-fingerprint|project-type|git-guard|branch-choice> '<json>'`
+  - git facts (read-only): `node bin/git-state.mjs --cwd <repo> [--mode <m>] [--target-branch <b>]`
+  - validation: `node scripts/validate-plan-artifacts.mjs <dir>`; integrity: `node scripts/self-check.mjs`
 - Keep Claude-specific `Workflow`, `phase()`, `agent()`, and resume semantics out of Codex prompts.
 - Keep Codex-specific CLI flags and sandbox behavior out of `core/`.
-- Never modify the target repository during `plan-from-requirement`.
+- `plan-from-requirement` and `deliver-from-plan` never modify the target repository (deliver works in a
+  sandbox copy and stops at a verified `changes.diff`).
+
+## Customer Git-Choice Gate (publish stage — mandatory)
+
+Before ANY branch op / commit / push:
+1. Run `node bin/git-state.mjs --cwd <target> --mode <customer choice if any> --target-branch <name if any>`.
+2. If the result's `branchChoice.needsChoice` is true → **stop and ask the customer**, offering **only** the
+   options where `available` is true (never show an invalid one, never auto-pick). Treat this as
+   `PUBLISH_NEEDS_CHOICE`; do not checkout, branch, commit, or push.
+3. Strategies (offered only when valid in the current repo / worktree / HEAD state):
+   `new-branch` (cut from current commit) · `switch-existing` (checkout a customer-named existing branch,
+   needs `targetBranch`) · `current-branch` (commit on the current branch directly).
+
+## Safety (unchanged across adapters)
+
+Never `git push --force`/`-f`; never delete a remote branch or rewrite history (run every git command past
+`node bin/core.mjs git-guard` first). Never stage `.env`/keys/`*.pem`/personal config. Protected branches
+(main/master/release) require explicit opt-in. High-risk domains (payment/permission/secret/auth/
+irreversible) hit a human gate. Block any change outside the planned SCOPE.
 
 ## Non-Goals
 
-- No Cursor, Gemini, or generic adapter scaffolding.
-- No UI.
-- No Codex delivery/diff workflow in the first phase.
-- No duplicated schema or status definitions when `core/` already owns the contract.
+- No Cursor, Gemini, or generic adapter scaffolding. No UI.
+- No duplicated schema/status/decision logic when `core/` already owns the contract — call `bin/`/`core/`.
 
-## Capability Notes
+## Capability Notes (verify before claiming runnable)
 
-The design assumes public Codex support for `AGENTS.md`, Skills, Subagents, and non-interactive `codex exec`. These capabilities are suitable inputs to the adapter design, but this repository should mark any exact command line, JSON output mode, or sandbox mode as verified only after it is exercised locally.
+The design assumes public Codex support for a root `AGENTS.md` and non-interactive `codex exec`. Mark any
+exact command line, `--output-schema`/JSON output mode, or sandbox flag as **verified only after a local
+Codex run exercises it** in a real target repository. The deterministic surface (`bin/`, `scripts/`,
+`core/`) is plain Node and already verified in this repository.
