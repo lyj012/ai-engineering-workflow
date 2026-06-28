@@ -57,7 +57,7 @@ git clone https://github.com/lyj012/ai-engineering-workflow && cd ai-engineering
 
 node scripts/self-check.mjs                                          # 1. everything green (logic + parity + schemas + scripts)
 node bin/git-state.mjs --cwd . --mode new-branch                     # 2. git state + which commit options are valid here
-node bin/core.mjs readiness '"PASS"'                                 # 3. a deterministic decision (PASS -> ready)
+node bin/core.mjs readiness PASS                                     # 3. a deterministic decision (PASS -> ready)
 node bin/core.mjs git-guard '"git push --force origin main"'        # 4. the git red-line guard (blocked: true)
 node scripts/validate-plan-artifacts.mjs examples/artifacts/plan-ready              # 5. validate an example PLAN
 node scripts/validate-delivery-artifacts.mjs examples/artifacts/delivery-success    # 6. validate an example DELIVERY
@@ -65,8 +65,10 @@ node bin/sandbox-prepare.mjs --src examples/minimal-target --dest /tmp/sb       
 ```
 
 On Windows use `$env:AIEW_HOME` (PowerShell) or `%AIEW_HOME%` (CMD) for paths; the Node scripts themselves
-are cross-platform. To then run the *model* stages, use the Claude `Workflow` quick start below, or open the
-project in Codex and invoke the `ai-engineering-delivery` skill.
+are cross-platform. For complex JSON on Windows PowerShell, prefer `--input file.json` or `--stdin`, for
+example `node bin/core.mjs scope-check --input .\scope-check.json`; this avoids PowerShell 5 quote
+stripping. To then run the *model* stages, use the Claude `Workflow` quick start below, or open the project
+in Codex and invoke the `ai-engineering-delivery` skill.
 
 ## Requirements
 

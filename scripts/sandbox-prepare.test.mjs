@@ -10,6 +10,16 @@ import { fileURLToPath } from 'node:url'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const script = path.join(here, '..', 'bin', 'sandbox-prepare.mjs')
 
+function assertRelativeReportPaths(report, failures) {
+  for (const key of ['excludedDirs', 'strippedSecrets', 'skippedSymlinks', 'leaks']) {
+    for (const value of report[key] || []) {
+      if (/[A-Za-z]:/.test(value) || value.includes('\\\\?\\') || value.includes('//?/')) failures.push(`${key} contains non-portable path: ${value}`)
+      if (path.isAbsolute(value) || value.startsWith('/')) failures.push(`${key} contains absolute path: ${value}`)
+      if (value.includes('\\')) failures.push(`${key} contains backslashes: ${value}`)
+    }
+  }
+}
+
 export function runSandboxPrepareTests() {
   const failures = []
   let work
@@ -24,6 +34,8 @@ export function runSandboxPrepareTests() {
     fs.writeFileSync(path.join(src, 'README.md'), '# readme\n')              // source: must survive
     fs.writeFileSync(path.join(src, '.env'), 'SECRET=1\n')                   // secret: must be stripped
     fs.writeFileSync(path.join(src, 'id_rsa'), 'PRIVATE\n')                  // secret: must be stripped
+    fs.mkdirSync(path.join(src, 'nested'), { recursive: true })
+    fs.writeFileSync(path.join(src, 'nested', '.env.local'), 'SECRET=2\n')    // nested secret: must be stripped
     let madeSymlink = false
     try { fs.symlinkSync(path.join(src, '.env'), path.join(src, 'link-to-secret')); madeSymlink = true } catch { /* symlink may be unsupported */ }
 
@@ -38,9 +50,20 @@ export function runSandboxPrepareTests() {
     if (fs.existsSync(path.join(dest, '.git'))) failures.push('.git leaked into the sandbox')
     if (fs.existsSync(path.join(dest, '.env'))) failures.push('.env secret leaked into the sandbox')
     if (fs.existsSync(path.join(dest, 'id_rsa'))) failures.push('id_rsa secret leaked into the sandbox')
+    if (fs.existsSync(path.join(dest, 'nested', '.env.local'))) failures.push('nested .env.local secret leaked into the sandbox')
     if (!(report.strippedSecrets || []).includes('.env')) failures.push('.env not reported as stripped')
+    if (!(report.strippedSecrets || []).includes('nested/.env.local')) failures.push('nested .env.local not reported as stripped')
     if (!(report.excludedDirs || []).includes('.git')) failures.push('.git not reported as excluded')
+    assertRelativeReportPaths(report, failures)
     if (madeSymlink && fs.existsSync(path.join(dest, 'link-to-secret'))) failures.push('symlink leaked into the sandbox')
+
+    const r2 = spawnSync('node', [script, '--src', src.replace(/\\/g, '/'), '--dest', `${dest}-posix`], { encoding: 'utf8' })
+    if (r2.status !== 0) failures.push(`sandbox-prepare with POSIX-style paths exited ${r2.status}: ${r2.stderr || r2.stdout}`)
+    else {
+      const report2 = JSON.parse(r2.stdout)
+      if (!report2.strippedSecrets.includes('nested/.env.local')) failures.push('POSIX-style path run did not report nested secret')
+      assertRelativeReportPaths(report2, failures)
+    }
   } catch (e) {
     failures.push(`sandbox-prepare test threw: ${e.message}`)
   } finally {

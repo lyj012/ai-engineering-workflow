@@ -101,6 +101,9 @@ Verified in this repository (plain Node, runs here):
   with unit tests in `scripts/git-state.test.mjs` (10) and `scripts/branch-choice.test.mjs` (12);
 - the git-choice gate logic (three strategies, environment-valid options only, detached-HEAD / worktree /
   missing-target handling) is unit-tested and exercised live here;
+- Windows-safe core input forms are supported: `readiness PASS`, `--input file.json`, and `--stdin`;
+- `bin/diff-from-sandbox.mjs` generates applyable `changes.diff` files through an isolated baseline git
+  repository instead of relying on `git diff --no-index --label`;
 - the Codex skill `.agents/skills/ai-engineering-delivery/SKILL.md` exists as a real, well-formed entry
   point (valid `name` + `description` frontmatter, the format Codex documents), and every deterministic
   command it tells Codex to run is verified to work here.

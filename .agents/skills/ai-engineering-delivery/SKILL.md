@@ -35,7 +35,7 @@ JSON verdict verbatim. (This is what keeps Codex and Claude from drifting.)
 | Need | Command |
 |---|---|
 | git state (branch / detached HEAD / worktree / dirty) + valid commit options | `node "$AIEW_HOME/bin/git-state.mjs" --cwd <repo> [--mode <m>] [--target-branch <b>]` |
-| plan readiness | `node "$AIEW_HOME/bin/core.mjs" readiness '"<finalStatus>"'` |
+| plan readiness | `node "$AIEW_HOME/bin/core.mjs" readiness <finalStatus>` |
 | delivery / publish / persist status | `node "$AIEW_HOME/bin/core.mjs" <deliver-status|publish-status|persist-outcome> '<json>'` |
 | stale-plan detection | `node "$AIEW_HOME/bin/core.mjs" repo-fingerprint '<json>'` |
 | project type (web vs not, for browser-verify) | `node "$AIEW_HOME/bin/core.mjs" project-type '<json>'` |
@@ -43,6 +43,7 @@ JSON verdict verbatim. (This is what keeps Codex and Claude from drifting.)
 | branch-choice resolution | `node "$AIEW_HOME/bin/core.mjs" branch-choice '<json>'` |
 | SCOPE check (changed files vs the plan's SCOPE) | `node "$AIEW_HOME/bin/core.mjs" scope-check '<json>'` |
 | sandbox prepare (copy target→sandbox; strip history/build/secrets/symlinks) | `node "$AIEW_HOME/bin/sandbox-prepare.mjs" --src <target> --dest <sandbox>` |
+| diff generation (portable patch) | `node "$AIEW_HOME/bin/diff-from-sandbox.mjs" --base <target> --sandbox <sandbox> --out <delivery-dir>/changes.diff` |
 | persist artifacts (write a JSON/MD bundle into a fresh timestamped run dir) | `node "$AIEW_HOME/bin/persist-artifacts.mjs" --out-base <dir> [--ts <stamp>]` |
 | validate a PLAN artifact dir (requirement/plan/risks/test-plan.json) | `node "$AIEW_HOME/scripts/validate-plan-artifacts.mjs" <plan-dir>` |
 | validate a DELIVERY dir (delivery-manifest.json) | `node "$AIEW_HOME/scripts/validate-delivery-artifacts.mjs" <delivery-dir>` |
@@ -51,6 +52,9 @@ JSON verdict verbatim. (This is what keeps Codex and Claude from drifting.)
 You do the **judgment** work (understanding, analysis, planning, coding, review, fixing, verifying); the
 CLIs do the **decisions**. If you ever feel like computing a status or a branch option in your head — stop
 and call the CLI instead.
+
+On Windows PowerShell 5, avoid inline object JSON when quoting is unstable: use `readiness PASS` for simple
+status values and `--input file.json` or `--stdin` for object inputs.
 
 ## 2. Stages, I/O and completion (full contracts: `$AIEW_HOME/codex/pipeline.md`)
 

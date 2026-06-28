@@ -10,9 +10,12 @@
 //
 // Usage:
 //   node bin/core.mjs <fn> ['<json>']         # json from argv, or piped on stdin
+//   node bin/core.mjs <fn> --input input.json # json from file
+//   node bin/core.mjs <fn> --stdin            # json from stdin
 //   echo '<json>' | node bin/core.mjs <fn>
 // Examples:
 //   node bin/core.mjs readiness '"PASS"'
+//   node bin/core.mjs readiness PASS
 //   node bin/core.mjs publish-status '{"deliverableStatus":"DELIVERED", ...}'
 //   node bin/core.mjs git-guard '"git push --force origin main"'
 //   node bin/core.mjs branch-choice '{"requestedMode":"new-branch","detachedHead":false}'
@@ -52,12 +55,26 @@ function main() {
     process.stderr.write(`unknown or missing fn. available: ${Object.keys(HANDLERS).join(', ')}\n`)
     process.exit(2)
   }
-  let rawInput = process.argv[3]
-  if (rawInput === undefined) { try { rawInput = readFileSync(0, 'utf8') } catch { rawInput = '' } }
+  const args = process.argv.slice(3)
+  let rawInput
+  if (args[0] === '--input') {
+    if (!args[1]) { process.stderr.write(`missing path after --input for "${fn}"\n`); process.exit(2) }
+    try { rawInput = readFileSync(args[1], 'utf8') } catch (e) {
+      process.stderr.write(`failed to read --input for "${fn}": ${e.message}\n`); process.exit(2)
+    }
+  } else if (args[0] === '--stdin') {
+    try { rawInput = readFileSync(0, 'utf8') } catch { rawInput = '' }
+  } else {
+    rawInput = args[0]
+    if (rawInput === undefined) { try { rawInput = readFileSync(0, 'utf8') } catch { rawInput = '' } }
+  }
   rawInput = (rawInput || '').trim()
   let input
   try { input = rawInput ? JSON.parse(rawInput) : undefined } catch (e) {
-    process.stderr.write(`invalid JSON input for "${fn}": ${e.message}\n`); process.exit(2)
+    if (!rawInput.startsWith('{') && !rawInput.startsWith('[') && !rawInput.startsWith('"') && !rawInput.startsWith('null') && fn === 'readiness') input = rawInput
+    else {
+      process.stderr.write(`invalid JSON input for "${fn}": ${e.message}\n`); process.exit(2)
+    }
   }
   const out = HANDLERS[fn](input)
   process.stdout.write(JSON.stringify(out, null, 2) + '\n')

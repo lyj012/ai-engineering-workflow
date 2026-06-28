@@ -44,7 +44,9 @@ is the safe first target; `deliver-from-plan` (sandbox) and `publish-delivery` (
   planning, risk identification, test planning, coding, independent review, fixing, independent verification.
 - Use plain Node for **all** deterministic work — never ask the model to do bookkeeping (all paths via `$AIEW_HOME`):
   - decisions: `node "$AIEW_HOME/bin/core.mjs" <readiness|deliver-status|publish-status|persist-outcome|repo-fingerprint|project-type|git-guard|branch-choice> '<json>'`
+    - Windows PowerShell-safe forms: `node "$env:AIEW_HOME\bin\core.mjs" readiness PASS`, `node "$env:AIEW_HOME\bin\core.mjs" scope-check --input .\scope-check.json`, or `Get-Content .\scope-check.json -Raw | node "$env:AIEW_HOME\bin\core.mjs" scope-check --stdin`
   - git facts (read-only): `node "$AIEW_HOME/bin/git-state.mjs" --cwd <repo> [--mode <m>] [--target-branch <b>]`
+  - diff generation: `node "$AIEW_HOME/bin/diff-from-sandbox.mjs" --base <target> --sandbox <sandbox> --out <delivery-dir>/changes.diff`
   - validation per stage: `node "$AIEW_HOME/scripts/validate-plan-artifacts.mjs" <plan-dir>` · `validate-delivery-artifacts.mjs <delivery-dir>` · `validate-publish-record.mjs <publish-dir>`; integrity: `node "$AIEW_HOME/scripts/self-check.mjs"`
 - Keep Claude-specific `Workflow`, `phase()`, `agent()`, and resume semantics out of Codex prompts.
 - Keep Codex-specific CLI flags and sandbox behavior out of `core/`.

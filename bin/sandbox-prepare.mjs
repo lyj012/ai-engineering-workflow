@@ -17,6 +17,17 @@ const SECRET_RE = [
   /^\.npmrc$/i, /^\.pypirc$/i, /credential.*\.json$/i, /secret.*\.json$/i, /\.(bak|dump|log)$/i, /\.sql\.gz$/i,
 ]
 const isSecretName = (name) => SECRET_RE.some((re) => re.test(name))
+const toPosix = (p) => String(p || '').replace(/\\/g, '/')
+
+function relativeReportPath(root, candidate) {
+  let rel = path.relative(root, candidate)
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+    const rootReal = fs.realpathSync.native(root)
+    const candidateReal = fs.realpathSync.native(candidate)
+    rel = path.relative(rootReal, candidateReal)
+  }
+  return toPosix(rel).replace(/^\/+/, '')
+}
 
 function parseArgs(argv) {
   const a = { src: null, dest: null }
@@ -44,7 +55,7 @@ function main() {
     force: true,
     filter(s) {
       if (path.resolve(s) === src) return true
-      const rel = path.relative(src, s).replace(/\\/g, '/')
+      const rel = relativeReportPath(src, s)
       const base = path.basename(s)
       let st
       try { st = fs.lstatSync(s) } catch { return false }
@@ -61,9 +72,10 @@ function main() {
   const walk = (dir) => {
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, ent.name)
-      if (ent.isSymbolicLink()) { leaks.push(`symlink: ${path.relative(dest, full)}`); continue }
-      if (ent.isDirectory()) { if (EXCLUDE_DIRS.has(ent.name)) leaks.push(`dir: ${path.relative(dest, full)}`); else walk(full); continue }
-      if (isSecretName(ent.name)) leaks.push(`secret: ${path.relative(dest, full)}`)
+      const rel = relativeReportPath(dest, full)
+      if (ent.isSymbolicLink()) { leaks.push(`symlink: ${rel}`); continue }
+      if (ent.isDirectory()) { if (EXCLUDE_DIRS.has(ent.name)) leaks.push(`dir: ${rel}`); else walk(full); continue }
+      if (isSecretName(ent.name)) leaks.push(`secret: ${rel}`)
     }
   }
   if (fs.existsSync(dest)) walk(dest)

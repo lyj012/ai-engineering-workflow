@@ -25,7 +25,7 @@ Codex calls `core/` through the CLIs below. One source of truth.
 | Command | Purpose | Backed by |
 |---|---|---|
 | `node bin/git-state.mjs [--cwd d] [--mode m] [--target-branch b] [--remote r]` | git state (branch / detached HEAD / worktree / dirty) + valid commit options | `core/git-state.mjs`, `core/branch-choice.mjs` |
-| `node bin/core.mjs readiness '"PASS"'` | plan readiness from final status | `core/readiness.mjs` |
+| `node bin/core.mjs readiness PASS` | plan readiness from final status | `core/readiness.mjs` |
 | `node bin/core.mjs deliver-status '<json>'` | delivery final status | `core/deliver-status.mjs` |
 | `node bin/core.mjs publish-status '<json>'` | publish final status | `core/publish-status.mjs` |
 | `node bin/core.mjs persist-outcome '<json>'` | persist read-back outcome / downgrade | `core/persist-outcome.mjs` |
@@ -35,6 +35,7 @@ Codex calls `core/` through the CLIs below. One source of truth.
 | `node bin/core.mjs branch-choice '<json>'` | resolve the customer commit-strategy choice | `core/branch-choice.mjs` |
 | `node bin/core.mjs scope-check '<json>'` | changed files vs the plan's SCOPE | `core/scope-check.mjs` |
 | `node bin/sandbox-prepare.mjs --src <t> --dest <s>` | copy target→sandbox; strip history/build/secrets/symlinks | (cross-platform fs) |
+| `node bin/diff-from-sandbox.mjs --base <t> --sandbox <s> --out <changes.diff>` | generate portable applyable patch without `git diff --no-index --label` | isolated baseline git repo |
 | `node bin/persist-artifacts.mjs --out-base <d> [--ts <s>]` | write a JSON/MD bundle to a fresh timestamped run dir | (cross-platform fs) |
 | `node scripts/validate-plan-artifacts.mjs <plan-dir>` | validate PLAN artifacts (requirement/plan/risks/test-plan) | `core/schemas/plan-artifacts.schema.json` |
 | `node scripts/validate-delivery-artifacts.mjs <delivery-dir>` | validate the DELIVERY contract (delivery-manifest.json) | `core/schemas/delivery-artifacts.schema.json` |
@@ -58,7 +59,7 @@ the schemas they satisfy are exactly the Claude ones (`core/schemas/plan-artifac
 `readiness gate → scaffold(sandbox copy, strip .git + secrets) → materialize tests(red→green) → implement →
 independent review → fix → independent verify(re-materialize tests from test-plan) → deliver-status → diff`
 - Deterministic: the readiness gate (`bin/core readiness` / `status-combo`), `deliver-status`
-  (`bin/core deliver-status`), and the final `git apply --check` on the generated `changes.diff`.
+  (`bin/core deliver-status`), `bin/diff-from-sandbox.mjs` for `changes.diff`, and the final `git apply --check`.
 - **Stops at a verified `changes.diff` + `delivery-manifest.json`. No commit, no push.** (Same as Claude.)
 
 ### 3c. publish-delivery (git — the only stage that writes git)
@@ -111,3 +112,7 @@ plan/delivery directory that passes the matching validator** (`validate-plan-art
 `validate-delivery-artifacts.mjs` for delivery, `validate-publish-record.mjs` for the publish record) **+
 `node scripts/self-check.mjs`.** The deterministic surface (`bin/`, `scripts/`, `core/`) is already verified
 in this repository.
+
+Windows note: PowerShell 5 may strip JSON quotes in inline arguments. Use `node bin/core.mjs readiness PASS`
+for simple status values and `--input file.json` or `--stdin` for objects, for example
+`node bin/core.mjs scope-check --input .\scope-check.json`.

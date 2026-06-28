@@ -29,6 +29,9 @@ import { runBranchChoiceTests, CASES as BRANCH_CHOICE_CASES } from './branch-cho
 import { runScopeCheckTests } from './scope-check.test.mjs'
 import { runSandboxPrepareTests } from './sandbox-prepare.test.mjs'
 import { runPersistArtifactsTests } from './persist-artifacts.test.mjs'
+import { runCoreCliInputTests } from './core-cli-input.test.mjs'
+import { runDiffFromSandboxTests } from './diff-from-sandbox.test.mjs'
+import { runUtf8ShellTests } from './utf8-shell.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -428,6 +431,9 @@ for (const failure of runBranchChoiceTests()) errors.push(failure)
 for (const failure of runScopeCheckTests()) errors.push(failure)
 for (const failure of runSandboxPrepareTests()) errors.push(failure)
 for (const failure of runPersistArtifactsTests()) errors.push(failure)
+for (const failure of runCoreCliInputTests()) errors.push(failure)
+for (const failure of runDiffFromSandboxTests()) errors.push(failure)
+for (const failure of runUtf8ShellTests()) errors.push(failure)
 // branch-choice resolution: behaviour-diff the publish workflow inline copy against core/branch-choice.mjs
 // (whole-object deep compare over fixed vectors) so Claude and the Codex adapter cannot drift apart.
 {
@@ -464,6 +470,7 @@ if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guar
   // the skill + AGENTS template orchestrate these shared assets — none may be a dangling reference
   for (const ref of [
     'bin/core.mjs', 'bin/git-state.mjs', 'bin/sandbox-prepare.mjs', 'bin/persist-artifacts.mjs', 'core/scope-check.mjs',
+    'bin/diff-from-sandbox.mjs',
     'scripts/validate-plan-artifacts.mjs', 'scripts/validate-delivery-artifacts.mjs', 'scripts/validate-publish-record.mjs',
     'core/schemas/plan-artifacts.schema.json', 'core/schemas/delivery-artifacts.schema.json', 'core/schemas/publish-record.schema.json',
     'codex/pipeline.md', 'codex/plan-from-requirement.md', 'codex/AGENTS.template.md',
@@ -542,5 +549,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, scope-check logic, sandbox+persist scripts, codex skill entry + refs, delivery+publish schema, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, scope-check logic, sandbox+persist scripts, core CLI input modes, portable diff generation, UTF-8 shell materialization, codex skill entry + refs, delivery+publish schema, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)
