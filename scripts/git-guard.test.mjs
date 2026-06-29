@@ -22,6 +22,16 @@ const BLOCK = [
   'git filter-branch --tree-filter rm HEAD',          // history rewrite
   'git branch -D feature',                            // force-delete a branch
   'git checkout x && git push --force origin main',   // forbidden part in a compound command
+  // --- P1.7: global options between `git` and the subcommand must not bypass the red line ---
+  'git -c http.sslVerify=false push --force origin main',
+  'git -C /repo push --force origin main',
+  'git --git-dir=.git push --force origin main',
+  'git -c x=y -C /repo push --delete origin feature',
+  'git -C /repo reset --hard origin/main',
+  // --- P1.7: quoted refspecs must not bypass force/delete detection ---
+  'git push origin "+main"',
+  'git push "origin" ":feature"',
+  "git push origin '+refs/heads/main'",
 ]
 const ALLOW = [
   'git push origin main',
@@ -37,6 +47,8 @@ const ALLOW = [
   'git push origin main && rm -f /tmp/x',    // unrelated -f after && must not false-positive
   'git push origin main && grep -f pats file',  // unrelated -f after && must not false-positive
   'git branch -d merged',                    // safe delete of a merged branch
+  'git -C /repo push origin main',           // global option + normal (non-force) push must still be allowed
+  'git -c user.name=x commit -m "force push later"',  // global option + non-push, message word must not trigger
   '',
 ]
 

@@ -77,8 +77,10 @@ independent review → fix → independent verify(re-materialize tests from test
    - `switch-existing` — checkout a customer-named existing branch (`targetBranch`), then commit/push;
    - `current-branch` — stay on the current branch and commit/push directly.
 3. Once a valid choice is in, proceed: clone/prepare → branch op per choice → `git apply` the verified diff →
-   commit (reject staging `.env`/keys/personal config) → push (**never `--force`**; `bin/core git-guard`
-   guards every git command) → independent remote verify → `publish-status` (`bin/core publish-status`).
+   commit (reject staging `.env`/keys/personal config) → push (**never `--force`**; the agent must screen
+   every git command with `bin/core git-guard` first — on the Codex side this is a **convention**, not a
+   runtime block; only the Claude adapter has a PreToolUse hook that enforces the same red lines at runtime)
+   → independent remote verify → `publish-status` (`bin/core publish-status`).
 - Safety unchanged (req 10): no force-push, no secret commit, protected-branch block (main/master/release
   need explicit opt-in), high-risk-domain human gate, SCOPE-overflow block.
 
