@@ -26,6 +26,8 @@ import { runProjectTypeTests, CASES as PROJECT_TYPE_CASES } from './project-type
 import { runGitStateTests } from './git-state.test.mjs'
 import { resolveBranchChoice as coreResolveBranchChoice } from '../core/branch-choice.mjs'
 import { runBranchChoiceTests, CASES as BRANCH_CHOICE_CASES } from './branch-choice.test.mjs'
+import { maskRemoteUrl as coreMaskRemoteUrl, hasEmbeddedCredentials as coreHasEmbeddedCredentials } from '../core/mask-remote-url.mjs'
+import { runMaskRemoteUrlTests, CASES as MASK_REMOTE_URL_CASES } from './mask-remote-url.test.mjs'
 import { runScopeCheckTests } from './scope-check.test.mjs'
 import { runSandboxPrepareTests } from './sandbox-prepare.test.mjs'
 import { runPersistArtifactsTests } from './persist-artifacts.test.mjs'
@@ -460,6 +462,30 @@ for (const failure of runSafeRmTests()) errors.push(failure)
     }
   }
 }
+// remote-URL credential redaction: run unit tests + behaviour-diff the publish workflow inline copy against
+// core/mask-remote-url.mjs (mask string + hasEmbeddedCredentials bool over fixed vectors) so they cannot drift.
+for (const failure of runMaskRemoteUrlTests()) errors.push(failure)
+{
+  const mWf = '.claude/workflows/publish-delivery.js'
+  if (exists(mWf)) {
+    const src = read(mWf)
+    const s = src.indexOf('// >>> MASK-REMOTE-URL-START')
+    const e = src.indexOf('// <<< MASK-REMOTE-URL-END')
+    if (s === -1 || e === -1 || e <= s) {
+      errors.push(`${mWf} is missing MASK-REMOTE-URL markers required for the inline-vs-core parity check`)
+    } else {
+      const block = src.slice(src.indexOf('\n', s), e)
+      let inline = null
+      try { inline = new Function(`${block}\n; return { maskRemoteUrl, hasEmbeddedCredentials };`)() } catch (error) { errors.push(`failed to evaluate inline mask-remote-url in ${mWf}: ${error.message}`) }
+      if (inline) {
+        for (const [name, url] of MASK_REMOTE_URL_CASES) {
+          if (inline.maskRemoteUrl(url) !== coreMaskRemoteUrl(url)) errors.push(`mask-remote-url drift on "${name}": inline=${inline.maskRemoteUrl(url)} core=${coreMaskRemoteUrl(url)}`)
+          if (inline.hasEmbeddedCredentials(url) !== coreHasEmbeddedCredentials(url)) errors.push(`hasEmbeddedCredentials drift on "${name}": inline=${inline.hasEmbeddedCredentials(url)} core=${coreHasEmbeddedCredentials(url)}`)
+        }
+      }
+    }
+  }
+}
 if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guard-hook.mjs (git red-line PreToolUse hook entry)')
 // Codex skill entry point: the recognizable `.agents/skills` entry must exist with valid name+description
 // frontmatter (the format Codex documents), so the entry can't silently break or disappear.
@@ -553,5 +579,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, scope-check logic, sandbox+persist scripts, core CLI input modes, portable diff generation, UTF-8 shell materialization, tests-fingerprint, deterministic test-runner, rm-path guards, codex skill entry + refs, delivery+publish schema, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, remote-url credential mask+parity, scope-check logic, sandbox+persist scripts, core CLI input modes, portable diff generation, UTF-8 shell materialization, tests-fingerprint, deterministic test-runner, rm-path guards, codex skill entry + refs, delivery+publish schema, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)

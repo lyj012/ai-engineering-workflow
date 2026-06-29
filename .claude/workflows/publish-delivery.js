@@ -159,6 +159,20 @@ function computePublishStatus(input) {
 }
 // <<< PUBLISH-STATUS-END
 
+// >>> MASK-REMOTE-URL-START — 与 core/mask-remote-url.mjs 同一逻辑（行为由 scripts/self-check.mjs 比对锁定，单测见 scripts/mask-remote-url.test.mjs）；勿删本标记与 END 标记
+// 凭据脱敏：http(s) URL 的 userinfo 段（user:token@ 或 token@）一律遮成 ***@；ssh/git@scp/本地路径原样。
+// hasEmbeddedCredentials 判定是否含内嵌凭据（'***' 哨兵不算）——发布引擎据此【拒绝】带凭据 URL，凭据须走环境。
+function maskRemoteUrl(u) {
+  if (!u || typeof u !== 'string') return u
+  return u.replace(/^(https?:\/\/)([^/@]+)@/i, '$1***@')
+}
+function hasEmbeddedCredentials(u) {
+  if (!u || typeof u !== 'string') return false
+  const m = /^https?:\/\/([^/@]+)@/i.exec(u)
+  return !!m && m[1] !== '***'
+}
+// <<< MASK-REMOTE-URL-END
+
 const SAFETY = `【硬安全约束】(1) 只在隔离的发布工作副本里操作，绝不修改原目标仓库 ${targetRepoArg || '(交付 manifest 的目标仓库)'} 的工作区或历史；(2) 绝不 git push --force/-f、绝不 reset --hard 远程、绝不删远程分支、绝不改写历史；(3) 绝不 git add/commit 任何 .env/.env.*/*.key/*.pem/*.p12/*.pfx/id_rsa*/凭据/密钥，以及 .claude/settings.local.json、AGENTS.md、个人 harness 配置；(4) 命中支付/权限/密钥/认证/不可逆操作即停并报告。中文输出，只返回结构化结果。`
 
 // ===================== Schemas =====================
@@ -228,6 +242,8 @@ const failedStages = []
 
 try {
   if (!deliveryDir) halt('Preflight', 'args.deliveryDir 缺失（必填）')
+  // 凭据不入 URL（设计铁律）：args.remoteUrl 内嵌凭据则在任何子代理/落盘前就拒绝，绝不把 token 透传进 prompt/日志/产物。
+  if (remoteUrlArg && hasEmbeddedCredentials(remoteUrlArg)) halt('Preflight', 'args.remoteUrl 内嵌了凭据（http(s) URL 含 user:token@）——禁止把凭据写进 URL；请改用不含凭据的远程 URL，凭据交由环境的 SSH / credential helper 提供。', 'PUBLISH_BLOCKED')
 
   // ---- Preflight：读交付 manifest + 解析远程 + 高风险/可发布闸门 ----
   phase('Preflight')
@@ -242,12 +258,14 @@ try {
   pre = pf.value
   const targetRepo = targetRepoArg || pre.targetRepo
   const remoteUrl = remoteUrlArg || pre.remoteUrl
+  const remoteUrlSafe = maskRemoteUrl(remoteUrl)   // 凭据脱敏版，用于一切展示/日志/落盘；原 remoteUrl 仅 clone/push 实际执行用
   highRiskBlocked = (pre.highRiskDomains || []).length > 0 && !allowHighRiskAutoPublish
   const publishable = ['DELIVERED', 'DELIVERED_WITH_OPEN_ITEMS'].includes(pre.deliverableStatus) && pre.diffApplyCheckPassed === true && pre.diffPresent === true
-  note(`发布闸门：交付态=${pre.deliverableStatus}，apply-check=${pre.diffApplyCheckPassed}，diff在=${pre.diffPresent} → 可发布=${publishable}；远程=${remoteUrl || '(未解析到)'}（可达=${pre.remoteReachable}）；高风险域=${(pre.highRiskDomains || []).join('/') || '无'}${highRiskBlocked ? '→人工闸门拦截' : ''}。`)
+  note(`发布闸门：交付态=${pre.deliverableStatus}，apply-check=${pre.diffApplyCheckPassed}，diff在=${pre.diffPresent} → 可发布=${publishable}；远程=${remoteUrlSafe || '(未解析到)'}（可达=${pre.remoteReachable}）；高风险域=${(pre.highRiskDomains || []).join('/') || '无'}${highRiskBlocked ? '→人工闸门拦截' : ''}。`)
   if (highRiskBlocked) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 命中高风险域且未开 allowHighRiskAutoPublish：默认人工闸门，不自动发布。如确需自动发布，请人工复核后传 allowHighRiskAutoPublish:true。') }
   else if (!publishable) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 上游交付未达可发布态（需 DELIVERED/带开环项 + apply-check 通过 + diff 存在），拒绝发布。') }
   else if (!remoteUrl) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 解析不到要 push 的远程（targetRepo 无 origin 且未传 remoteUrl），无处可发。请传 args.remoteUrl。') }
+  else if (hasEmbeddedCredentials(remoteUrl)) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 解析到的远程 URL 内嵌了凭据（targetRepo 的 origin 含 user:token@）——拒绝发布以免凭据落入日志/产物。请把该 remote 改为不含凭据的 URL，凭据交由环境 credential helper。') }
   else if (!pre.remoteReachable) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 远程不可达（网络或凭据问题），无法发布。') }
   else if (!branchChoiceProvided) { finalStatus = 'PUBLISH_NEEDS_CHOICE'; note('⏸ 需客户先选择提交方式，未明确选择前【不 checkout/建分支/commit/push】：(1) 新建分支后提交推送 → gitPolicy.branchMode="new-branch"；(2) 切换到已有分支后提交推送 → gitPolicy.branchMode="switch-existing" 且 gitPolicy.targetBranch="<已有分支>"；(3) 当前分支直接提交推送 → gitPolicy.branchMode="current-branch"。请带选择重跑。受保护分支/高风险/敏感文件/禁强推规则不变。') }
   else {
@@ -323,7 +341,7 @@ try {
       // ---- Push：git push 到分支（绝不 force；dryRun 跳过）----
       phase('Push')
       if (dryRun) {
-        push = { ok: true, pushPerformed: false, pushRejected: false, remoteRef: `refs/heads/${branch.branchName}`, pushUrlSafe: remoteUrl, note: 'dryRun：未实际 push' }
+        push = { ok: true, pushPerformed: false, pushRejected: false, remoteRef: `refs/heads/${branch.branchName}`, pushUrlSafe: remoteUrlSafe, note: 'dryRun：未实际 push' }
         note('Push：dryRun=true，已准备好提交但未 push。')
       } else {
         const pu = await callAgent(
@@ -332,7 +350,7 @@ try {
           `若被拒（凭据缺失/权限/非快进），pushRejected=true、pushPerformed=false，如实在 note 写原因与"如何用 ! git push 自行完成"的提示，不要 force、不要重写。成功则 pushPerformed=true。\n` +
           `回报 ok/pushPerformed/pushRejected/remoteRef(refs/heads/${branch.branchName})/pushUrlSafe(不含凭据的远程URL)/note。`,
           { schema: PUSH_SCHEMA, label: 'push', phase: 'Push', agentType: AT, effort: 'low', model: LIGHT_MODEL }, true)
-        if (!pu.ok) { failedStages.push('Push'); push = { ok: false, pushPerformed: false, pushRejected: true, remoteRef: '', pushUrlSafe: remoteUrl, note: pu.error } }
+        if (!pu.ok) { failedStages.push('Push'); push = { ok: false, pushPerformed: false, pushRejected: true, remoteRef: '', pushUrlSafe: remoteUrlSafe, note: pu.error } }
         else push = pu.value
         note(`Push：${push.pushPerformed ? '已推送到 ' + push.remoteRef : '未推送（' + (push.pushRejected ? '被拒' : '失败') + '）：' + push.note}`)
         if (!push.pushPerformed) finalStatus = 'PUBLISH_BLOCKED'
@@ -343,7 +361,7 @@ try {
         phase('RemoteVerify')
         const rv = await callAgent(
           `你是独立发布核验者，未参与前面的 clone/commit/push，只读核对客观事实、不改任何文件、不打分。${SAFETY}\n` +
-          `针对发布副本 ${clone.repoDir}、远程 ${remoteUrl}、分支 ${branch.branchName}、本地提交 ${commit.commitSha}：\n` +
+          `针对发布副本 ${clone.repoDir}、远程 ${remoteUrlSafe}、分支 ${branch.branchName}、本地提交 ${commit.commitSha}：\n` +
           `1) branchShaMatches：git ls-remote ${pushRemote} refs/heads/${branch.branchName} 的 SHA 是否 == ${commit.commitSha}。\n` +
           `2) committedFilesMatch：本次提交实际改动文件(git show --stat --name-only --pretty=format: ${commit.commitSha})是否与交付声明 ${JSON.stringify(pre.manifestFilesChanged)} 完全一致（多一个少一个都为 false）。remoteFiles 填实际提交文件。\n` +
           `3) noForbiddenFiles：提交内不含 .env/密钥/*.key/*.pem/凭据/.claude/settings.local.json/AGENTS.md 等禁入文件。\n` +
@@ -386,14 +404,14 @@ const finalDelivery = {
   branchChoice: branchChoiceProvided ? branchMode : null,
   branchChoiceProvided,
   targetRepo: targetRepoArg || (pre && pre.targetRepo) || null,
-  remoteUrl: remoteUrlArg || (pre && pre.remoteUrl) || null,
+  remoteUrl: maskRemoteUrl(remoteUrlArg || (pre && pre.remoteUrl) || null),
   deliverableStatus: pre ? pre.deliverableStatus : null,
   highRiskDomains: pre ? pre.highRiskDomains : [],
   highRiskBlocked: !!highRiskBlocked,
   branch: branch ? { name: branch.branchName, originalBranch: branch.originalBranch, finalBranch: branch.branchName, isNewBranch: branch.isNewBranch, branchCreated: branch.branchCreated, branchSwitched: branch.branchSwitched, createdFrom: branch.createdFrom, allowed: branchAllowed } : null,
   branchChoiceMode: branchChoiceProvided ? branchMode : null,
   commit: commit ? { sha: commit.commitSha, author: commit.authorLine, files: commit.committedFiles } : null,
-  push: push ? { performed: push.pushPerformed, rejected: push.pushRejected, remoteRef: push.remoteRef, url: push.pushUrlSafe } : null,
+  push: push ? { performed: push.pushPerformed, rejected: push.pushRejected, remoteRef: push.remoteRef, url: maskRemoteUrl(push.pushUrlSafe) } : null,
   remoteVerify: remoteVerify || null,
   filesChanged: pre ? pre.manifestFilesChanged : [],
   openItems: (pre && pre.openItems) || [],

@@ -32,6 +32,7 @@ import { classifyProjectType } from '../core/project-type.mjs'
 import { classifyGitCommand } from '../core/git-guard.mjs'
 import { applyPlanPatch } from '../core/plan-patch.mjs'
 import { checkScope } from '../core/scope-check.mjs'
+import { maskRemoteUrl, hasEmbeddedCredentials } from '../core/mask-remote-url.mjs'
 
 const HANDLERS = {
   'scope-check': (i) => checkScope(i),
@@ -47,6 +48,7 @@ const HANDLERS = {
   'project-type': (i) => classifyProjectType(i),
   'git-guard': (i) => classifyGitCommand(i),
   'plan-patch': (i) => applyPlanPatch(i.plan, i.patch),
+  'mask-remote-url': (i) => ({ masked: maskRemoteUrl(i.url), hasCredentials: hasEmbeddedCredentials(i.url) }),
 }
 
 function main() {
