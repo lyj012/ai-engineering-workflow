@@ -174,6 +174,33 @@ function hasEmbeddedCredentials(u) {
 }
 // <<< MASK-REMOTE-URL-END
 
+// >>> VERIFY-REMOTE-PUBLISH-START — 与 core/verify-remote-publish.mjs 同一逻辑（行为由 scripts/self-check.mjs 比对锁定，单测见 scripts/verify-remote-publish.test.mjs）；勿删本标记与 END 标记
+// 发布后硬门禁的脚本侧确定性复算：从 RemoteVerify 已回报的原始材料(remoteSha/remoteFiles/workTreeStatus)重算
+// SHA 等值 / 文件集等值 / 禁入文件扫描，最终门禁取【复算∧agent 自报】，不再单信 agent 布尔。
+const FORBIDDEN_FILE_PATTERNS = [
+  /(^|\/)\.env(\.|$)/i, /\.(key|pem|p12|pfx|keystore|jks)$/i, /(^|\/)id_rsa/i, /(^|\/)id_ed25519/i,
+  /credential/i, /secret/i, /(^|\/)\.npmrc$/i, /(^|\/)\.pypirc$/i,
+  /\.claude\/settings\.local\.json$/, /(^|\/)AGENTS\.md$/,
+]
+function findForbiddenFiles(files) {
+  return (Array.isArray(files) ? files : []).map(String).filter(f => FORBIDDEN_FILE_PATTERNS.some(re => re.test(f)))
+}
+function setEqual(a, b) {
+  const A = [...new Set((Array.isArray(a) ? a : []).map(String))].sort()
+  const B = [...new Set((Array.isArray(b) ? b : []).map(String))].sort()
+  return A.length === B.length && A.every((x, idx) => x === B[idx])
+}
+function verifyRemotePublish(input) {
+  const i = input || {}
+  const branchShaMatches = !!(i.commitSha && i.remoteSha && String(i.remoteSha).trim() === String(i.commitSha).trim())
+  const committedFilesMatch = setEqual(i.remoteFiles, i.manifestFilesChanged)
+  const forbiddenFound = findForbiddenFiles([...(Array.isArray(i.remoteFiles) ? i.remoteFiles : []), ...(Array.isArray(i.committedFiles) ? i.committedFiles : [])])
+  const noForbiddenFiles = forbiddenFound.length === 0
+  const workTreeClean = typeof i.workTreeStatus === 'string' ? i.workTreeStatus.trim() === '' : undefined
+  return { branchShaMatches, committedFilesMatch, noForbiddenFiles, workTreeClean, forbiddenFound }
+}
+// <<< VERIFY-REMOTE-PUBLISH-END
+
 const SAFETY = `【硬安全约束】(1) 只在隔离的发布工作副本里操作，绝不修改原目标仓库 ${targetRepoArg || '(交付 manifest 的目标仓库)'} 的工作区或历史；(2) 绝不 git push --force/-f、绝不 reset --hard 远程、绝不删远程分支、绝不改写历史；(3) 绝不 git add/commit 任何 .env/.env.*/*.key/*.pem/*.p12/*.pfx/id_rsa*/凭据/密钥，以及 .claude/settings.local.json、AGENTS.md、个人 harness 配置；(4) 命中支付/权限/密钥/认证/不可逆操作即停并报告。中文输出，只返回结构化结果。`
 
 // ===================== Schemas =====================
@@ -229,8 +256,9 @@ const REMOTEVERIFY_SCHEMA = { type: 'object', additionalProperties: false, prope
   committedFilesMatch: { type: 'boolean', description: '本次提交实际改动文件 == 交付 filesChanged（多一个少一个都为 false）' },
   noForbiddenFiles: { type: 'boolean', description: '提交内不含 .env/密钥/个人配置等禁入文件' },
   workTreeClean: { type: 'boolean', description: 'git status --porcelain 为空' },
+  workTreeStatus: { type: 'string', description: 'git status --porcelain 的原始输出（空串=干净）；供脚本侧确定性复算 workTreeClean' },
   remoteSha: { type: 'string' }, remoteFiles: { type: 'array', items: { type: 'string' } }, note: { type: 'string' },
-}, required: ['branchShaMatches', 'committedFilesMatch', 'noForbiddenFiles', 'workTreeClean', 'remoteSha', 'remoteFiles', 'note'] }
+}, required: ['branchShaMatches', 'committedFilesMatch', 'noForbiddenFiles', 'workTreeClean', 'workTreeStatus', 'remoteSha', 'remoteFiles', 'note'] }
 
 const FINALIZE_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   ok: { type: 'boolean' }, absOutDir: { type: 'string' }, written: { type: 'array', items: { type: 'string' } }, note: { type: 'string' },
@@ -238,7 +266,7 @@ const FINALIZE_SCHEMA = { type: 'object', additionalProperties: false, propertie
 
 // ===================== 状态收集 =====================
 let finalStatus = 'FAILED'
-let pre = null, clone = null, branch = null, apply = null, commit = null, push = null, remoteVerify = null, finalize = null
+let pre = null, clone = null, branch = null, apply = null, commit = null, push = null, remoteVerify = null, remoteRecomputed = null, finalize = null
 let halted = false, branchAllowed = null, highRiskBlocked = null
 const failedStages = []
 
@@ -368,12 +396,28 @@ try {
           `1) branchShaMatches：git ls-remote ${pushRemote} refs/heads/${branch.branchName} 的 SHA 是否 == ${commit.commitSha}。\n` +
           `2) committedFilesMatch：本次提交实际改动文件(git show --stat --name-only --pretty=format: ${commit.commitSha})是否与交付声明 ${JSON.stringify(pre.manifestFilesChanged)} 完全一致（多一个少一个都为 false）。remoteFiles 填实际提交文件。\n` +
           `3) noForbiddenFiles：提交内不含 .env/密钥/*.key/*.pem/凭据/.claude/settings.local.json/AGENTS.md 等禁入文件。\n` +
-          `4) workTreeClean：发布副本本地 git status --porcelain 是否为空（本地工作树核查，非远程）。\n` +
-          `回报 branchShaMatches/committedFilesMatch/noForbiddenFiles/workTreeClean/remoteSha/remoteFiles/note。`,
+          `4) workTreeClean：发布副本本地 git status --porcelain 是否为空（本地工作树核查，非远程）；workTreeStatus 填该 porcelain 命令的【原始输出】（干净则空串），脚本会据此复算。\n` +
+          `回报 branchShaMatches/committedFilesMatch/noForbiddenFiles/workTreeClean/workTreeStatus/remoteSha/remoteFiles/note。`,
           { schema: REMOTEVERIFY_SCHEMA, label: 'remote-verify', phase: 'RemoteVerify', agentType: AT, effort: 'medium' }, true)
         if (!rv.ok) { failedStages.push('RemoteVerify'); note(`远程核验失败：${rv.error}`); remoteVerify = null }
         else remoteVerify = rv.value
-        if (remoteVerify) note(`RemoteVerify：远程SHA一致=${remoteVerify.branchShaMatches}、提交文件一致=${remoteVerify.committedFilesMatch}、无禁入=${remoteVerify.noForbiddenFiles}、树干净=${remoteVerify.workTreeClean}。`)
+        if (remoteVerify) {
+          note(`RemoteVerify(agent 自报)：远程SHA一致=${remoteVerify.branchShaMatches}、提交文件一致=${remoteVerify.committedFilesMatch}、无禁入=${remoteVerify.noForbiddenFiles}、树干净=${remoteVerify.workTreeClean}。`)
+          // 脚本侧确定性复算（从 agent 已回报的 remoteSha/remoteFiles/workTreeStatus 重算），最终门禁取 复算∧agent：
+          const rc = verifyRemotePublish({ commitSha: commit.commitSha, manifestFilesChanged: pre.manifestFilesChanged, remoteSha: remoteVerify.remoteSha, remoteFiles: remoteVerify.remoteFiles, committedFiles: (commit && commit.committedFiles) || [], workTreeStatus: remoteVerify.workTreeStatus })
+          const effWorkTree = (rc.workTreeClean === undefined ? (remoteVerify.workTreeClean === true) : rc.workTreeClean) && remoteVerify.workTreeClean === true
+          remoteRecomputed = {
+            branchShaMatches: rc.branchShaMatches && remoteVerify.branchShaMatches === true,
+            committedFilesMatch: rc.committedFilesMatch && remoteVerify.committedFilesMatch === true,
+            noForbiddenFiles: rc.noForbiddenFiles && remoteVerify.noForbiddenFiles === true,
+            workTreeClean: effWorkTree,
+          }
+          const disc = []
+          if (rc.branchShaMatches !== (remoteVerify.branchShaMatches === true)) disc.push('SHA')
+          if (rc.committedFilesMatch !== (remoteVerify.committedFilesMatch === true)) disc.push('文件集')
+          if (rc.noForbiddenFiles !== (remoteVerify.noForbiddenFiles === true)) disc.push('禁入')
+          note(`RemoteVerify(脚本复算)：SHA一致=${rc.branchShaMatches}、文件集一致=${rc.committedFilesMatch}、无禁入=${rc.noForbiddenFiles}${rc.forbiddenFound.length ? '（检出禁入：' + rc.forbiddenFound.join(', ') + '）' : ''}、树干净=${rc.workTreeClean}${disc.length ? `；⚠ agent 自报与脚本复算不符：${disc.join('/')}（终态以 复算∧agent 为准）` : ''}。`)
+        }
       }
     }
   }
@@ -393,7 +437,7 @@ const statusInput = {
   branchAllowed: branchAllowed === null ? false : branchAllowed,
   dryRun,
   pushPerformed: !!(push && push.pushPerformed),
-  remoteVerified: remoteVerify ? { branchShaMatches: remoteVerify.branchShaMatches, committedFilesMatch: remoteVerify.committedFilesMatch, noForbiddenFiles: remoteVerify.noForbiddenFiles, workTreeClean: remoteVerify.workTreeClean } : null,
+  remoteVerified: remoteRecomputed,   // P1.6：脚本侧确定性复算(复算∧agent)，不再单信 agent 自报布尔
   deliverableOpenItems: (pre && pre.openItems) || [],
 }
 const sr = computePublishStatus(statusInput)
@@ -417,6 +461,7 @@ const finalDelivery = {
   commit: commit ? { sha: commit.commitSha, author: commit.authorLine, files: commit.committedFiles } : null,
   push: push ? { performed: push.pushPerformed, rejected: push.pushRejected, remoteRef: push.remoteRef, url: maskRemoteUrl(push.pushUrlSafe) } : null,
   remoteVerify: remoteVerify || null,
+  remoteVerifyRecomputed: remoteRecomputed,   // 脚本侧确定性复算结果（终态判定依据）
   filesChanged: pre ? pre.manifestFilesChanged : [],
   openItems: (pre && pre.openItems) || [],
   failedStages,

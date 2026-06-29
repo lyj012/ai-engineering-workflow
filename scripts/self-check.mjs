@@ -28,6 +28,8 @@ import { resolveBranchChoice as coreResolveBranchChoice } from '../core/branch-c
 import { runBranchChoiceTests, CASES as BRANCH_CHOICE_CASES } from './branch-choice.test.mjs'
 import { maskRemoteUrl as coreMaskRemoteUrl, hasEmbeddedCredentials as coreHasEmbeddedCredentials } from '../core/mask-remote-url.mjs'
 import { runMaskRemoteUrlTests, CASES as MASK_REMOTE_URL_CASES } from './mask-remote-url.test.mjs'
+import { verifyRemotePublish as coreVerifyRemotePublish, findForbiddenFiles as coreFindForbiddenFiles } from '../core/verify-remote-publish.mjs'
+import { runVerifyRemotePublishTests, CASES as VERIFY_REMOTE_PUBLISH_CASES } from './verify-remote-publish.test.mjs'
 import { runScopeCheckTests } from './scope-check.test.mjs'
 import { runSandboxPrepareTests } from './sandbox-prepare.test.mjs'
 import { runPersistArtifactsTests } from './persist-artifacts.test.mjs'
@@ -486,6 +488,32 @@ for (const failure of runMaskRemoteUrlTests()) errors.push(failure)
     }
   }
 }
+// post-push remote-verify recompute: run unit tests + behaviour-diff the publish workflow inline copy against
+// core/verify-remote-publish.mjs (recomputed booleans + forbidden-file scan over fixed vectors) so they cannot drift.
+for (const failure of runVerifyRemotePublishTests()) errors.push(failure)
+{
+  const vWf = '.claude/workflows/publish-delivery.js'
+  if (exists(vWf)) {
+    const src = read(vWf)
+    const s = src.indexOf('// >>> VERIFY-REMOTE-PUBLISH-START')
+    const e = src.indexOf('// <<< VERIFY-REMOTE-PUBLISH-END')
+    if (s === -1 || e === -1 || e <= s) {
+      errors.push(`${vWf} is missing VERIFY-REMOTE-PUBLISH markers required for the inline-vs-core parity check`)
+    } else {
+      const block = src.slice(src.indexOf('\n', s), e)
+      let inline = null
+      try { inline = new Function(`${block}\n; return { verifyRemotePublish, findForbiddenFiles };`)() } catch (error) { errors.push(`failed to evaluate inline verify-remote-publish in ${vWf}: ${error.message}`) }
+      if (inline) {
+        for (const [name, input] of VERIFY_REMOTE_PUBLISH_CASES) {
+          if (JSON.stringify(inline.verifyRemotePublish(input)) !== JSON.stringify(coreVerifyRemotePublish(input))) errors.push(`verify-remote-publish drift on "${name}"`)
+        }
+        for (const probe of [['.env', 'src/a.js'], ['deploy/id_rsa', 'ok.txt'], ['config/x.pem']]) {
+          if (JSON.stringify(inline.findForbiddenFiles(probe)) !== JSON.stringify(coreFindForbiddenFiles(probe))) errors.push(`findForbiddenFiles drift on ${JSON.stringify(probe)}`)
+        }
+      }
+    }
+  }
+}
 if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guard-hook.mjs (git red-line PreToolUse hook entry)')
 // Codex skill entry point: the recognizable `.agents/skills` entry must exist with valid name+description
 // frontmatter (the format Codex documents), so the entry can't silently break or disappear.
@@ -579,5 +607,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, remote-url credential mask+parity, scope-check logic, sandbox+persist scripts, core CLI input modes, portable diff generation, UTF-8 shell materialization, tests-fingerprint, deterministic test-runner, rm-path guards, codex skill entry + refs, delivery+publish schema, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, remote-url credential mask+parity, remote-verify recompute+parity, scope-check logic, sandbox+persist scripts, core CLI input modes, portable diff generation, UTF-8 shell materialization, tests-fingerprint, deterministic test-runner, rm-path guards, codex skill entry + refs, delivery+publish schema, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)
