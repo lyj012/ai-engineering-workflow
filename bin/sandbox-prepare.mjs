@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // bin/sandbox-prepare — deterministically copy a target repo into an isolated sandbox, stripping version
-// history, build output, secrets and out-of-tree symlinks. Cross-platform (pure Node fs, no rsync/bash).
+// history, build output, secrets (by filename pattern — not a content-level secret scan) and symlinks (ALL
+// symlinks are skipped, not just out-of-tree ones). Cross-platform (pure Node fs, no rsync/bash).
 //
 // Replaces the natural-language "scaffold" cleanup the Claude deliver engine asks a subagent to do, so the
 // strip is a tested script, not a model judgment (closes the "sandbox cleanup never machine-verified" gap).
