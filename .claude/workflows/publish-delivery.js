@@ -107,6 +107,9 @@ const branchChoice = resolveBranchChoice({ requestedMode: GP.branchMode || '', t
 const branchChoiceProvided = branchChoice.choiceProvided
 const branchMode = branchChoice.resolvedMode || 'new-branch'   // 安全缺省仅供代码路径；needsChoice 时不会走到使用它的分支
 const allowMainPush = !!GP.allowMainPush
+// pushRemote 仅用于在【源 targetRepo】里解析要 push 的 URL（Preflight）；发布在 clone 隔离副本上进行，
+// 副本里 git clone 默认建的 remote 恒为 origin，故 Branch/Push/RemoteVerify 一律用字面量 origin（P1.8：
+// 避免 pushRemote='upstream' 等非 origin 取值时副本无该 remote 导致 push 失败）。
 const pushRemote = GP.pushRemote ? String(GP.pushRemote) : 'origin'
 
 const AT = 'general-purpose'   // 全工具内置 agentType（需 Read/Bash/Write），任意目录可跑
@@ -323,7 +326,7 @@ try {
       (branchMode === 'new-branch'
         ? `策略=new-branch（从当前分支新建）：保持在 originalBranch 上，ts=$(date +%Y%m%d-%H%M%S)，用需求目标生成简短 slug（小写/空格转-/去特殊字符/≤40）；git checkout -b "${branchPrefix}<slug>-$ts"。branchName=新分支名、createdFrom=originalBranch、isNewBranch=true、branchCreated=true、branchSwitched=true。需求目标：${pre.requirementGoal}\n`
         : branchMode === 'switch-existing'
-          ? `策略=switch-existing（切换到客户指定的【已有】分支 "${targetBranch}"）：git checkout "${targetBranch}"；若本地无但远程有，用 git checkout -b "${targetBranch}" --track ${pushRemote}/"${targetBranch}"。该分支必须是已存在分支（不得新建）；若远程也不存在则 ok=false 并在 note 说明。branchName="${targetBranch}"、createdFrom="${targetBranch}"、isNewBranch=false、branchCreated=false、branchSwitched=true。\n`
+          ? `策略=switch-existing（切换到客户指定的【已有】分支 "${targetBranch}"）：git checkout "${targetBranch}"；若本地无但远程有，用 git checkout -b "${targetBranch}" --track origin/"${targetBranch}"。该分支必须是已存在分支（不得新建）；若远程也不存在则 ok=false 并在 note 说明。branchName="${targetBranch}"、createdFrom="${targetBranch}"、isNewBranch=false、branchCreated=false、branchSwitched=true。\n`
           : `策略=current-branch（保持当前分支不变，不 checkout、不建分支）：branchName=originalBranch、createdFrom=originalBranch、isNewBranch=false、branchCreated=false、branchSwitched=false。\n`) +
       `回报 ok/branchName(最终提交分支)/originalBranch/createdFrom/isNewBranch/branchCreated/branchSwitched/note。`,
       { schema: BRANCH_SCHEMA, label: 'prepare-branch', phase: 'Branch', agentType: AT, effort: 'low' }, true)
@@ -377,7 +380,7 @@ try {
       } else {
         const pu = await callAgent(
           `你负责把分支推到远程（绝不 force、绝不改写历史）。${SAFETY}\n` +
-          `在 ${clone.repoDir} 执行：git push ${pushRemote} "${branch.branchName}"（${branch.isNewBranch ? '新分支首次推送可加 -u' : '推到已存在分支，必须是快进；非快进即停、绝不 -f'}）。用环境已配置的凭据，命令行不内联 token。\n` +
+          `在 ${clone.repoDir} 执行：git push origin "${branch.branchName}"（${branch.isNewBranch ? '新分支首次推送可加 -u' : '推到已存在分支，必须是快进；非快进即停、绝不 -f'}）。用环境已配置的凭据，命令行不内联 token。\n` +
           `若被拒（凭据缺失/权限/非快进），pushRejected=true、pushPerformed=false，如实在 note 写原因与"如何用 ! git push 自行完成"的提示，不要 force、不要重写。成功则 pushPerformed=true。\n` +
           `回报 ok/pushPerformed/pushRejected/remoteRef(refs/heads/${branch.branchName})/pushUrlSafe(不含凭据的远程URL)/note。`,
           { schema: PUSH_SCHEMA, label: 'push', phase: 'Push', agentType: AT, effort: 'low', model: LIGHT_MODEL }, true)
@@ -393,7 +396,7 @@ try {
         const rv = await callAgent(
           `你是独立发布核验者，未参与前面的 clone/commit/push，只读核对客观事实、不改任何文件、不打分。${SAFETY}\n` +
           `针对发布副本 ${clone.repoDir}、远程 ${remoteUrlSafe}、分支 ${branch.branchName}、本地提交 ${commit.commitSha}：\n` +
-          `1) branchShaMatches：git ls-remote ${pushRemote} refs/heads/${branch.branchName} 的 SHA 是否 == ${commit.commitSha}。\n` +
+          `1) branchShaMatches：git ls-remote origin refs/heads/${branch.branchName} 的 SHA 是否 == ${commit.commitSha}。\n` +
           `2) committedFilesMatch：本次提交实际改动文件(git show --stat --name-only --pretty=format: ${commit.commitSha})是否与交付声明 ${JSON.stringify(pre.manifestFilesChanged)} 完全一致（多一个少一个都为 false）。remoteFiles 填实际提交文件。\n` +
           `3) noForbiddenFiles：提交内不含 .env/密钥/*.key/*.pem/凭据/.claude/settings.local.json/AGENTS.md 等禁入文件。\n` +
           `4) workTreeClean：发布副本本地 git status --porcelain 是否为空（本地工作树核查，非远程）；workTreeStatus 填该 porcelain 命令的【原始输出】（干净则空串），脚本会据此复算。\n` +
