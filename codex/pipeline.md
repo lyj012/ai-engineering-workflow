@@ -36,6 +36,8 @@ Codex calls `core/` through the CLIs below. One source of truth.
 | `node bin/core.mjs scope-check '<json>'` | changed files vs the plan's SCOPE | `core/scope-check.mjs` |
 | `node bin/sandbox-prepare.mjs --src <t> --dest <s>` | copy target→sandbox; strip history/build/secrets/symlinks | (cross-platform fs) |
 | `node bin/diff-from-sandbox.mjs --base <t> --sandbox <s> --out <changes.diff>` | generate portable applyable patch without `git diff --no-index --label` | isolated baseline git repo |
+| `node bin/tests-fingerprint.mjs --dir <testsDir>` | canonical, order-independent fingerprint of the tests/ tree (the freeze and the verify-time recompute agree by construction) | `node:crypto` sha256 |
+| `node bin/verify-tests.mjs --cwd <d> -- <cmd...>` | run a test/DONE command; report its REAL exit code as the pass/fail fact (no model judgment) | `spawnSync` exit code |
 | `node bin/persist-artifacts.mjs --out-base <d> [--ts <s>]` | write a JSON/MD bundle to a fresh timestamped run dir | (cross-platform fs) |
 | `node scripts/validate-plan-artifacts.mjs <plan-dir>` | validate PLAN artifacts (requirement/plan/risks/test-plan) | `core/schemas/plan-artifacts.schema.json` |
 | `node scripts/validate-delivery-artifacts.mjs <delivery-dir>` | validate the DELIVERY contract (delivery-manifest.json) | `core/schemas/delivery-artifacts.schema.json` |
@@ -59,7 +61,9 @@ the schemas they satisfy are exactly the Claude ones (`core/schemas/plan-artifac
 `readiness gate → scaffold(sandbox copy, strip .git + secrets) → materialize tests(red→green) → implement →
 independent review → fix → independent verify(re-materialize tests from test-plan) → deliver-status → diff`
 - Deterministic: the readiness gate (`bin/core readiness` / `status-combo`), `deliver-status`
-  (`bin/core deliver-status`), `bin/diff-from-sandbox.mjs` for `changes.diff`, and the final `git apply --check`.
+  (`bin/core deliver-status`), `bin/tests-fingerprint.mjs` (freeze + verify-time tests-integrity fingerprint)
+  and `bin/verify-tests.mjs` (DONE / red-green / independent re-test pass-fail decided by the real exit code,
+  not a model's self-report), `bin/diff-from-sandbox.mjs` for `changes.diff`, and the final `git apply --check`.
 - **Stops at a verified `changes.diff` + `delivery-manifest.json`. No commit, no push.** (Same as Claude.)
 
 ### 3c. publish-delivery (git — the only stage that writes git)

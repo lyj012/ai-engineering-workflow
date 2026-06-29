@@ -32,6 +32,8 @@ import { runPersistArtifactsTests } from './persist-artifacts.test.mjs'
 import { runCoreCliInputTests } from './core-cli-input.test.mjs'
 import { runDiffFromSandboxTests } from './diff-from-sandbox.test.mjs'
 import { runUtf8ShellTests } from './utf8-shell.test.mjs'
+import { runTestsFingerprintTests } from './tests-fingerprint.test.mjs'
+import { runVerifyTestsTests } from './verify-tests.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -240,9 +242,8 @@ if (exists(deliverWf)) {
     try { inlineFn = new Function(`${block}\n; return computeDeliverStatus;`)() } catch (error) { errors.push(`failed to evaluate inline computeDeliverStatus in ${deliverWf}: ${error.message}`) }
     if (inlineFn) {
       for (const [name, input] of DELIVER_STATUS_CASES) {
-        const inlineStatus = inlineFn(input).finalStatus
-        const coreStatus = coreComputeDeliverStatus(input).finalStatus
-        if (inlineStatus !== coreStatus) errors.push(`deliver-status drift on "${name}": inline=${inlineStatus} core=${coreStatus}`)
+        const inlineOut = JSON.stringify(inlineFn(input)), coreOut = JSON.stringify(coreComputeDeliverStatus(input))
+        if (inlineOut !== coreOut) errors.push(`deliver-status drift on "${name}" (whole-object): inline=${inlineOut} core=${coreOut}`)
       }
     }
   }
@@ -313,9 +314,8 @@ for (const failure of runPersistOutcomeTests()) errors.push(failure)
       try { inlineFn = new Function(`${block}\n; return computePersistOutcome;`)() } catch (error) { errors.push(`failed to evaluate inline computePersistOutcome in ${planWf}: ${error.message}`) }
       if (inlineFn) {
         for (const [name, input] of PERSIST_OUTCOME_CASES) {
-          const a = inlineFn(input)
-          const b = coreComputePersistOutcome(input)
-          if (a.ok !== b.ok || a.finalStatus !== b.finalStatus) errors.push(`persist-outcome drift on "${name}": inline(ok=${a.ok},status=${a.finalStatus}) core(ok=${b.ok},status=${b.finalStatus})`)
+          const a = JSON.stringify(inlineFn(input)), b = JSON.stringify(coreComputePersistOutcome(input))
+          if (a !== b) errors.push(`persist-outcome drift on "${name}" (whole-object): inline=${a} core=${b}`)
         }
       }
     }
@@ -338,9 +338,8 @@ for (const failure of runRepoFingerprintTests()) errors.push(failure)
       try { inlineFn = new Function(`${block}\n; return compareRepoFingerprint;`)() } catch (error) { errors.push(`failed to evaluate inline compareRepoFingerprint in ${dWf}: ${error.message}`) }
       if (inlineFn) {
         for (const [name, planFp, currentFp] of REPO_FINGERPRINT_CASES) {
-          const a = inlineFn(planFp, currentFp)
-          const b = coreCompareRepoFingerprint(planFp, currentFp)
-          if (a.severity !== b.severity || a.stale !== b.stale) errors.push(`repo-fingerprint drift on "${name}": inline(${a.severity}/${a.stale}) core(${b.severity}/${b.stale})`)
+          const a = JSON.stringify(inlineFn(planFp, currentFp)), b = JSON.stringify(coreCompareRepoFingerprint(planFp, currentFp))
+          if (a !== b) errors.push(`repo-fingerprint drift on "${name}" (whole-object): inline=${a} core=${b}`)
         }
       }
     }
@@ -363,9 +362,8 @@ for (const failure of runChangedFilesTests()) errors.push(failure)
       try { inlineFn = new Function(`${block}\n; return reconcileChangedFiles;`)() } catch (error) { errors.push(`failed to evaluate inline reconcileChangedFiles in ${dWf}: ${error.message}`) }
       if (inlineFn) {
         for (const [name, input] of CHANGED_FILES_CASES) {
-          const a = inlineFn(input).consistent
-          const b = coreReconcileChangedFiles(input).consistent
-          if (a !== b) errors.push(`changed-files drift on "${name}": inline=${a} core=${b}`)
+          const a = JSON.stringify(inlineFn(input)), b = JSON.stringify(coreReconcileChangedFiles(input))
+          if (a !== b) errors.push(`changed-files drift on "${name}" (whole-object): inline=${a} core=${b}`)
         }
       }
     }
@@ -414,8 +412,8 @@ for (const failure of runProjectTypeTests()) errors.push(failure)
       try { inlineFn = new Function(`${block}\n; return classifyProjectType;`)() } catch (error) { errors.push(`failed to evaluate inline classifyProjectType in ${ptWf}: ${error.message}`) }
       if (inlineFn) {
         for (const [name, input] of PROJECT_TYPE_CASES) {
-          const a = inlineFn(input), b = coreClassifyProjectType(input)
-          if (a.type !== b.type || a.isWeb !== b.isWeb) errors.push(`project-type drift on "${name}": inline(${a.type}/${a.isWeb}) core(${b.type}/${b.isWeb})`)
+          const a = JSON.stringify(inlineFn(input)), b = JSON.stringify(coreClassifyProjectType(input))
+          if (a !== b) errors.push(`project-type drift on "${name}" (whole-object): inline=${a} core=${b}`)
         }
       }
     }
@@ -434,6 +432,9 @@ for (const failure of runPersistArtifactsTests()) errors.push(failure)
 for (const failure of runCoreCliInputTests()) errors.push(failure)
 for (const failure of runDiffFromSandboxTests()) errors.push(failure)
 for (const failure of runUtf8ShellTests()) errors.push(failure)
+// test-integrity primitives (test/impl boundary hole): canonical tests fingerprint + deterministic test runner
+for (const failure of runTestsFingerprintTests()) errors.push(failure)
+for (const failure of runVerifyTestsTests()) errors.push(failure)
 // branch-choice resolution: behaviour-diff the publish workflow inline copy against core/branch-choice.mjs
 // (whole-object deep compare over fixed vectors) so Claude and the Codex adapter cannot drift apart.
 {
@@ -470,7 +471,7 @@ if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guar
   // the skill + AGENTS template orchestrate these shared assets — none may be a dangling reference
   for (const ref of [
     'bin/core.mjs', 'bin/git-state.mjs', 'bin/sandbox-prepare.mjs', 'bin/persist-artifacts.mjs', 'core/scope-check.mjs',
-    'bin/diff-from-sandbox.mjs',
+    'bin/diff-from-sandbox.mjs', 'bin/tests-fingerprint.mjs', 'bin/verify-tests.mjs',
     'scripts/validate-plan-artifacts.mjs', 'scripts/validate-delivery-artifacts.mjs', 'scripts/validate-publish-record.mjs',
     'core/schemas/plan-artifacts.schema.json', 'core/schemas/delivery-artifacts.schema.json', 'core/schemas/publish-record.schema.json',
     'codex/pipeline.md', 'codex/plan-from-requirement.md', 'codex/AGENTS.template.md',
@@ -549,5 +550,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, scope-check logic, sandbox+persist scripts, core CLI input modes, portable diff generation, UTF-8 shell materialization, codex skill entry + refs, delivery+publish schema, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, scope-check logic, sandbox+persist scripts, core CLI input modes, portable diff generation, UTF-8 shell materialization, tests-fingerprint, deterministic test-runner, codex skill entry + refs, delivery+publish schema, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)

@@ -44,6 +44,9 @@ const targetRepoArg = A.targetRepo ? String(A.targetRepo) : null
 const outDirBase = A.outDir ? String(A.outDir) : 'evidence/deliveries'
 const vendorDir = A.vendorDir ? String(A.vendorDir) : 'vendor/zhuliming-templates'
 const bridgeDoc = A.bridgeDoc ? String(A.bridgeDoc) : 'docs/12-plan-to-coding-bridge.md'
+// 共享确定性脚本目录（相对本工作流仓库根解析，同 vendorDir/bridgeDoc 约定）。测试指纹/复测运行/diff 生成统一走 bin/ 脚本，
+// 不再让子代理各写一套自然语言口径——把这些机械操作收敛成与 Codex 适配器同一份、可单测、self-check 注册的确定性脚本。
+const binDir = A.binDir ? String(A.binDir) : 'bin'
 const allowStalePlan = !!A.allowStalePlan   // true 时即便目标仓库自方案生成后变更也放行（#5 stale-plan 闸门）
 // 有界循环兜底轮数（防无限循环）：Implement 最多 MAX_IMPL 轮、Review↔Fix 最多 MAX_FIX 轮
 const MAX_IMPL = (Number.isFinite(Number(A.maxImplRounds)) && Number(A.maxImplRounds) > 0) ? Number(A.maxImplRounds) : 3
@@ -430,7 +433,7 @@ try {
       `2) 把测试分两类，并让 DONE 入口支持【按类筛选 + 指定目标】（硬契约：Verify 要靠它在原仓库新副本上独立复现"红/绿"）：①【新功能测试】针对本次要实现的行为（未实现时应红）；②【回归测试】针对既有且不该被破坏的行为（如既有退出码语义，应一直绿）。DONE 入口必须支持开关 \`--red\`（只跑①）与 \`--regression\`（只跑②），并接受一个可选的【目标目录】参数（默认沙箱 ${sandboxDir}），使同一套测试能对任意代码副本运行。\n` +
       `3) verificationType 无法自动验的（如本机无 pwsh 的 .ps1 行为：先 command -v pwsh 探测）→ 不要硬塞进 DONE，列入 openLoopItems 作人工核对，并在 note 说明。\n` +
       `4) **先红后绿核验**（关键）：在当前未实现的沙箱上，用 --red 跑①确认其为红、用 --regression 跑②确认其为绿；报告 newFeatureTestsFailOnCurrent、regressionTestsPassOnCurrent、redExitCode(①的退出码)。\n` +
-      `5) **冻结测试基线**（防改测试迁就实现）：上述测试全部跑完后，计算 tests/ 下测试源文件的合并指纹 testsFingerprint（用 find tests -type f 排序后逐个 sha256sum、再对结果整体 sha256sum、取前16位）。务必让测试把临时输出写到 ${taskDir}/state/ 或 mktemp、不要写进 tests/，以保证该指纹在后续实现/修复阶段保持稳定。\n` +
+      `5) **冻结测试基线**（防改测试迁就实现）：上述测试全部跑完后，用确定性脚本计算 tests/ 指纹——在本工作流仓库根执行 \`node ${binDir}/tests-fingerprint.mjs --dir ${taskDir}/tests\`，取其 JSON 输出的 fingerprint 字段作为 testsFingerprint。这是该指纹的【唯一权威算法】，Verify 阶段会用同一脚本复算比对；不要自己另写 find/sha256 口径（口径不一会造成假阳/假阴）。务必让测试把临时输出写到 ${taskDir}/state/ 或 mktemp、不要写进 tests/，以保证该指纹在后续实现/修复阶段保持稳定。\n` +
       `回报 ok/doneCommand(默认跑全部)/testsFingerprint(冻结基线)/redCommand(只跑新功能,--red 的完整命令)/regressionCommand(只跑回归,--regression 的完整命令)/testsDir/newFeatureTestsFailOnCurrent/regressionTestsPassOnCurrent/redExitCode/autoVerifiableCount/openLoopItems/note。`,
       { schema: MATERIALIZE_SCHEMA, label: 'materialize-tests', phase: 'MaterializeTests', agentType: AT, effort: 'high' }, true)
     if (!mt.ok) { failedStages.push('MaterializeTests'); halt('MaterializeTests', mt.error) }
@@ -535,11 +538,12 @@ try {
         phase('Verify')
         const vf = await callAgent(
           `你是独立验证者，未参与实现/修复/审查，只复核客观事实、不打分、不改任何文件。${SAFETY}\n` +
-          `1) 亲手复跑最终 DONE：\`${materialize.doneCommand}\`，取真实退出码与是否输出 "ALL PASSED"。\n` +
-          `2) 先红后绿独立复核：把原仓库 ${targetRepo} 复制到一个 mktemp -d 临时副本（不含本次实现），用 DONE 的 --red 对该副本跑（命令形如 \`${materialize ? materialize.redCommand : '<redCommand>'}\`，把目标目录指向该副本），确认新功能测试在【未实现版】上确为红（非0）；再用 --regression（形如 \`${materialize ? materialize.regressionCommand : '<regressionCommand>'}\`）确认回归为绿（0）。两者都成立才置 redGreenVerified=true。\n` +
+          `【硬规则·过没过由脚本退出码裁决，不得自评】下列复跑一律用确定性运行器 \`node ${binDir}/verify-tests.mjs --cwd <目标目录> -- <命令>\`（在本工作流仓库根执行），布尔字段取其 JSON 的 passed、退出码取其 exitCode；严禁凭"看起来过了"自行判定。\n` +
+          `1) 亲手复跑最终 DONE：\`node ${binDir}/verify-tests.mjs --cwd ${sandboxDir} -- ${materialize.doneCommand}\`，donePassedVerified=其 passed、doneExitCodeVerified=其 exitCode。\n` +
+          `2) 先红后绿独立复核：把原仓库 ${targetRepo} 复制到一个 mktemp -d 临时副本（不含本次实现）；用运行器对该副本跑 --red（命令形如 \`${materialize ? materialize.redCommand : '<redCommand>'}\`，目标目录指向该副本）确认新功能测试在【未实现版】上为红（运行器 passed=false）；再跑 --regression（形如 \`${materialize ? materialize.regressionCommand : '<regressionCommand>'}\`）确认回归为绿（passed=true）。两者都成立才 redGreenVerified=true。\n` +
           `3) 独立算 diff：diff -ruN "${targetRepo}" "${sandboxDir}"（忽略 .git），列出真正变更的文件，判断是否【只动了 SCOPE】=${JSON.stringify(scaffold.scopeFiles)}（可选 ${JSON.stringify(scaffold.optionalScopeFiles)}）。\n` +
-          `4) 【独立复测·防改测试迁就实现，硬闸门】不要复用沙箱旁的 ${taskDir}/tests/。改为从 ${taskDir}/input/test-plan.json 自己重新物化【新功能验收检查】到一个 mktemp -d 全新目录，对沙箱 ${sandboxDir} 跑：沙箱全过则 independentTestsPassed=true，否则 false（=实现未真正满足验收，或在树测试被改弱）。\n` +
-          `5) 【测试基线完整性】重算 ${taskDir}/tests/ 测试源文件的合并 sha256（前16位，算法同物化阶段），与物化时冻结的 testsFingerprint=\`${materialize ? materialize.testsFingerprint : '<none>'}\` 比对：一致则 testsIntact=true，否则 false（疑似实现/修复阶段改动了测试）。\n` +
+          `4) 【独立复测·防改测试迁就实现，硬闸门】不要复用沙箱旁的 ${taskDir}/tests/。改为从 ${taskDir}/input/test-plan.json 自己重新物化【新功能验收检查】到一个 mktemp -d 全新目录（物化是你的职责），再用运行器执行 \`node ${binDir}/verify-tests.mjs --cwd ${sandboxDir} -- <你物化的复测命令>\`：independentTestsPassed=其 passed（脚本退出码裁决，非自评）。false=实现未真正满足验收，或在树测试被改弱。\n` +
+          `5) 【测试基线完整性】用与物化阶段【同一脚本】复算指纹：\`node ${binDir}/tests-fingerprint.mjs --dir ${taskDir}/tests\`，取其 fingerprint 与物化时冻结的 testsFingerprint=\`${materialize ? materialize.testsFingerprint : '<none>'}\` 比对：一致则 testsIntact=true，否则 false（疑似实现/修复阶段改动了测试）。\n` +
           `回报 donePassedVerified(最终DONE是否真绿)/doneExitCodeVerified/redGreenVerified(先红后绿是否独立复现)/independentTestsPassed(从test-plan独立重物化复测沙箱是否全过)/testsIntact(在树tests指纹是否未变)/changedFilesVerified(实测变更文件)/scopeCleanVerified(是否只动SCOPE)/note。`,
           { schema: VERIFY_SCHEMA, label: 'independent-verify', phase: 'Verify', agentType: AT, effort: 'high' }, true)
         if (!vf.ok) { failedStages.push('Verify'); note(`独立验证失败：${vf.error}`) }
@@ -635,8 +639,10 @@ phase('Deliver')
 if (scaffold && scaffold.runDir && finalStatus !== 'BLOCKED' && !halted) {
   const gd = await callAgent(
     `你负责生成交付 diff（只在 ${scaffold.runDir} 内写，绝不动原仓库、绝不 commit/push）。${SAFETY}\n` +
-    `1) 生成 target-root-relative diff：以 ${targetRepoArg || (gate && gate.manifestTarget)} 为 target root，仅基于独立验证得到的 changedFiles/scopeFiles 收集相对路径；为每个相对路径从原仓库和沙箱复制到临时 diff-root/old/<rel> 与 diff-root/new/<rel>，然后在 diff-root 内执行 git diff --no-index --src-prefix=a/ --dst-prefix=b/ old new > "${scaffold.runDir}/changes.diff"（退出码 1=有差异属正常），再把 diff 头中的 a/old/、b/new/ 规范化为 a/、b/。禁止 diff 头出现绝对路径、sandbox、targetRepo、old/ 或 new/ 前缀；filesChanged 必须全部是 target-root-relative 路径。\n` +
-    `2) 检查 diff 可应用：复制一份干净 target root 到临时 apply-check 目录，在该目录执行 git apply --check "${scaffold.runDir}/changes.diff"；通过则 diffApplyCheckPassed=true，否则 false。若 diff 为空（无任何变更文件）则 ok=false。\n` +
+    `1) 生成 target-root-relative diff（用确定性脚本，避免 git diff --no-index 的兼容缺口；与 Codex 适配器同一机制）：\n` +
+    `   a. 先备一份与沙箱【同套净化规则】的干净 base：在本工作流仓库根执行 \`node ${binDir}/sandbox-prepare.mjs --src ${targetRepoArg || (gate && gate.manifestTarget)} --dest <tmp>/diff-base\`（剥 .git/构建产物/密钥/symlink，使 base 与沙箱可比——不会把 node_modules 等误算成整体删除）。\n` +
+    `   b. 生成可移植补丁：\`node ${binDir}/diff-from-sandbox.mjs --base <tmp>/diff-base --sandbox ${sandboxDir} --out "${scaffold.runDir}/changes.diff"\`，读其 JSON：filesChanged 即变更文件（已是 target-root-relative）；要求 ok=true 且 absoluteLeak=false（脚本已保证标准 a/ b/ 前缀、含 --binary、diff 头不含绝对路径/sandbox/base 前缀）。若 filesChanged 为空（无任何变更）则置 ok=false。diffStat 用变更文件数/行数概述。\n` +
+    `2) 检查 diff 可应用：把 <tmp>/diff-base 再复制一份到临时 apply-check 目录（它与生成补丁所用 base 同一内容），在该目录执行 git apply --check "${scaffold.runDir}/changes.diff"；通过则 diffApplyCheckPassed=true，否则 false。若 diff 为空（无任何变更文件）则 ok=false。\n` +
     `只产出 changes.diff 并回报事实，不要写 manifest 或报告。回报 ok/diffStat/filesChanged(target-root-relative)/diffApplyCheckPassed/note。`,
     { schema: DIFF_SCHEMA, label: 'generate-diff', phase: 'Deliver', agentType: AT, effort: 'medium' }, true)
   diffResult = gd.ok ? gd.value : { ok: false, diffStat: '', filesChanged: [], diffApplyCheckPassed: false, note: gd.error }
