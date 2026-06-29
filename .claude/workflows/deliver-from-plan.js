@@ -237,7 +237,7 @@ function classifyProjectType(input) {
 }
 // <<< PROJECT-TYPE-END
 
-const SAFETY = `【硬安全约束】(1) 只在沙箱目录内写文件，绝不修改原仓库 ${targetRepoArg || '(方案目标仓库)'} 之外或之内的任何原始文件；(2) 绝不执行 git commit/push/merge/reset、绝不删库删表、绝不碰支付/权限/密钥/认证/不可逆操作——命中即停并在结构化结果里报告；(3) 只改方案 SCOPE(plan.affected.files)内的文件，越界即停。中文输出，只返回结构化结果。`
+const SAFETY = `【硬安全约束】(1) 只在沙箱目录内写文件，绝不修改原仓库 ${targetRepoArg || '(方案目标仓库)'} 之外或之内的任何原始文件；(2) 绝不执行 git commit/push/merge/reset、绝不删库删表、绝不执行真实的支付/权限变更/认证/删库/迁移等不可逆危险操作、绝不读写真实密钥——命中即停并在结构化结果里报告（此处指"执行真实副作用"：按 SCOPE 在沙箱内编写支付/权限/认证等领域的功能代码本身是允许的，高风险域的发布把关由 publish 阶段人工闸门负责）；(3) 只改方案 SCOPE(plan.affected.files)内的文件，越界即停。中文输出，只返回结构化结果。`
 
 // ===================== Schemas =====================
 const FINGERPRINT_SCHEMA = { type: 'object', additionalProperties: false, properties: {
