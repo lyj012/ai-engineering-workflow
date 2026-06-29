@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { guardOrExit } from './safe-rm.mjs'
 
 const EXCLUDE_DIRS = new Set(['.git'])
 
@@ -60,6 +61,8 @@ function main() {
   if (!fs.existsSync(sandbox) || !fs.statSync(sandbox).isDirectory()) throw new Error(`sandbox not a directory: ${sandbox}`)
 
   const work = path.resolve(a.work || fs.mkdtempSync(path.join(os.tmpdir(), 'aiew-diff-')))
+  // a caller-supplied --work must never overlap base/sandbox (or root) before we rm -rf + clearWorktree it
+  guardOrExit(work, [base, sandbox], 'diff work')
   fs.rmSync(work, { recursive: true, force: true })
   fs.mkdirSync(work, { recursive: true })
   copyFiltered(base, work)

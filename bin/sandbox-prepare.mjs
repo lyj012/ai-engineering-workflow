@@ -10,6 +10,7 @@
 // Prints a JSON report; exit 0 on success, 1 if the post-copy safety verification finds a leak, 2 on error.
 import fs from 'node:fs'
 import path from 'node:path'
+import { guardOrExit } from './safe-rm.mjs'
 
 const EXCLUDE_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'coverage', '.nuxt', 'target', '__pycache__'])
 const SECRET_RE = [
@@ -47,7 +48,8 @@ function main() {
 
   const strippedSecrets = [], skippedSymlinks = [], excludedDirs = []
   let copiedFiles = 0
-  // start clean so the sandbox can't inherit stale files
+  // start clean so the sandbox can't inherit stale files — but never delete a dest that overlaps the source
+  guardOrExit(dest, [src], 'sandbox dest')
   fs.rmSync(dest, { recursive: true, force: true })
 
   fs.cpSync(src, dest, {
