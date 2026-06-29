@@ -25,6 +25,10 @@ export const CASES = [
   ['high-risk gated -> PUBLISH_BLOCKED', { ...clean, highRiskBlocked: true }, 'PUBLISH_BLOCKED'],
   ['upstream not delivered -> PUBLISH_BLOCKED', { ...clean, deliverableStatus: 'BLOCKED' }, 'PUBLISH_BLOCKED'],
   ['upstream FAILED -> PUBLISH_BLOCKED', { ...clean, deliverableStatus: 'FAILED' }, 'PUBLISH_BLOCKED'],
+  // --- upstream delivery manifest must self-verify its own persistence (disk finalStatus is trustworthy) ---
+  ['upstream persist UNVERIFIED -> PUBLISH_BLOCKED', { ...clean, deliveryPersistVerified: false }, 'PUBLISH_BLOCKED'],
+  ['upstream persist verified -> PUBLISHED', { ...clean, deliveryPersistVerified: true }, 'PUBLISHED'],
+  ['upstream persist field absent -> no effect (PUBLISHED)', clean, 'PUBLISHED'],
   ['diff apply-check failed -> PUBLISH_BLOCKED', { ...clean, diffApplyCheckPassed: false }, 'PUBLISH_BLOCKED'],
   ['branch not allowed -> PUBLISH_BLOCKED', { ...clean, branchAllowed: false }, 'PUBLISH_BLOCKED'],
   ['dryRun -> PUBLISH_DRYRUN', { ...clean, dryRun: true }, 'PUBLISH_DRYRUN'],

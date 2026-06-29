@@ -144,6 +144,7 @@ function computePublishStatus(input) {
 
   const ok = ['DELIVERED', 'DELIVERED_WITH_OPEN_ITEMS']
   if (!ok.includes(i.deliverableStatus)) { reasons.push('上游交付未达可发布态（需 DELIVERED / DELIVERED_WITH_OPEN_ITEMS），拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
+  if (i.deliveryPersistVerified === false) { reasons.push('上游交付 manifest 自标落盘未通过独立回读（磁盘 finalStatus 不可信），拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
   if (i.diffApplyCheckPassed !== true) { reasons.push('交付 diff 未通过 git apply --check，拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
   if (i.branchAllowed === false) { reasons.push('目标分支不被策略允许（默认禁止直接 push main/master/release；需显式 allowMainPush）。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
 
@@ -179,6 +180,7 @@ const SAFETY = `【硬安全约束】(1) 只在隔离的发布工作副本里操
 const PREFLIGHT_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   deliverableStatus: { type: 'string', description: 'delivery-manifest.finalStatus' },
   diffApplyCheckPassed: { type: 'boolean', description: 'delivery-manifest.diffApplyCheckPassed' },
+  deliveryPersistVerified: { type: 'boolean', description: 'delivery-manifest.persistVerification.ok（交付落盘是否通过独立回读）；该字段不存在则填 true（向后兼容旧 manifest）' },
   diffPresent: { type: 'boolean', description: 'deliveryDir/changes.diff 是否存在且非空' },
   manifestFilesChanged: { type: 'array', items: { type: 'string' }, description: 'delivery-manifest.filesChanged（target-root-relative）' },
   requirementGoal: { type: 'string' },
@@ -188,7 +190,7 @@ const PREFLIGHT_SCHEMA = { type: 'object', additionalProperties: false, properti
   highRiskDomains: { type: 'array', items: { type: 'string' }, description: '从 risks.json/manifest 识别的高风险域（支付/权限/密钥/认证/不可逆等）；无则空数组' },
   openItems: { type: 'array', items: { type: 'string' }, description: 'delivery-manifest.openItems' },
   note: { type: 'string' },
-}, required: ['deliverableStatus', 'diffApplyCheckPassed', 'diffPresent', 'manifestFilesChanged', 'requirementGoal', 'targetRepo', 'remoteUrl', 'remoteReachable', 'defaultBranch', 'highRiskDomains', 'openItems', 'note'] }
+}, required: ['deliverableStatus', 'diffApplyCheckPassed', 'deliveryPersistVerified', 'diffPresent', 'manifestFilesChanged', 'requirementGoal', 'targetRepo', 'remoteUrl', 'remoteReachable', 'defaultBranch', 'highRiskDomains', 'openItems', 'note'] }
 
 const CLONE_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   ok: { type: 'boolean' }, publishDir: { type: 'string' }, repoDir: { type: 'string' },
@@ -250,7 +252,7 @@ try {
   const pf = await callAgent(
     `你是只读分析者，为"自动发布"做前置取证。${SAFETY}\n` +
     `读取交付目录 ${deliveryDir}：delivery-manifest.json（必读）与 changes.diff（确认存在且非空）。如存在再看 task-workflow/input/risks.json、requirement.json。\n` +
-    `回报：deliverableStatus(=manifest.finalStatus)、diffApplyCheckPassed(=manifest.diffApplyCheckPassed)、diffPresent(changes.diff 是否存在且非空)、manifestFilesChanged(=manifest.filesChanged 原样)、requirementGoal(=manifest.gate.requirementGoal 或 requirement.json.goal)、targetRepo(=${targetRepoArg || 'manifest.targetRepo'})、` +
+    `回报：deliverableStatus(=manifest.finalStatus)、diffApplyCheckPassed(=manifest.diffApplyCheckPassed)、deliveryPersistVerified(=manifest.persistVerification.ok；该字段不存在则填 true)、diffPresent(changes.diff 是否存在且非空)、manifestFilesChanged(=manifest.filesChanged 原样)、requirementGoal(=manifest.gate.requirementGoal 或 requirement.json.goal)、targetRepo(=${targetRepoArg || 'manifest.targetRepo'})、` +
     `remoteUrl(${remoteUrlArg ? '=' + remoteUrlArg : '用 Bash 取 targetRepo 的远程：git -C <targetRepo> remote get-url ' + pushRemote + '；取不到则空串'})、remoteReachable(git ls-remote 能否连通 remoteUrl；空串则 false)、defaultBranch(远程默认分支，如 git -C <targetRepo> symbolic-ref refs/remotes/' + pushRemote + '/HEAD 或 ls-remote --symref；取不到填 "main")、` +
     `highRiskDomains(扫描 risks.json 高危项与 manifest.redLine：命中 支付/payment/金额、权限/permission、密钥/secret/key、认证/auth/login、不可逆/删库/migration 的域名列表；无则空数组)、openItems(=manifest.openItems)。不要改任何文件、不要 clone。`,
     { schema: PREFLIGHT_SCHEMA, label: 'publish-preflight', phase: 'Preflight', agentType: AT, effort: 'low' }, true)
@@ -264,6 +266,7 @@ try {
   note(`发布闸门：交付态=${pre.deliverableStatus}，apply-check=${pre.diffApplyCheckPassed}，diff在=${pre.diffPresent} → 可发布=${publishable}；远程=${remoteUrlSafe || '(未解析到)'}（可达=${pre.remoteReachable}）；高风险域=${(pre.highRiskDomains || []).join('/') || '无'}${highRiskBlocked ? '→人工闸门拦截' : ''}。`)
   if (highRiskBlocked) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 命中高风险域且未开 allowHighRiskAutoPublish：默认人工闸门，不自动发布。如确需自动发布，请人工复核后传 allowHighRiskAutoPublish:true。') }
   else if (!publishable) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 上游交付未达可发布态（需 DELIVERED/带开环项 + apply-check 通过 + diff 存在），拒绝发布。') }
+  else if (pre.deliveryPersistVerified === false) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 上游交付 manifest 自标落盘未通过独立回读（persistVerification.ok=false）——磁盘 finalStatus 不可信，拒绝发布以免据陈旧/未核实状态发布。') }
   else if (!remoteUrl) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 解析不到要 push 的远程（targetRepo 无 origin 且未传 remoteUrl），无处可发。请传 args.remoteUrl。') }
   else if (hasEmbeddedCredentials(remoteUrl)) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 解析到的远程 URL 内嵌了凭据（targetRepo 的 origin 含 user:token@）——拒绝发布以免凭据落入日志/产物。请把该 remote 改为不含凭据的 URL，凭据交由环境 credential helper。') }
   else if (!pre.remoteReachable) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 远程不可达（网络或凭据问题），无法发布。') }
@@ -385,6 +388,7 @@ const statusInput = {
   priorStatus: (finalStatus === 'PUBLISH_BLOCKED' || finalStatus === 'PUBLISH_NEEDS_CHOICE') ? finalStatus : null,
   highRiskBlocked: !!highRiskBlocked,
   deliverableStatus: pre ? pre.deliverableStatus : null,
+  deliveryPersistVerified: pre ? pre.deliveryPersistVerified : true,
   diffApplyCheckPassed: pre ? pre.diffApplyCheckPassed : false,
   branchAllowed: branchAllowed === null ? false : branchAllowed,
   dryRun,

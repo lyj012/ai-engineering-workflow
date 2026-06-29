@@ -15,6 +15,7 @@
 //   priorStatus already PUBLISH_BLOCKED                                  -> PUBLISH_BLOCKED
 //   high-risk domain and not explicitly allowed (human gate)             -> PUBLISH_BLOCKED
 //   upstream delivery not DELIVERED / DELIVERED_WITH_OPEN_ITEMS          -> PUBLISH_BLOCKED
+//   upstream delivery manifest self-marks its persistence unverified     -> PUBLISH_BLOCKED
 //   delivery diff did not pass git apply --check                         -> PUBLISH_BLOCKED
 //   target branch not allowed by policy (main/master/release w/o opt-in) -> PUBLISH_BLOCKED
 //   dryRun                                                               -> PUBLISH_DRYRUN
@@ -27,6 +28,9 @@
 //   priorStatus,            // current status before this gate ('PUBLISH_BLOCKED' short-circuits)
 //   highRiskBlocked,        // bool: high-risk domain present and auto-publish not allowed
 //   deliverableStatus,      // delivery-manifest.finalStatus
+//   deliveryPersistVerified,// bool|undefined: delivery-manifest.persistVerification.ok (its disk finalStatus
+//                           //   was independently read back). false -> disk status untrustworthy -> BLOCKED;
+//                           //   true/absent -> no effect (backward compatible with manifests lacking the field)
 //   diffApplyCheckPassed,   // bool: delivery diff passed git apply --check
 //   branchAllowed,          // bool: target branch permitted by git policy (no main/master/release unless opted in)
 //   dryRun,                 // bool: prepare everything but do not push
@@ -45,6 +49,7 @@ export function computePublishStatus(input) {
 
   const ok = ['DELIVERED', 'DELIVERED_WITH_OPEN_ITEMS']
   if (!ok.includes(i.deliverableStatus)) { reasons.push('上游交付未达可发布态（需 DELIVERED / DELIVERED_WITH_OPEN_ITEMS），拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
+  if (i.deliveryPersistVerified === false) { reasons.push('上游交付 manifest 自标落盘未通过独立回读（磁盘 finalStatus 不可信），拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
   if (i.diffApplyCheckPassed !== true) { reasons.push('交付 diff 未通过 git apply --check，拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
   if (i.branchAllowed === false) { reasons.push('目标分支不被策略允许（默认禁止直接 push main/master/release；需显式 allowMainPush）。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
 

@@ -315,6 +315,11 @@ const DIFF_SCHEMA = { type: 'object', additionalProperties: false, properties: {
 const DELIVER_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   ok: { type: 'boolean' }, absOutDir: { type: 'string' }, written: { type: 'array', items: { type: 'string' } }, note: { type: 'string' },
 }, required: ['ok', 'absOutDir', 'written', 'note'] }
+const DELIVER_READBACK_SCHEMA = { type: 'object', additionalProperties: false, properties: {
+  readbackOk: { type: 'boolean', description: 'delivery-manifest.json 真实存在、非空、可 JSON.parse' },
+  diskFinalStatus: { type: 'string', description: '磁盘 delivery-manifest.json 顶层 finalStatus 字段值；读不到填空串' },
+  note: { type: 'string' },
+}, required: ['readbackOk', 'diskFinalStatus', 'note'] }
 
 // BrowserVerify：客观项目信号（供确定性分类器判 web/非web）
 const BROWSER_SIGNALS_SCHEMA = { type: 'object', additionalProperties: false, properties: {
@@ -731,6 +736,8 @@ const deliverManifest = {
   filesReconcile: { consistent: filesReconcile.consistent, issues: filesReconcile.issues },
   failedStages,
 }
+// 落盘前乐观标 persistVerification.ok=true；下面独立回读不过 / 磁盘 finalStatus 不一致时回写为 false（下游 publish 据此拒绝）
+deliverManifest.persistVerification = { ok: true, readbackOk: null, diskFinalStatus: null }
 
 // step 4：落盘（diff 已生成；本步只写 manifest/报告/日志，不重新生成 diff）
 if (scaffold && scaffold.runDir) {
@@ -749,19 +756,37 @@ if (scaffold && scaffold.runDir) {
     ? { ...dl.value, diffStat: diffResult ? diffResult.diffStat : '', filesChanged: deliverManifest.filesChanged, diffApplyCheckPassed: diffResult ? diffResult.diffApplyCheckPassed : false }
     : { ok: false, absOutDir: scaffold.runDir, written: [], note: dl.error, diffStat: '', filesChanged: [], diffApplyCheckPassed: false }
   note(`Deliver 落盘：${deliver.ok ? '已写入 ' + deliver.absOutDir + '（' + deliver.written.length + ' 文件）' : '失败：' + deliver.note}`)
+
+  // 独立回读校验（不信 persist agent 自报；与 plan 的回读对称）：磁盘 delivery-manifest.json 真实存在/可解析、
+  // 且其 finalStatus === 引擎确定的 finalStatus，否则磁盘状态不可信（下游 publish 读盘会被误导）。
+  let readbackOk = false, diskFinalStatus = ''
+  if (deliver.ok) {
+    const rb = await callAgent(
+      `你是独立校验者，只读不写。检查 ${scaffold.runDir}/delivery-manifest.json 是否【真实存在且非空】、能否 JSON.parse 成功，并取其顶层 finalStatus 字段值。回报 readbackOk(存在且可解析)/diskFinalStatus(磁盘 finalStatus 值；读不到填空串)/note。绝不创建或修改任何文件。`,
+      { schema: DELIVER_READBACK_SCHEMA, label: 'deliver-readback', phase: 'Deliver', agentType: AT, effort: 'low' }, true)
+    if (rb.ok) { readbackOk = rb.value.readbackOk === true; diskFinalStatus = rb.value.diskFinalStatus || '' }
+    else note(`交付落盘回读校验失败：${rb.error}（按未通过校验处理）`)
+  }
+  deliverManifest.persistVerification.readbackOk = readbackOk
+  deliverManifest.persistVerification.diskFinalStatus = diskFinalStatus
+  // 落盘是最后一项事实（#1）：磁盘真实存在/可解析 且 磁盘 finalStatus 与引擎一致，才算真落盘
+  const persisted = !!(deliver && deliver.ok) && readbackOk && diskFinalStatus === finalStatus
+  deliverManifest.deliveryPersisted = persisted
+  if (!halted && statusInput && !persisted) {
+    deliverManifest.persistVerification.ok = false
+    const sr2 = computeDeliverStatus({ ...statusInput, deliveryPersisted: false })
+    if (sr2.finalStatus !== finalStatus) { note(`⚠ 交付落盘/回读未通过（磁盘=${diskFinalStatus || '缺失'}，回读=${readbackOk}），最终状态由 ${finalStatus} 降级为 ${sr2.finalStatus}。`); finalStatus = sr2.finalStatus; deliverManifest.finalStatus = finalStatus }
+    // 回写磁盘 manifest，使磁盘 finalStatus + persistVerification.ok 与返回值一致——堵住下游 publish 读盘把 BLOCKED 当 DELIVERED 放行的窗口
+    if (deliver && deliver.ok) {
+      const pf = await callAgent(
+        `把 ${scaffold.runDir}/delivery-manifest.json 覆盖写为下面这个规范 JSON（UTF-8），不要改其它文件。回报 ok/absOutDir/written/note。\ndelivery-manifest.json:\n${JSON.stringify(deliverManifest)}`,
+        { schema: DELIVER_SCHEMA, label: 'deliver-manifest-fix', phase: 'Deliver', agentType: AT, effort: 'low' }, true)
+      note(`回写磁盘 manifest：${pf.ok ? '已更新为 ' + finalStatus + '（persistVerification.ok=false）' : '失败：' + pf.error}`)
+    }
+  }
 } else {
   note('未建立 runDir（就绪闸门或前置失败），无产物可落盘。')
-}
-
-// 落盘是最后一项事实（#1）：交付产物未成功写入则不以 DELIVERED 收尾
-deliverManifest.deliveryPersisted = deliver ? deliver.ok : null
-if (!halted && statusInput && deliver && deliver.ok === false) {
-  const sr2 = computeDeliverStatus({ ...statusInput, deliveryPersisted: false })
-  if (sr2.finalStatus !== finalStatus) {
-    note(`⚠ 交付产物落盘失败，最终状态由 ${finalStatus} 降级为 ${sr2.finalStatus}。`)
-    finalStatus = sr2.finalStatus
-    deliverManifest.finalStatus = finalStatus
-  }
+  deliverManifest.deliveryPersisted = null
 }
 
 log(`deliver-from-plan 完成。最终状态=${finalStatus}；DONE可信=${trustworthy}；实现全绿=${!!(implement && implement.passed)}；审查 ${reviews.length} 视角；开环遗留 ${deliverManifest.openItems.length} 项；失败阶段 [${failedStages.join(', ') || '无'}]。`)
