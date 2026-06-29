@@ -30,6 +30,7 @@ import { maskRemoteUrl as coreMaskRemoteUrl, hasEmbeddedCredentials as coreHasEm
 import { runMaskRemoteUrlTests, CASES as MASK_REMOTE_URL_CASES } from './mask-remote-url.test.mjs'
 import { verifyRemotePublish as coreVerifyRemotePublish, findForbiddenFiles as coreFindForbiddenFiles } from '../core/verify-remote-publish.mjs'
 import { runVerifyRemotePublishTests, CASES as VERIFY_REMOTE_PUBLISH_CASES } from './verify-remote-publish.test.mjs'
+import { runInspectRemoteTests } from './inspect-remote.test.mjs'
 import { runScopeCheckTests } from './scope-check.test.mjs'
 import { runSandboxPrepareTests } from './sandbox-prepare.test.mjs'
 import { runPersistArtifactsTests } from './persist-artifacts.test.mjs'
@@ -491,6 +492,8 @@ for (const failure of runMaskRemoteUrlTests()) errors.push(failure)
 // post-push remote-verify recompute: run unit tests + behaviour-diff the publish workflow inline copy against
 // core/verify-remote-publish.mjs (recomputed booleans + forbidden-file scan over fixed vectors) so they cannot drift.
 for (const failure of runVerifyRemotePublishTests()) errors.push(failure)
+// inspect-remote CLI: a raw credentialed remote URL must never leave the CLI into agent/log/artifact
+for (const failure of runInspectRemoteTests()) errors.push(failure)
 {
   const vWf = '.claude/workflows/publish-delivery.js'
   if (exists(vWf)) {
@@ -528,7 +531,7 @@ if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guar
   // the skill + AGENTS template orchestrate these shared assets — none may be a dangling reference
   for (const ref of [
     'bin/core.mjs', 'bin/git-state.mjs', 'bin/sandbox-prepare.mjs', 'bin/persist-artifacts.mjs', 'core/scope-check.mjs',
-    'bin/diff-from-sandbox.mjs', 'bin/tests-fingerprint.mjs', 'bin/verify-tests.mjs', 'bin/safe-rm.mjs',
+    'bin/diff-from-sandbox.mjs', 'bin/tests-fingerprint.mjs', 'bin/verify-tests.mjs', 'bin/safe-rm.mjs', 'bin/inspect-remote.mjs',
     'scripts/validate-plan-artifacts.mjs', 'scripts/validate-delivery-artifacts.mjs', 'scripts/validate-publish-record.mjs',
     'core/schemas/plan-artifacts.schema.json', 'core/schemas/delivery-artifacts.schema.json', 'core/schemas/publish-record.schema.json',
     'codex/pipeline.md', 'codex/plan-from-requirement.md', 'codex/AGENTS.template.md',

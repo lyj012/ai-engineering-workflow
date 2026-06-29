@@ -166,16 +166,35 @@ function computePublishStatus(input) {
 // <<< PUBLISH-STATUS-END
 
 // >>> MASK-REMOTE-URL-START — 与 core/mask-remote-url.mjs 同一逻辑（行为由 scripts/self-check.mjs 比对锁定，单测见 scripts/mask-remote-url.test.mjs）；勿删本标记与 END 标记
-// 凭据脱敏：http(s) URL 的 userinfo 段（user:token@ 或 token@）一律遮成 ***@；ssh/git@scp/本地路径原样。
-// hasEmbeddedCredentials 判定是否含内嵌凭据（'***' 哨兵不算）——发布引擎据此【拒绝】带凭据 URL，凭据须走环境。
+// 凭据脱敏：http(s) 任意 userinfo、任意 scheme 的 user:password@（含 ssh://）、query token（access_token 等）一律遮蔽；
+// ssh://git@/git@scp（密钥认证）/本地路径原样。hasEmbeddedCredentials 判定是否含内嵌凭据——发布引擎据此【拒绝】带凭据 URL。
 function maskRemoteUrl(u) {
   if (!u || typeof u !== 'string') return u
-  return u.replace(/^(https?:\/\/)([^/@]+)@/i, '$1***@')
+  let out = u.replace(/^([a-z][a-z0-9+.-]*:\/\/)([^/@]+)@/i, (m, scheme, userinfo) => {
+    if (userinfo === '***') return m
+    if (/^https?:\/\//i.test(scheme)) return scheme + '***@'
+    const ci = userinfo.indexOf(':')
+    if (ci >= 0) return scheme + userinfo.slice(0, ci) + ':***@'
+    return m
+  })
+  out = out.replace(/([?&](?:access_token|private_token|oauth_token|token|x-oauth-basic)=)([^&#]+)/gi, '$1***')
+  return out
 }
 function hasEmbeddedCredentials(u) {
   if (!u || typeof u !== 'string') return false
-  const m = /^https?:\/\/([^/@]+)@/i.exec(u)
-  return !!m && m[1] !== '***'
+  const m = /^([a-z][a-z0-9+.-]*:\/\/)([^/@]+)@/i.exec(u)
+  if (m && m[2] !== '***') {
+    if (/^https?:\/\//i.test(m[1])) return true
+    const ci = m[2].indexOf(':')
+    if (ci >= 0) { const pw = m[2].slice(ci + 1); if (pw && pw !== '***') return true }
+  }
+  const q = /[?&](?:access_token|private_token|oauth_token|token|x-oauth-basic)=([^&#]+)/i.exec(u)
+  if (q && q[1] && q[1] !== '***') return true
+  return false
+}
+function inspectRemoteUrl(rawUrl) {
+  const hasCredentials = hasEmbeddedCredentials(rawUrl)
+  return { maskedUrl: maskRemoteUrl(rawUrl), hasCredentials, safeUrl: hasCredentials ? '' : (rawUrl || '') }
 }
 // <<< MASK-REMOTE-URL-END
 
@@ -216,13 +235,15 @@ const PREFLIGHT_SCHEMA = { type: 'object', additionalProperties: false, properti
   diffPresent: { type: 'boolean', description: 'deliveryDir/changes.diff 是否存在且非空' },
   manifestFilesChanged: { type: 'array', items: { type: 'string' }, description: 'delivery-manifest.filesChanged（target-root-relative）' },
   requirementGoal: { type: 'string' },
-  targetRepo: { type: 'string' }, remoteUrl: { type: 'string', description: '要 push 的远程；解析不到则空串' },
+  targetRepo: { type: 'string' }, remoteUrl: { type: 'string', description: '脱敏后的远程 URL（inspect-remote 的 maskedUrl，凭据已遮蔽）；解析不到则空串' },
+  remoteHasCredentials: { type: 'boolean', description: 'inspect-remote 的 hasCredentials：远程 URL 是否内嵌凭据（http(s) userinfo / ssh user:pass / query token）' },
+  remoteSafeUrl: { type: 'string', description: 'inspect-remote 的 safeUrl：不含凭据时=原始 URL（供 clone/ls-remote 用），含凭据时=空串' },
   remoteReachable: { type: 'boolean', description: 'git ls-remote 能否连通该远程' },
   defaultBranch: { type: 'string' },
   highRiskDomains: { type: 'array', items: { type: 'string' }, description: '从 risks.json/manifest 识别的高风险域（支付/权限/密钥/认证/不可逆等）；无则空数组' },
   openItems: { type: 'array', items: { type: 'string' }, description: 'delivery-manifest.openItems' },
   note: { type: 'string' },
-}, required: ['deliverableStatus', 'diffApplyCheckPassed', 'deliveryPersistVerified', 'diffPresent', 'manifestFilesChanged', 'requirementGoal', 'targetRepo', 'remoteUrl', 'remoteReachable', 'defaultBranch', 'highRiskDomains', 'openItems', 'note'] }
+}, required: ['deliverableStatus', 'diffApplyCheckPassed', 'deliveryPersistVerified', 'diffPresent', 'manifestFilesChanged', 'requirementGoal', 'targetRepo', 'remoteUrl', 'remoteHasCredentials', 'remoteSafeUrl', 'remoteReachable', 'defaultBranch', 'highRiskDomains', 'openItems', 'note'] }
 
 const CLONE_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   ok: { type: 'boolean' }, publishDir: { type: 'string' }, repoDir: { type: 'string' },
@@ -286,14 +307,17 @@ try {
     `你是只读分析者，为"自动发布"做前置取证。${SAFETY}\n` +
     `读取交付目录 ${deliveryDir}：delivery-manifest.json（必读）与 changes.diff（确认存在且非空）。如存在再看 task-workflow/input/risks.json、requirement.json。\n` +
     `回报：deliverableStatus(=manifest.finalStatus)、diffApplyCheckPassed(=manifest.diffApplyCheckPassed)、deliveryPersistVerified(=manifest.persistVerification.ok；该字段不存在则填 true)、diffPresent(changes.diff 是否存在且非空)、manifestFilesChanged(=manifest.filesChanged 原样)、requirementGoal(=manifest.gate.requirementGoal 或 requirement.json.goal)、targetRepo(=${targetRepoArg || 'manifest.targetRepo'})、` +
-    `remoteUrl(${remoteUrlArg ? '=' + remoteUrlArg : '用 Bash 取 targetRepo 的远程：git -C <targetRepo> remote get-url ' + pushRemote + '；取不到则空串'})、remoteReachable(git ls-remote 能否连通 remoteUrl；空串则 false)、defaultBranch(远程默认分支，如 git -C <targetRepo> symbolic-ref refs/remotes/' + pushRemote + '/HEAD 或 ls-remote --symref；取不到填 "main")、` +
+    `【凭据不出 CLI 边界·R2-2】绝不自己跑 git remote get-url（会把原始带凭据 URL 带进你的输出/transcript）。改用 inspect-remote CLI 取脱敏远程信息——在本工作流仓库根执行 \`node ${binDir}/inspect-remote.mjs ${remoteUrlArg ? '--url "' + remoteUrlArg + '"' : '--repo "' + (targetRepoArg || '<刚读到的 manifest.targetRepo>') + '" --remote ' + pushRemote}\`，读其 JSON：remoteUrl=maskedUrl、remoteHasCredentials=hasCredentials、remoteSafeUrl=safeUrl。remoteReachable(用 remoteSafeUrl 跑 \`git ls-remote <safeUrl>\` 能否连通；safeUrl 为空则 false)、defaultBranch(用 remoteSafeUrl 的 \`git ls-remote --symref <safeUrl> HEAD\` 取默认分支；取不到填 "main")、` +
     `highRiskDomains(扫描 risks.json 高危项与 manifest.redLine：命中 支付/payment/金额、权限/permission、密钥/secret/key、认证/auth/login、不可逆/删库/migration 的域名列表；无则空数组)、openItems(=manifest.openItems)。不要改任何文件、不要 clone。`,
     { schema: PREFLIGHT_SCHEMA, label: 'publish-preflight', phase: 'Preflight', agentType: AT, effort: 'low' }, true)
   if (!pf.ok) { failedStages.push('Preflight'); halt('Preflight', pf.error) }
   pre = pf.value
   const targetRepo = targetRepoArg || pre.targetRepo
-  const remoteUrl = remoteUrlArg || pre.remoteUrl
-  const remoteUrlSafe = maskRemoteUrl(remoteUrl)   // 凭据脱敏版，用于一切展示/日志/落盘；原 remoteUrl 仅 clone/push 实际执行用
+  // R2-2：remoteUrl 用于实际 clone/ls-remote=【不含凭据的 safeUrl】（带凭据的会被下面拒绝，原始凭据经 inspect-remote CLI
+  // 从不进入 agent/日志/产物）；remoteUrlSafe=脱敏版，用于一切展示/日志/落盘。
+  const remoteUrl = remoteUrlArg || pre.remoteSafeUrl || ''
+  const remoteUrlSafe = remoteUrlArg ? maskRemoteUrl(remoteUrlArg) : (pre.remoteUrl || '')
+  const remoteHasCredentials = remoteUrlArg ? hasEmbeddedCredentials(remoteUrlArg) : (pre.remoteHasCredentials === true)
   highRiskBlocked = (pre.highRiskDomains || []).length > 0 && !allowHighRiskAutoPublish
   const publishable = ['DELIVERED', 'DELIVERED_WITH_OPEN_ITEMS'].includes(pre.deliverableStatus) && pre.diffApplyCheckPassed === true && pre.diffPresent === true
   note(`发布闸门：交付态=${pre.deliverableStatus}，apply-check=${pre.diffApplyCheckPassed}，diff在=${pre.diffPresent} → 可发布=${publishable}；远程=${remoteUrlSafe || '(未解析到)'}（可达=${pre.remoteReachable}）；高风险域=${(pre.highRiskDomains || []).join('/') || '无'}${highRiskBlocked ? '→人工闸门拦截' : ''}。`)
@@ -301,8 +325,8 @@ try {
   else if (!publishable) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 上游交付未达可发布态（需 DELIVERED/带开环项 + apply-check 通过 + diff 存在），拒绝发布。') }
   else if (pre.deliveryPersistVerified === false) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 上游交付 manifest persistVerification.ok=false（落盘未通过独立回读）——拒绝发布。') }
   else if (pre.deliveryPersistVerified !== true && !allowLegacyUnverifiedDelivery) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 上游交付 manifest 缺 persistVerification.ok===true（旧产物/未经新协议核验）——默认拒绝；确需发布旧产物请显式传 allowLegacyUnverifiedDelivery:true。') }
+  else if (remoteHasCredentials) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 远程 URL 内嵌了凭据（http(s) userinfo / ssh user:pass / query token）——拒绝发布以免凭据落入日志/产物。请把该 remote 改为不含凭据的 URL，凭据交由环境 SSH / credential helper。') }
   else if (!remoteUrl) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 解析不到要 push 的远程（targetRepo 无 origin 且未传 remoteUrl），无处可发。请传 args.remoteUrl。') }
-  else if (hasEmbeddedCredentials(remoteUrl)) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 解析到的远程 URL 内嵌了凭据（targetRepo 的 origin 含 user:token@）——拒绝发布以免凭据落入日志/产物。请把该 remote 改为不含凭据的 URL，凭据交由环境 credential helper。') }
   else if (!pre.remoteReachable) { finalStatus = 'PUBLISH_BLOCKED'; note('⛔ 远程不可达（网络或凭据问题），无法发布。') }
   else if (!branchChoiceProvided) { finalStatus = 'PUBLISH_NEEDS_CHOICE'; note('⏸ 需客户先选择提交方式，未明确选择前【不 checkout/建分支/commit/push】：(1) 新建分支后提交推送 → gitPolicy.branchMode="new-branch"；(2) 切换到已有分支后提交推送 → gitPolicy.branchMode="switch-existing" 且 gitPolicy.targetBranch="<已有分支>"；(3) 当前分支直接提交推送 → gitPolicy.branchMode="current-branch"。请带选择重跑。受保护分支/高风险/敏感文件/禁强推规则不变。') }
   else {
