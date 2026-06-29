@@ -641,7 +641,7 @@ if (scaffold && scaffold.runDir && finalStatus !== 'BLOCKED' && !halted) {
     `你负责生成交付 diff（只在 ${scaffold.runDir} 内写，绝不动原仓库、绝不 commit/push）。${SAFETY}\n` +
     `1) 生成 target-root-relative diff（用确定性脚本，避免 git diff --no-index 的兼容缺口；与 Codex 适配器同一机制）：\n` +
     `   a. 先备一份与沙箱【同套净化规则】的干净 base：在本工作流仓库根执行 \`node ${binDir}/sandbox-prepare.mjs --src ${targetRepoArg || (gate && gate.manifestTarget)} --dest <tmp>/diff-base\`（剥 .git/构建产物/密钥/symlink，使 base 与沙箱可比——不会把 node_modules 等误算成整体删除）。\n` +
-    `   b. 生成可移植补丁：\`node ${binDir}/diff-from-sandbox.mjs --base <tmp>/diff-base --sandbox ${sandboxDir} --out "${scaffold.runDir}/changes.diff"\`，读其 JSON：filesChanged 即变更文件（已是 target-root-relative）；要求 ok=true 且 absoluteLeak=false（脚本已保证标准 a/ b/ 前缀、含 --binary、diff 头不含绝对路径/sandbox/base 前缀）。若 filesChanged 为空（无任何变更）则置 ok=false。diffStat 用变更文件数/行数概述。\n` +
+    `   b. 生成可移植补丁：\`node ${binDir}/diff-from-sandbox.mjs --base <tmp>/diff-base --sandbox ${scaffold.sandboxDir} --out "${scaffold.runDir}/changes.diff"\`，读其 JSON：filesChanged 即变更文件（已是 target-root-relative）；要求 ok=true 且 absoluteLeak=false（脚本已保证标准 a/ b/ 前缀、含 --binary、diff 头不含绝对路径/sandbox/base 前缀）。若 filesChanged 为空（无任何变更）则置 ok=false。diffStat 用变更文件数/行数概述。\n` +
     `2) 检查 diff 可应用：把 <tmp>/diff-base 再复制一份到临时 apply-check 目录（它与生成补丁所用 base 同一内容），在该目录执行 git apply --check "${scaffold.runDir}/changes.diff"；通过则 diffApplyCheckPassed=true，否则 false。若 diff 为空（无任何变更文件）则 ok=false。\n` +
     `只产出 changes.diff 并回报事实，不要写 manifest 或报告。回报 ok/diffStat/filesChanged(target-root-relative)/diffApplyCheckPassed/note。`,
     { schema: DIFF_SCHEMA, label: 'generate-diff', phase: 'Deliver', agentType: AT, effort: 'medium' }, true)
