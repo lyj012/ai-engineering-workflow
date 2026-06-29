@@ -111,12 +111,18 @@ function computeDeliverStatus(input) {
   const codeQualityOpenItems = (codeQuality && Array.isArray(codeQuality.openItems)) ? codeQuality.openItems : []
   const codeQualityCompileFailed = !!(codeQuality && codeQuality.applicable === true && codeQuality.compileRan === true && codeQuality.compilePassed === false)
   const codeQualityP0 = !!(codeQuality && codeQuality.applicable === true && codeQuality.hasP0Failure === true)
+  // P1.4: these three also feed manifest.openItems in the engine, so they must downgrade here too —
+  // otherwise finalStatus=DELIVERED with a non-empty openItems list (self-contradictory).
+  const testsTampered = !!(verify && verify.testsIntact === false)   // in-tree tests changed since materialize
+  const softStale = i.staleSeverity === 'soft'                       // target had uncommitted dirty diff vs plan
+  const filesReconcileIssues = Array.isArray(i.filesReconcileIssues) ? i.filesReconcileIssues : []   // Verify/diff/SCOPE 三方对账不一致
   const hasOpenItems = materializeOpenLoopItems.length > 0 ||
     reviews.some(r => r && r.verdict === 'needs-work') ||
     redGreenUnconfirmed ||
     gateOpenQuestions.length > 0 || gateRemainingGaps.length > 0 ||
     browserOpenItems.length > 0 || browserDeferred ||
-    codeQualityOpenItems.length > 0
+    codeQualityOpenItems.length > 0 ||
+    testsTampered || softStale || filesReconcileIssues.length > 0
 
   if (!i.implementPassed) { reasons.push('实现未达全绿，不交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (!verify) { reasons.push('缺独立验证（Verify 失败），不乐观交付。'); return { finalStatus: 'BLOCKED', reasons } }
@@ -665,18 +671,28 @@ const cqOpenItems = (codeQuality && codeQuality.applicable === true) ? [
   ...(codeQuality.introducedNewTool === true ? ['代码质量检查报告引入了项目原本没有的工具或批量改了格式（违反"只跑既有"约束），需人工复核'] : []),
 ] : []
 
+// 三方对账（#4）：Verify / diff / SCOPE 文件列表一致性 —— 必须在终态计算之前求值（P1.4：其 issues 是开环来源，要进终态）
+const filesReconcile = reconcileChangedFiles({
+  verifiedFiles: (verify && verify.changedFilesVerified) || [],
+  diffFiles: (diffResult && diffResult.filesChanged) || [],
+  scopeFiles: (scaffold && scaffold.scopeFiles) || [],
+  optionalScopeFiles: (scaffold && scaffold.optionalScopeFiles) || [],
+})
+
 // step 2：确定性终态（纯函数；非 halt 路径才重算；diff 也是判定输入 —— #1/#2 不再以 DELIVERED 收尾失败交付）
 let statusInput = null
 if (!halted) {
   statusInput = {
     priorStatus: finalStatus,
     implementPassed: !!(implement && implement.passed),
-    verify: verify ? { donePassedVerified: verify.donePassedVerified, scopeCleanVerified: verify.scopeCleanVerified, redGreenVerified: verify.redGreenVerified } : null,
+    verify: verify ? { donePassedVerified: verify.donePassedVerified, scopeCleanVerified: verify.scopeCleanVerified, redGreenVerified: verify.redGreenVerified, testsIntact: verify.testsIntact } : null,
     reviews: reviews.map(r => ({ verdict: r.verdict, blocking: r.blocking })),
     reviewIncomplete,
     materializeOpenLoopItems: materialize ? materialize.openLoopItems : [],
     gateOpenQuestions: (gate && gate.openQuestions) || [],
     gateRemainingGaps: (gate && gate.remainingGaps) || [],
+    staleSeverity: staleCmp ? staleCmp.severity : null,
+    filesReconcileIssues: filesReconcile.issues,
     diff: (scaffold && scaffold.runDir) ? diffResult : null,
     browser: browserResult ? { applicable: browserResult.applicable, status: browserResult.status, openItems: browserResult.openItems } : null,
     codeQuality: codeQuality ? { applicable: codeQuality.applicable, compileRan: codeQuality.compileRan, compilePassed: codeQuality.compilePassed, hasP0Failure: codeQuality.staticChecks.some(c => c.status === 'failed' && c.severity === 'P0'), openItems: cqOpenItems } : null,
@@ -688,13 +704,7 @@ if (!halted) {
 
 // step 3：据最终事实构建 manifest（filesChanged 以独立验证为准 —— #3；记录 diff apply-check 结果）
 const verifiedChanged = (verify && Array.isArray(verify.changedFilesVerified) && verify.changedFilesVerified.length) ? verify.changedFilesVerified : null
-// 三方对账（#4）：Verify / diff / SCOPE 文件列表一致性
-const filesReconcile = reconcileChangedFiles({
-  verifiedFiles: (verify && verify.changedFilesVerified) || [],
-  diffFiles: (diffResult && diffResult.filesChanged) || [],
-  scopeFiles: (scaffold && scaffold.scopeFiles) || [],
-  optionalScopeFiles: (scaffold && scaffold.optionalScopeFiles) || [],
-})
+// filesReconcile 已在终态计算前求值（见上，P1.4），此处直接复用
 const deliverManifest = {
   schemaVersion: '1.0',
   workflow: 'deliver-from-plan', planDir, targetRepo: targetRepoArg || (gate && gate.manifestTarget) || null,

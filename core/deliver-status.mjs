@@ -18,11 +18,14 @@
 // input = {
 //   priorStatus,                       // current finalStatus before this gate ('BLOCKED' short-circuits)
 //   implementPassed,                   // bool: implementer reported DONE all-green
-//   verify,                            // { donePassedVerified, scopeCleanVerified, redGreenVerified } | null
+//   verify,                            // { donePassedVerified, scopeCleanVerified, redGreenVerified, testsIntact? } | null
+//                                      //   testsIntact===false -> open item (in-tree tests changed since materialize)
 //   reviews,                           // [{ verdict:'ok'|'needs-work', blocking:bool }]
 //   reviewIncomplete,                  // bool: a review lens was missing
 //   materializeOpenLoopItems,          // string[]
 //   gateOpenQuestions, gateRemainingGaps,   // string[]
+//   staleSeverity,                     // 'soft'|'none'|... : 'soft' (uncommitted dirty diff vs plan) -> open item
+//   filesReconcileIssues,              // string[]: Verify/diff/SCOPE three-way reconcile issues -> open item
 //   diff,                              // { ok, diffApplyCheckPassed, filesChanged } | null
 //   browser,                           // { applicable, status:'passed'|'failed'|'skipped'|'error', openItems[] } | null
 //                                      //   web only: applicable+failed -> BLOCKED; skipped/error or openItems
@@ -59,12 +62,18 @@ export function computeDeliverStatus(input) {
   const codeQualityOpenItems = (codeQuality && Array.isArray(codeQuality.openItems)) ? codeQuality.openItems : []
   const codeQualityCompileFailed = !!(codeQuality && codeQuality.applicable === true && codeQuality.compileRan === true && codeQuality.compilePassed === false)
   const codeQualityP0 = !!(codeQuality && codeQuality.applicable === true && codeQuality.hasP0Failure === true)
+  // P1.4: these three also feed manifest.openItems in the engine, so they must downgrade here too —
+  // otherwise finalStatus=DELIVERED with a non-empty openItems list (self-contradictory).
+  const testsTampered = !!(verify && verify.testsIntact === false)   // in-tree tests changed since materialize
+  const softStale = i.staleSeverity === 'soft'                       // target had uncommitted dirty diff vs plan
+  const filesReconcileIssues = Array.isArray(i.filesReconcileIssues) ? i.filesReconcileIssues : []   // Verify/diff/SCOPE 三方对账不一致
   const hasOpenItems = materializeOpenLoopItems.length > 0 ||
     reviews.some(r => r && r.verdict === 'needs-work') ||
     redGreenUnconfirmed ||
     gateOpenQuestions.length > 0 || gateRemainingGaps.length > 0 ||
     browserOpenItems.length > 0 || browserDeferred ||
-    codeQualityOpenItems.length > 0
+    codeQualityOpenItems.length > 0 ||
+    testsTampered || softStale || filesReconcileIssues.length > 0
 
   if (!i.implementPassed) { reasons.push('实现未达全绿，不交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (!verify) { reasons.push('缺独立验证（Verify 失败），不乐观交付。'); return { finalStatus: 'BLOCKED', reasons } }
