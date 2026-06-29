@@ -28,9 +28,13 @@
 //   priorStatus,            // current status before this gate ('PUBLISH_BLOCKED' short-circuits)
 //   highRiskBlocked,        // bool: high-risk domain present and auto-publish not allowed
 //   deliverableStatus,      // delivery-manifest.finalStatus
-//   deliveryPersistVerified,// bool|undefined: delivery-manifest.persistVerification.ok (its disk finalStatus
-//                           //   was independently read back). false -> disk status untrustworthy -> BLOCKED;
-//                           //   true/absent -> no effect (backward compatible with manifests lacking the field)
+//   deliveryPersistVerified,// bool|undefined: delivery-manifest.persistVerification.ok (R2-1 protocol: a
+//                           //   delivery's manifest starts ok=false and is only flipped to true after a
+//                           //   complete write + independent read-back + content match + re-read-back).
+//                           //   === true -> trustworthy; === false -> persistence failed -> BLOCKED (never
+//                           //   bypassable); absent/!==true -> legacy/un-verified -> BLOCKED UNLESS
+//                           //   allowLegacyUnverifiedDelivery === true.
+//   allowLegacyUnverifiedDelivery,  // bool: explicit opt-in to publish a legacy manifest lacking the field
 //   diffApplyCheckPassed,   // bool: delivery diff passed git apply --check
 //   branchAllowed,          // bool: target branch permitted by git policy (no main/master/release unless opted in)
 //   dryRun,                 // bool: prepare everything but do not push
@@ -49,7 +53,8 @@ export function computePublishStatus(input) {
 
   const ok = ['DELIVERED', 'DELIVERED_WITH_OPEN_ITEMS']
   if (!ok.includes(i.deliverableStatus)) { reasons.push('上游交付未达可发布态（需 DELIVERED / DELIVERED_WITH_OPEN_ITEMS），拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
-  if (i.deliveryPersistVerified === false) { reasons.push('上游交付 manifest 自标落盘未通过独立回读（磁盘 finalStatus 不可信），拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
+  if (i.deliveryPersistVerified === false) { reasons.push('上游交付 manifest 自标落盘未通过独立回读（persistVerification.ok=false，磁盘 finalStatus 不可信），拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
+  if (i.deliveryPersistVerified !== true && i.allowLegacyUnverifiedDelivery !== true) { reasons.push('上游交付 manifest 缺 persistVerification.ok===true（旧产物/未经新协议核验）：默认拒绝；确需发布旧产物请显式传 allowLegacyUnverifiedDelivery=true。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
   if (i.diffApplyCheckPassed !== true) { reasons.push('交付 diff 未通过 git apply --check，拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
   if (i.branchAllowed === false) { reasons.push('目标分支不被策略允许（默认禁止直接 push main/master/release；需显式 allowMainPush）。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
 

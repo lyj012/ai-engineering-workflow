@@ -324,8 +324,9 @@ const DELIVER_SCHEMA = { type: 'object', additionalProperties: false, properties
 const DELIVER_READBACK_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   readbackOk: { type: 'boolean', description: 'delivery-manifest.json 真实存在、非空、可 JSON.parse' },
   diskFinalStatus: { type: 'string', description: '磁盘 delivery-manifest.json 顶层 finalStatus 字段值；读不到填空串' },
+  contentConsistent: { type: 'boolean', description: '磁盘内容与本阶段提供的 finalStatus/filesChanged/diffApplyCheckPassed 逐一深度一致' },
   note: { type: 'string' },
-}, required: ['readbackOk', 'diskFinalStatus', 'note'] }
+}, required: ['readbackOk', 'diskFinalStatus', 'contentConsistent', 'note'] }
 
 // BrowserVerify：客观项目信号（供确定性分类器判 web/非web）
 const BROWSER_SIGNALS_SCHEMA = { type: 'object', additionalProperties: false, properties: {
@@ -746,8 +747,9 @@ const deliverManifest = {
   filesReconcile: { consistent: filesReconcile.consistent, issues: filesReconcile.issues },
   failedStages,
 }
-// 落盘前乐观标 persistVerification.ok=true；下面独立回读不过 / 磁盘 finalStatus 不一致时回写为 false（下游 publish 据此拒绝）
-deliverManifest.persistVerification = { ok: true, readbackOk: null, diskFinalStatus: null }
+// R2-1 持久化协议：persistVerification.ok 初始【必须 false】；仅在"完整写入→独立回读→内容深度一致"后才原子升 true，
+// 升后再回读确认；任一不过则保持/退回 false。下游 publish 对【非 true（含缺失）】默认拒绝（除非 allowLegacyUnverifiedDelivery）。
+deliverManifest.persistVerification = { ok: false, readbackOk: null, diskFinalStatus: null, contentConsistent: null }
 
 // step 4：落盘（diff 已生成；本步只写 manifest/报告/日志，不重新生成 diff）
 if (scaffold && scaffold.runDir) {
@@ -767,31 +769,51 @@ if (scaffold && scaffold.runDir) {
     : { ok: false, absOutDir: scaffold.runDir, written: [], note: dl.error, diffStat: '', filesChanged: [], diffApplyCheckPassed: false }
   note(`Deliver 落盘：${deliver.ok ? '已写入 ' + deliver.absOutDir + '（' + deliver.written.length + ' 文件）' : '失败：' + deliver.note}`)
 
-  // 独立回读校验（不信 persist agent 自报；与 plan 的回读对称）：磁盘 delivery-manifest.json 真实存在/可解析、
-  // 且其 finalStatus === 引擎确定的 finalStatus，否则磁盘状态不可信（下游 publish 读盘会被误导）。
-  let readbackOk = false, diskFinalStatus = ''
+  // R2-1 步骤①：独立回读 —— 磁盘真实存在/可解析、finalStatus 一致、内容深度一致（filesChanged/diffApplyCheckPassed 逐一吻合）。
+  let readbackOk = false, diskFinalStatus = '', contentConsistent = false
   if (deliver.ok) {
     const rb = await callAgent(
-      `你是独立校验者，只读不写。检查 ${scaffold.runDir}/delivery-manifest.json 是否【真实存在且非空】、能否 JSON.parse 成功，并取其顶层 finalStatus 字段值。回报 readbackOk(存在且可解析)/diskFinalStatus(磁盘 finalStatus 值；读不到填空串)/note。绝不创建或修改任何文件。`,
+      `你是独立校验者，只读不写。检查 ${scaffold.runDir}/delivery-manifest.json：(1) 真实存在且非空、能 JSON.parse；(2) 取顶层 finalStatus；(3) 内容深度一致——其 finalStatus 是否 === "${finalStatus}"、filesChanged 是否逐一等于 ${JSON.stringify(deliverManifest.filesChanged)}、diffApplyCheckPassed 是否 === ${JSON.stringify(deliverManifest.diffApplyCheckPassed)}（全部吻合才 contentConsistent=true）。回报 readbackOk/diskFinalStatus/contentConsistent/note。绝不创建或修改任何文件。`,
       { schema: DELIVER_READBACK_SCHEMA, label: 'deliver-readback', phase: 'Deliver', agentType: AT, effort: 'low' }, true)
-    if (rb.ok) { readbackOk = rb.value.readbackOk === true; diskFinalStatus = rb.value.diskFinalStatus || '' }
+    if (rb.ok) { readbackOk = rb.value.readbackOk === true; diskFinalStatus = rb.value.diskFinalStatus || ''; contentConsistent = rb.value.contentConsistent === true }
     else note(`交付落盘回读校验失败：${rb.error}（按未通过校验处理）`)
   }
   deliverManifest.persistVerification.readbackOk = readbackOk
   deliverManifest.persistVerification.diskFinalStatus = diskFinalStatus
-  // 落盘是最后一项事实（#1）：磁盘真实存在/可解析 且 磁盘 finalStatus 与引擎一致，才算真落盘
-  const persisted = !!(deliver && deliver.ok) && readbackOk && diskFinalStatus === finalStatus
+  deliverManifest.persistVerification.contentConsistent = contentConsistent
+  // 完整写入 + 回读通过 + finalStatus 一致 + 内容深度一致，才有资格把 ok 从 false 升 true
+  const writeVerified = !!(deliver && deliver.ok) && readbackOk && diskFinalStatus === finalStatus && contentConsistent
+
+  if (writeVerified) {
+    // R2-1 步骤②：原子替换为 ok=true（先写同目录临时文件再 mv 覆盖）
+    deliverManifest.persistVerification.ok = true
+    const flip = await callAgent(
+      `把 ${scaffold.runDir}/delivery-manifest.json 用【原子方式】覆盖写为下面的规范 JSON：先写同目录临时文件（如 delivery-manifest.json.tmp）、写完后 mv 覆盖目标，不改其它文件。回报 ok/absOutDir/written/note。\ndelivery-manifest.json:\n${JSON.stringify(deliverManifest)}`,
+      { schema: DELIVER_SCHEMA, label: 'deliver-persist-confirm', phase: 'Deliver', agentType: AT, effort: 'low' }, true)
+    // R2-1 步骤③：替换后再次回读，确认磁盘 persistVerification.ok===true 真已落地
+    let confirmOk = false
+    if (flip.ok) {
+      const rb2 = await callAgent(
+        `你是独立校验者，只读不写。JSON.parse ${scaffold.runDir}/delivery-manifest.json 后：其 persistVerification.ok 是否 === true、顶层 finalStatus 是否 === "${finalStatus}"。readbackOk 填"persistVerification.ok 是否===true"、diskFinalStatus 填磁盘 finalStatus 值、contentConsistent 填 true 占位。绝不改文件。`,
+        { schema: DELIVER_READBACK_SCHEMA, label: 'deliver-persist-confirm-readback', phase: 'Deliver', agentType: AT, effort: 'low' }, true)
+      confirmOk = rb2.ok && rb2.value.readbackOk === true && (rb2.value.diskFinalStatus || '') === finalStatus
+    }
+    if (!confirmOk) { deliverManifest.persistVerification.ok = false; note('⚠ persistVerification 升 ok=true 后再回读未确认（写入/再读未坐实），退回 ok=false。') }
+    else note('persistVerification：完整写入→独立回读→内容一致→原子升 ok=true→再回读确认，已坐实。')
+  }
+
+  // 最终 persisted = 磁盘 persistVerification.ok 确为 true
+  const persisted = deliverManifest.persistVerification.ok === true
   deliverManifest.deliveryPersisted = persisted
   if (!halted && statusInput && !persisted) {
-    deliverManifest.persistVerification.ok = false
     const sr2 = computeDeliverStatus({ ...statusInput, deliveryPersisted: false })
-    if (sr2.finalStatus !== finalStatus) { note(`⚠ 交付落盘/回读未通过（磁盘=${diskFinalStatus || '缺失'}，回读=${readbackOk}），最终状态由 ${finalStatus} 降级为 ${sr2.finalStatus}。`); finalStatus = sr2.finalStatus; deliverManifest.finalStatus = finalStatus }
-    // 回写磁盘 manifest，使磁盘 finalStatus + persistVerification.ok 与返回值一致——堵住下游 publish 读盘把 BLOCKED 当 DELIVERED 放行的窗口
+    if (sr2.finalStatus !== finalStatus) { note(`⚠ 交付落盘/回读未坐实（写验=${writeVerified}，磁盘=${diskFinalStatus || '缺失'}），最终状态由 ${finalStatus} 降级为 ${sr2.finalStatus}。`); finalStatus = sr2.finalStatus; deliverManifest.finalStatus = finalStatus }
+    // 降级时原子回写磁盘（临时文件+mv），使磁盘 finalStatus + persistVerification.ok=false 与返回值一致
     if (deliver && deliver.ok) {
       const pf = await callAgent(
-        `把 ${scaffold.runDir}/delivery-manifest.json 覆盖写为下面这个规范 JSON（UTF-8），不要改其它文件。回报 ok/absOutDir/written/note。\ndelivery-manifest.json:\n${JSON.stringify(deliverManifest)}`,
+        `把 ${scaffold.runDir}/delivery-manifest.json 用原子方式（同目录临时文件+mv 覆盖）写为下面的规范 JSON，不改其它文件。回报 ok/absOutDir/written/note。\ndelivery-manifest.json:\n${JSON.stringify(deliverManifest)}`,
         { schema: DELIVER_SCHEMA, label: 'deliver-manifest-fix', phase: 'Deliver', agentType: AT, effort: 'low' }, true)
-      note(`回写磁盘 manifest：${pf.ok ? '已更新为 ' + finalStatus + '（persistVerification.ok=false）' : '失败：' + pf.error}`)
+      note(`回写磁盘 manifest（降级）：${pf.ok ? '已更新为 ' + finalStatus + '（persistVerification.ok=false）' : '失败：' + pf.error}`)
     }
   }
 } else {

@@ -16,6 +16,7 @@ const clean = {
   pushPerformed: true,
   remoteVerified: { branchShaMatches: true, committedFilesMatch: true, noForbiddenFiles: true, workTreeClean: true },
   deliverableOpenItems: [],
+  deliveryPersistVerified: true,   // new protocol: a publishable delivery must self-verify its persistence
 }
 
 export const CASES = [
@@ -25,10 +26,12 @@ export const CASES = [
   ['high-risk gated -> PUBLISH_BLOCKED', { ...clean, highRiskBlocked: true }, 'PUBLISH_BLOCKED'],
   ['upstream not delivered -> PUBLISH_BLOCKED', { ...clean, deliverableStatus: 'BLOCKED' }, 'PUBLISH_BLOCKED'],
   ['upstream FAILED -> PUBLISH_BLOCKED', { ...clean, deliverableStatus: 'FAILED' }, 'PUBLISH_BLOCKED'],
-  // --- upstream delivery manifest must self-verify its own persistence (disk finalStatus is trustworthy) ---
-  ['upstream persist UNVERIFIED -> PUBLISH_BLOCKED', { ...clean, deliveryPersistVerified: false }, 'PUBLISH_BLOCKED'],
-  ['upstream persist verified -> PUBLISHED', { ...clean, deliveryPersistVerified: true }, 'PUBLISHED'],
-  ['upstream persist field absent -> no effect (PUBLISHED)', clean, 'PUBLISHED'],
+  // --- R2-1: persistVerification must be explicitly TRUE; false or absent is BLOCKED (absent only bypassable via allowLegacyUnverifiedDelivery) ---
+  ['persist verified true -> PUBLISHED', clean, 'PUBLISHED'],
+  ['persist explicitly false -> PUBLISH_BLOCKED', { ...clean, deliveryPersistVerified: false }, 'PUBLISH_BLOCKED'],
+  ['persist field ABSENT -> PUBLISH_BLOCKED (legacy not allowed)', { ...clean, deliveryPersistVerified: undefined }, 'PUBLISH_BLOCKED'],
+  ['persist ABSENT + allowLegacy -> PUBLISHED', { ...clean, deliveryPersistVerified: undefined, allowLegacyUnverifiedDelivery: true }, 'PUBLISHED'],
+  ['persist explicit false + allowLegacy STILL BLOCKED (legacy only bypasses absent)', { ...clean, deliveryPersistVerified: false, allowLegacyUnverifiedDelivery: true }, 'PUBLISH_BLOCKED'],
   ['diff apply-check failed -> PUBLISH_BLOCKED', { ...clean, diffApplyCheckPassed: false }, 'PUBLISH_BLOCKED'],
   ['branch not allowed -> PUBLISH_BLOCKED', { ...clean, branchAllowed: false }, 'PUBLISH_BLOCKED'],
   ['dryRun -> PUBLISH_DRYRUN', { ...clean, dryRun: true }, 'PUBLISH_DRYRUN'],
