@@ -602,6 +602,46 @@ errors.push(...validatePublishRecord(path.join(root, 'examples/artifacts/publish
   }
 }
 
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aiew-delivery-semantic-'))
+  try {
+    const src = path.join(root, 'examples/artifacts/delivery-success')
+    fs.cpSync(src, tmp, { recursive: true })
+    const manifestPath = path.join(tmp, 'delivery-manifest.json')
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    manifest.finalStatus = 'DELIVERED_WITH_OPEN_ITEMS'
+    manifest.openItems = []
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
+    const negative = validateDeliveryArtifacts(tmp)
+    if (!negative.some(error => error.includes('recomputed DELIVERED')) ||
+        !negative.some(error => error.includes('DELIVERED_WITH_OPEN_ITEMS requires at least one open item'))) {
+      errors.push('delivery validation must semantically reject DELIVERED_WITH_OPEN_ITEMS with empty openItems')
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+}
+
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aiew-publish-semantic-'))
+  try {
+    const src = path.join(root, 'examples/artifacts/publish-record-example')
+    fs.cpSync(src, tmp, { recursive: true })
+    const recordPath = path.join(tmp, 'final-delivery.json')
+    const record = JSON.parse(fs.readFileSync(recordPath, 'utf8'))
+    record.finalStatus = 'PUBLISHED'
+    record.deliverableStatus = 'DELIVERED_WITH_OPEN_ITEMS'
+    record.openItems = []
+    fs.writeFileSync(recordPath, JSON.stringify(record, null, 2), 'utf8')
+    const negative = validatePublishRecord(tmp)
+    if (!negative.some(error => error.includes('recomputed PUBLISH_BLOCKED'))) {
+      errors.push('publish validation must recompute and reject contradictory delivered-with-open-items records')
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+}
+
 for (const file of ['app.sh', 'test.sh']) {
   const plan = JSON.parse(read('examples/artifacts/plan-ready/plan.json'))
   if (!plan.affected.files.includes(file)) errors.push(`plan.json affected.files missing ${file}`)

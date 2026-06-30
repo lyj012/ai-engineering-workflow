@@ -46,7 +46,8 @@ export const CASES = [
   ['dirty work tree -> PUBLISH_UNVERIFIED', { ...clean, remoteVerified: { ...clean.remoteVerified, workTreeClean: false } }, 'PUBLISH_UNVERIFIED'],
   // --- delivered-with-open-items carries through to PUBLISHED_WITH_OPEN_ITEMS ---
   ['delivered-with-open-items + open carried -> WITH_OPEN_ITEMS', { ...clean, deliverableStatus: 'DELIVERED_WITH_OPEN_ITEMS', deliverableOpenItems: ['no pwsh .ps1'] }, 'PUBLISHED_WITH_OPEN_ITEMS'],
-  ['delivered-with-open-items but no carried item -> PUBLISHED', { ...clean, deliverableStatus: 'DELIVERED_WITH_OPEN_ITEMS', deliverableOpenItems: [] }, 'PUBLISHED'],
+  ['delivered-with-open-items but no carried item -> BLOCKED', { ...clean, deliverableStatus: 'DELIVERED_WITH_OPEN_ITEMS', deliverableOpenItems: [] }, 'PUBLISH_BLOCKED'],
+  ['delivered clean but open item carried -> BLOCKED', { ...clean, deliverableStatus: 'DELIVERED', deliverableOpenItems: ['contradictory item'] }, 'PUBLISH_BLOCKED'],
 ]
 
 export function runPublishStatusTests() {

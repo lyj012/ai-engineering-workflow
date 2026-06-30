@@ -58,6 +58,9 @@ export function computePublishStatus(input) {
   if (!ok.includes(i.deliverableStatus)) { reasons.push('上游交付未达可发布态（需 DELIVERED / DELIVERED_WITH_OPEN_ITEMS），拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
   if (i.deliveryPersistVerified === false) { reasons.push('上游交付 manifest 自标落盘未通过独立回读（persistVerification.ok=false，磁盘 finalStatus 不可信），拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
   if (i.deliveryPersistVerified !== true && i.allowLegacyUnverifiedDelivery !== true) { reasons.push('上游交付 manifest 缺 persistVerification.ok===true（旧产物/未经新协议核验）：默认拒绝；确需发布旧产物请显式传 allowLegacyUnverifiedDelivery=true。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
+  const open = Array.isArray(i.deliverableOpenItems) ? i.deliverableOpenItems : []
+  if (i.deliverableStatus === 'DELIVERED_WITH_OPEN_ITEMS' && open.length === 0) { reasons.push('上游交付状态为 DELIVERED_WITH_OPEN_ITEMS 但未携带 openItems，交付记录自相矛盾，拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
+  if (i.deliverableStatus === 'DELIVERED' && open.length > 0) { reasons.push('上游交付状态为 DELIVERED 但携带 openItems，交付记录自相矛盾，拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
   if (i.diffApplyCheckPassed !== true) { reasons.push('交付 diff 未通过 git apply --check，拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
   if (i.branchAllowed === false) { reasons.push('目标分支不被策略允许（默认禁止直接 push main/master/release；需显式 allowMainPush）。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
   if (i.awaitingUserConfirmation === true) { reasons.push('已通过实现/审查/独立验证，等待用户确认精确暂存、提交和普通 push。'); return { finalStatus: 'PUBLISH_READY', reasons } }
@@ -69,6 +72,5 @@ export function computePublishStatus(input) {
   const remoteOk = !!(rv && rv.branchShaMatches === true && rv.committedFilesMatch === true && rv.noForbiddenFiles === true && rv.workTreeClean === true)
   if (!remoteOk) { reasons.push('发布后远程核验未全过（远程SHA/提交文件/禁入文件/工作树 之一不符），不宣称成功。'); return { finalStatus: 'PUBLISH_UNVERIFIED', reasons } }
 
-  const open = Array.isArray(i.deliverableOpenItems) ? i.deliverableOpenItems : []
   return { finalStatus: open.length > 0 ? 'PUBLISHED_WITH_OPEN_ITEMS' : 'PUBLISHED', reasons }
 }

@@ -16,6 +16,8 @@
   "targetRepo": "examples/minimal-target",
   "remoteUrl": "origin",
   "deliverableStatus": "DELIVERED_WITH_OPEN_ITEMS",
+  "deliveryPersistVerified": true,
+  "diffApplyCheckPassed": true,
   "highRiskDomains": [],
   "highRiskBlocked": false,
   "branch": {

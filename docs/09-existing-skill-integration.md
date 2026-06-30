@@ -75,7 +75,7 @@ Workflow 体系有五类构件，职责边界互不重叠（`evidence/03` 采用
 关于 presubmit-scan 落 Hook 的两个**前置条件**（不可照抄）：
 
 1. 该脚本是**只读**扫描，"NEVER modifies, stages, or commits anything"（脚本头注释原文），高置信度密钥 → 退出码 2，其余（字段名/调试日志/SQL/TODO）仅警告。把它当门禁是合理的，但
-2. **配置前必须先读项目实际的 `.claude/settings.json`**：判断是新增 Hook 还是合入现有 Hook、matcher 对 `git commit` 各种调用形式的覆盖等。本项目根 `.claude/settings.json` 现状未读（`evidence/03` 未确认第 4 条），故本文不给可照抄的 Hook 配置；落地时按实际 settings 定。
+2. **配置前必须先读项目实际的 `.claude/settings.json`**：判断是新增 Hook 还是合入现有 Hook、matcher 对 `git commit` 各种调用形式的覆盖等。本仓库已在 `.claude/settings.json` 落地 `git-guard-hook` 的 PreToolUse 硬拦截；迁移到其他项目时仍需按目标项目的实际 settings 合入，不能盲目覆盖。
 
 > Hook 强制层与 CLAUDE.md 上下文层的差别、子代理 schema 用法详见 docs/04、docs/05；本节只讲"哪个东西去哪"。
 
@@ -127,7 +127,7 @@ Workflow 体系有五类构件，职责边界互不重叠（`evidence/03` 采用
 2. **把 8 阶段折成 4 phase**：按第 2 节映射表，在**单个** workflow 的 `meta.phases` 里声明 4 个 phase，`title` 与脚本 `phase()` 调用逐字一致。
 3. **角色归位**：扫描/实现/验证/审查/复盘各派**独立** Subagent（实现者≠验证者≠审查者）；用内置 agentType（Explore/general-purpose）或省略并把角色专长写进 prompt，保证 Workflow 任意目录可跑（`CLAUDE.md` 脚本硬约束第 5 条）。
 4. **references 按需加载**：每个 phase 让子代理只 Read 它需要的那一个 reference（分析→requirement-analysis、实现验证→delivery-checklist、风险→risk-review、复盘→retrospective-template），不一次全读。
-5. **presubmit-scan 两段式接入**：日常由带 Bash 的子代理调用脚本回报结果；若要做成不可绕过的提交前门禁，**先读项目实际 `.claude/settings.json`**，再决定如何配 PreToolUse Hook（本文不提供可照抄配置，原因见第 3 节）。
+5. **presubmit-scan 两段式接入**：日常由带 Bash 的子代理调用脚本回报结果；若要做成不可绕过的提交前门禁，**先读项目实际 `.claude/settings.json`**，再决定如何合入 PreToolUse Hook。本仓库已有 `git-guard-hook` 作为发布链路的硬拦截样例，但其他项目不得直接覆盖原有 settings。
 6. **质量与成本纪律**：独立 reviewer + 对抗式证伪，任何 P0 判 FAIL；循环设最大轮次与可观测退出；fan-out 前设 `budget`、按"是否新增独立视角"分配 agent，而非按主题数量堆 agent（`evidence/03` 采用第 12–14 条）。
 7. **证据外部化**：脚本体不直接读写文件，中间产物与运行记录由子代理写入 `evidence/`，保证可追踪、可从零复用（`CLAUDE.md` 证据与可复用条款）。
 

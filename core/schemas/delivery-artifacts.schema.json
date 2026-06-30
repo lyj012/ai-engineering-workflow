@@ -62,7 +62,17 @@
     },
     "fixHistory": { "type": "array" },
     "reviewComplete": { "type": "boolean" },
-    "independentVerify": { "type": "object" },
+    "independentVerify": {
+      "type": "object",
+      "required": ["donePassedVerified", "scopeCleanVerified"],
+      "properties": {
+        "donePassedVerified": { "type": "boolean" },
+        "doneExitCodeVerified": { "type": "integer" },
+        "redGreenVerified": { "type": "boolean" },
+        "scopeCleanVerified": { "type": "boolean" },
+        "testsIntact": { "type": "boolean" }
+      }
+    },
     "multiAgent": {
       "type": "object",
       "required": ["required", "preflightPassed", "executed", "fallbackUsed", "parentAgentImplemented", "roles"],
@@ -77,17 +87,46 @@
         "parentAgentRanTestsWithoutVerifier": { "type": "boolean" },
         "spawnSupported": { "type": "boolean" },
         "agentsDiscoverable": { "type": "boolean" },
-        "executionContext": { "type": "object" },
-        "workspaceBaseline": { "type": "object" },
+        "executionContext": {
+          "type": "object",
+          "required": ["workflowRoot", "projectRoot", "workspaceRoot", "taskArtifactRoot", "changedFiles", "workspaceBaseline"],
+          "properties": {
+            "workflowRoot": { "type": "string" },
+            "projectRoot": { "type": "string" },
+            "workspaceRoot": { "type": "string" },
+            "taskArtifactRoot": { "type": "string" },
+            "changedFiles": { "type": "array", "items": { "type": "string" } },
+            "workspaceBaseline": {
+              "type": "object",
+              "required": ["branch", "head", "statusShort", "diffStat", "untrackedFiles"],
+              "properties": {
+                "branch": { "type": "string" },
+                "head": { "type": "string" },
+                "statusShort": { "type": "string" },
+                "diffStat": { "type": "string" },
+                "untrackedFiles": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "workspaceBaseline": {
+          "type": "object",
+          "properties": {
+            "preExistingStatusShort": { "type": "string" },
+            "preExistingUntracked": { "type": "array", "items": { "type": "string" } },
+            "preflightHead": { "type": "string" },
+            "head": { "type": "string" }
+          }
+        },
         "roles": {
           "type": "array",
           "items": {
             "type": "object",
             "required": ["stage", "role", "codexAgent", "spawned", "completed", "resultValidated"],
             "properties": {
-              "stage": { "type": "string" },
+              "stage": { "type": "string", "enum": ["analysis", "requirement-analysis", "repository-analysis", "risk-analysis", "solution-design", "test-planning", "test-materialization", "implementation", "review", "fix", "verification", "browser-verification", "publish", "remote-publish-verification"] },
               "role": { "type": "string" },
-              "codexAgent": { "type": "string" },
+              "codexAgent": { "type": "string", "pattern": "^aiew_[a-z0-9_]+$" },
               "spawned": { "type": "boolean" },
               "completed": { "type": "boolean" },
               "resultValidated": { "type": "boolean" },

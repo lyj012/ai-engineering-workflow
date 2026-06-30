@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Strengthen delivery and publish artifact validation from schema-only checks to semantic recomputation:
+  `validate-delivery-artifacts.mjs` now recomputes `computeDeliverStatus`, checks delivered/open-items
+  invariants, and reconciles `changes.diff` file headers with `filesChanged`; `validate-publish-record.mjs`
+  now recomputes `computePublishStatus`, requires published records to carry commit/push/remote verification
+  evidence, and checks committed/remote file sets against `filesChanged`. Publish status now blocks
+  contradictory upstream delivery records such as `DELIVERED_WITH_OPEN_ITEMS` with empty `openItems`.
+- Align stale documentation with the current runtime contract: high-risk domains may be implemented inside
+  the sandbox while real side effects and publishing remain gated, Codex has one Windows 10 end-to-end
+  validation run, and this repository's Claude git red-line hook is installed in `.claude/settings.json`.
+
 ## [1.0.0] - 2026-07-01
 
 - Add generated Codex custom subagent adapters (`codex/agents/aiew_*.toml`) sourced from existing Claude

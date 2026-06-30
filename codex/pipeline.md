@@ -10,9 +10,11 @@ sequencing, validation gates, git-delivery gates, and final status meanings. The
 instruction still wins, target project rules supply project facts/style/build/test constraints, and global
 safety rules remain active.
 
-> First-phase status discipline (kept from `README.md`): treat any exact `codex exec` flag, output-schema
-> mode, or sandbox flag as **assumed** until a local Codex smoke run proves it in this repository. The
-> deterministic surface below (`bin/`, `scripts/`, `core/`) is plain Node and is already verified here.
+> Current status discipline: the Codex Skill has completed one real Windows 10 + Codex multi-subagent
+> end-to-end validation, including analysis, implementation, independent review/fix/verify, tests, commit,
+> push, and remote verification. Exact `codex exec` flags, output-schema behavior, sandbox flags, and
+> cross-platform compatibility still remain version/environment-sensitive and must be verified per install.
+> The deterministic surface below (`bin/`, `scripts/`, `core/`) is plain Node and is verified by self-check.
 
 ## 1. The one rule that prevents drift
 
@@ -207,16 +209,17 @@ commands run on Windows and macOS.
 5. At the publish stage Codex stops at the **git-choice gate** and asks you to pick a valid strategy before
    any commit/push.
 
-## 7. Capability assumptions — verify locally before claiming runnable (req 14)
+## 7. Capability assumptions — verify per environment (req 14)
 
-Assumed and **pending a local Codex smoke run**: exact Codex Desktop `/skills` refresh/discovery behavior
-after installation; the exact `codex exec` invocation and output-schema/sandbox flags; that one skill
-invocation can drive the complete loop end to end with bounded internal stages.
-Per the repo discipline: **do not claim the Codex adapter is runnable until a real Codex run has produced a
-plan/delivery directory that passes the matching validator** (`validate-plan-artifacts.mjs` for plan,
-`validate-delivery-artifacts.mjs` for delivery, `validate-publish-record.mjs` for the publish record) **+
-`node scripts/self-check.mjs`.** The deterministic surface (`bin/`, `scripts/`, `core/`) is already verified
-in this repository.
+Verified: one Windows 10 + Codex run has exercised the full multi-subagent loop through commit, push, and
+remote verification. Still pending broader evidence: macOS / Linux Codex environments, more real projects
+and technology stacks, different Codex versions, and long-running install/upgrade smoke runs that confirm
+generated `aiew_*` agents remain discoverable.
+
+Per the repo discipline: a new environment should not be called validated until a real Codex run has
+produced artifacts that pass the matching validator (`validate-plan-artifacts.mjs` for plan,
+`validate-delivery-artifacts.mjs` for delivery, `validate-publish-record.mjs` for the publish record) plus
+`node scripts/self-check.mjs`.
 
 Windows note: PowerShell 5 may strip JSON quotes in inline arguments. Use `node bin/core.mjs readiness PASS`
 for simple status values and `--input file.json` or `--stdin` for objects, for example

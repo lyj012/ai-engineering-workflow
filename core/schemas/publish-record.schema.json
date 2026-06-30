@@ -13,6 +13,9 @@
     "deliveryDir": { "type": "string" },
     "finalStatus": { "type": "string", "enum": ["PUBLISH_READY", "PUBLISH_NEEDS_CHOICE", "PUBLISH_BLOCKED", "PUBLISH_DRYRUN", "PUBLISH_UNVERIFIED", "PUBLISHED", "PUBLISHED_WITH_OPEN_ITEMS"] },
     "dryRun": { "type": "boolean" },
+    "deliverableStatus": { "type": "string", "enum": ["DELIVERED", "DELIVERED_WITH_OPEN_ITEMS", "BLOCKED", "FAILED"] },
+    "deliveryPersistVerified": { "type": "boolean" },
+    "diffApplyCheckPassed": { "type": "boolean" },
     "gitPolicy": {
       "type": "object",
       "required": ["branchMode", "pushRemote"],
@@ -26,6 +29,51 @@
     "branchChoiceProvided": { "type": "boolean" },
     "highRiskDomains": { "type": "array", "items": { "type": "string" } },
     "highRiskBlocked": { "type": "boolean" },
+    "branch": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "originalBranch": { "type": "string" },
+        "finalBranch": { "type": "string" },
+        "isNewBranch": { "type": "boolean" },
+        "branchCreated": { "type": "boolean" },
+        "branchSwitched": { "type": "boolean" },
+        "createdFrom": { "type": "string" },
+        "allowed": { "type": "boolean" }
+      }
+    },
+    "commit": {
+      "type": "object",
+      "required": ["sha", "files"],
+      "properties": {
+        "sha": { "type": "string", "pattern": "^[0-9a-fA-F]{40}$" },
+        "author": { "type": "string" },
+        "files": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "push": {
+      "type": "object",
+      "required": ["performed"],
+      "properties": {
+        "performed": { "type": "boolean" },
+        "rejected": { "type": "boolean" },
+        "remoteRef": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    },
+    "remoteVerify": {
+      "type": "object",
+      "required": ["branchShaMatches", "committedFilesMatch", "noForbiddenFiles", "workTreeClean"],
+      "properties": {
+        "branchShaMatches": { "type": "boolean" },
+        "committedFilesMatch": { "type": "boolean" },
+        "noForbiddenFiles": { "type": "boolean" },
+        "workTreeClean": { "type": "boolean" },
+        "remoteSha": { "type": "string", "pattern": "^[0-9a-fA-F]{40}$" },
+        "remoteFiles": { "type": "array", "items": { "type": "string" } },
+        "note": { "type": "string" }
+      }
+    },
     "filesChanged": { "type": "array", "items": { "type": "string" } },
     "openItems": { "type": "array", "items": { "type": "string" } },
     "failedStages": { "type": "array", "items": { "type": "string" } },
