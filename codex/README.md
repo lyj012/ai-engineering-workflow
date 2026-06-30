@@ -63,7 +63,7 @@ To use it in a customer project, install this repository's `ai-engineering-workf
 powershell -ExecutionPolicy Bypass -File .\scripts\install-codex-skill.ps1
 ```
 
-The default install creates a user-level link under `%USERPROFILE%\.codex\skills\ai-engineering-workflow`.
+The default install creates a user-level link under `%USERPROFILE%\.agents\skills\ai-engineering-workflow`.
 The Skill resolves the link's real target before walking upward, so it can locate the repository toolkit
 without `AIEW_HOME`. For a self-contained copied install, use `-Mode Copy -Force`. After installing, restart
 Codex or open a new thread, then open the customer project and invoke the skill. Do not require each project

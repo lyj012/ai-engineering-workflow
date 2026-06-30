@@ -105,7 +105,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-codex-skill.ps1
 The default install mode creates a user-level link at:
 
 ```text
-%USERPROFILE%\.codex\skills\ai-engineering-workflow
+%USERPROFILE%\.agents\skills\ai-engineering-workflow
 ```
 
 that points back to this repository's `.agents/skills/ai-engineering-workflow` directory. Because the Skill

@@ -2,7 +2,7 @@ param(
   [ValidateSet('Link', 'Copy')]
   [string]$Mode = 'Link',
 
-  [string]$CodexSkillsDir = (Join-Path $HOME '.codex\skills'),
+  [string]$CodexSkillsDir = (Join-Path $HOME '.agents\skills'),
 
   [switch]$Force
 )
@@ -56,7 +56,7 @@ if ($Mode -eq 'Link') {
   New-Item -ItemType Directory -Force -Path $destination | Out-Null
   Copy-Item -LiteralPath $sourceSkillFile -Destination (Join-Path $destination 'SKILL.md') -Force
 
-  foreach ($dir in @('bin', 'core', 'scripts', 'codex', 'examples')) {
+  foreach ($dir in @('bin', 'core', 'scripts', 'codex', 'docs', 'examples', 'references', 'vendor')) {
     Copy-Item -Recurse -LiteralPath (Join-Path $repoRoot $dir) -Destination (Join-Path $destination $dir)
   }
 
@@ -68,9 +68,6 @@ if ($Mode -eq 'Link') {
   New-Item -ItemType Directory -Force -Path $nestedSkillDir | Out-Null
   Copy-Item -LiteralPath $sourceSkillFile -Destination (Join-Path $nestedSkillDir 'SKILL.md') -Force
 
-  $vendorDir = Join-Path $destination 'vendor\zhuliming-templates'
-  New-Item -ItemType Directory -Force -Path $vendorDir | Out-Null
-  Copy-Item -LiteralPath (Join-Path $repoRoot 'vendor\zhuliming-templates\ATTRIBUTION.md') -Destination (Join-Path $vendorDir 'ATTRIBUTION.md') -Force
 }
 
 $installedSkill = Join-Path $destination 'SKILL.md'
