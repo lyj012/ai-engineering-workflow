@@ -11,7 +11,7 @@
     "schemaVersion": { "type": "string" },
     "workflow": { "type": "string" },
     "deliveryDir": { "type": "string" },
-    "finalStatus": { "type": "string", "enum": ["PUBLISH_NEEDS_CHOICE", "PUBLISH_BLOCKED", "PUBLISH_DRYRUN", "PUBLISH_UNVERIFIED", "PUBLISHED", "PUBLISHED_WITH_OPEN_ITEMS"] },
+    "finalStatus": { "type": "string", "enum": ["PUBLISH_READY", "PUBLISH_NEEDS_CHOICE", "PUBLISH_BLOCKED", "PUBLISH_DRYRUN", "PUBLISH_UNVERIFIED", "PUBLISHED", "PUBLISHED_WITH_OPEN_ITEMS"] },
     "dryRun": { "type": "boolean" },
     "gitPolicy": {
       "type": "object",

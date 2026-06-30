@@ -19,6 +19,20 @@ Do not ask the user for a toolkit path, a skill path, `AIEW_HOME`, or a generate
 starting. Read project guidance when it exists, but treat it as optional project context, not as the workflow
 launcher.
 
+## 0.0 Workflow Mode Authority
+
+When this skill is invoked, the current turn enters Workflow Mode:
+
+- the engineering flow, subagent sequencing, validation gates, commit gate, and push gate are governed by
+  this workflow contract;
+- the user's latest explicit instruction still has highest priority;
+- target project rules provide project facts, coding style, build/test commands, and safety constraints, but
+  they do not replace this workflow's orchestration contract;
+- global safety rules still apply, including no `git add`, `git commit`, or `git push` without explicit user
+  confirmation.
+
+Do not let a subagent reinterpret the run as an ordinary single-agent coding task.
+
 ## 0. Resolve The Toolkit Root
 
 Resolve the toolkit root once, then use absolute paths derived from it for every deterministic command.
@@ -359,17 +373,32 @@ Verifier input must be self-contained. Give the verifier the goal, acceptance cr
 allowed validation commands, project root or sandbox root, "do not modify code", and required evidence
 format. The verifier should not need to locate or read the workflow installation to run tests.
 
-## 7. Publish Gate
+## 7. Git Delivery / Publish Gate
 
 Do not commit or push unless the user explicitly asks for publishing.
+
+`DELIVERED` means the workflow produced and verified a local delivery diff. It does not mean remote delivery
+is complete. After independent verification passes, compute the git-delivery preflight:
+
+1. compare the starting and ending workspace snapshots;
+2. identify exactly which files belong to this task;
+3. exclude pre-existing unrelated changes and untracked files;
+4. reject `AGENTS.md`, secrets, personal config, generated local output, and any out-of-scope file;
+5. present the exact file list and key change summary to the user;
+6. stop as `PUBLISH_READY` until the user confirms commit/push.
 
 Before any branch operation, commit, or push:
 
 1. run git state via `<toolkit-root>/bin/git-state.mjs`;
 2. if `branchChoice.needsChoice` is true, stop and present only available options;
-3. run every write-oriented git command through the git red-line guard first;
-4. never force-push, delete remote branches, commit secrets, or publish protected-branch changes without
+3. use precise pathspecs for staging; never use `git add .`;
+4. run every write-oriented git command through the git red-line guard first;
+5. never force-push, delete remote branches, commit secrets, or publish protected-branch changes without
    explicit opt-in.
+
+After commit/push, verify the remote commit. Only then may the workflow report `PUBLISHED` or
+`PUBLISHED_WITH_OPEN_ITEMS`. If push or remote verification fails, report local implementation complete but
+remote delivery incomplete (`PUBLISH_BLOCKED` or `PUBLISH_UNVERIFIED`), not complete success.
 
 ## 8. Final Delivery
 
@@ -381,6 +410,18 @@ Keep the final response high signal:
 4. tests/checks run and results;
 5. unverified items;
 6. known risks or user actions.
+
+Completion terms are strict:
+
+- code complete is not full delivery;
+- tests passing is not full delivery;
+- local commit is not remote delivery;
+- `DELIVERED` is local verified diff only;
+- `PUBLISH_READY` is verified and waiting for user-confirmed git delivery;
+- `PUBLISHED` requires commit, push, and independent remote verification.
+
+When published, include commit hash, branch, remote, push status, remote verification status, and test
+results. When not published, say what remains.
 
 When reporting untracked files, distinguish baseline facts from inference. If no starting snapshot exists,
 say that whether a file existed before the task cannot be proven from the current state alone.

@@ -18,6 +18,7 @@
     "DELIVERED_WITH_OPEN_ITEMS": "Delivery produced a diff, but some verification remains manual or environment-dependent."
   },
   "publishStatuses": {
+    "PUBLISH_READY": "A verified delivery is ready for git delivery, but commit/push are waiting for explicit user confirmation and an exact file list.",
     "PUBLISH_NEEDS_CHOICE": "Stopped before any checkout/switch/branch-create/commit/push because the customer has not explicitly chosen a commit strategy. Re-run with gitPolicy.branchMode set to one of three: 'new-branch' (create a branch off the current branch), 'switch-existing' (switch to the customer-specified existing gitPolicy.targetBranch), or 'current-branch' (commit on the current branch unchanged; legacy 'direct' maps here). The report records the chosen mode, the original branch, the final commit branch, and whether a branch was created or switched. Not a failure; protected-branch / high-risk / sensitive-file / no-force-push rules still apply once a choice is made.",
     "PUBLISH_BLOCKED": "Publish refused by a deterministic gate (delivery not publishable, diff apply-check failed, protected branch without allowMainPush, push not performed, prior block, or a high-risk domain without allowHighRiskAutoPublish).",
     "PUBLISH_DRYRUN": "dryRun: branch and commit prepared, but push intentionally skipped.",
@@ -31,7 +32,7 @@
     "BLOCKED_AT_PLAN": "Plan did not reach a ready state (needs PASS/PARTIAL + ready); did not enter coding.",
     "BLOCKED_AT_DELIVER": "Delivery did not reach a publishable state (needs DELIVERED / DELIVERED_WITH_OPEN_ITEMS); did not publish.",
     "FAILED": "A sub-workflow (plan/deliver/publish) returned no result, or an unexpected error halted orchestration.",
-    "<publishStatus>": "On reaching the publish stage, the overall finalStatus passes through publish-delivery's status (PUBLISH_BLOCKED / PUBLISH_DRYRUN / PUBLISH_UNVERIFIED / PUBLISHED / PUBLISHED_WITH_OPEN_ITEMS)."
+    "<publishStatus>": "On reaching the publish stage, the overall finalStatus passes through publish-delivery's status (PUBLISH_READY / PUBLISH_NEEDS_CHOICE / PUBLISH_BLOCKED / PUBLISH_DRYRUN / PUBLISH_UNVERIFIED / PUBLISHED / PUBLISHED_WITH_OPEN_ITEMS)."
   },
   "readinessForDev": {
     "ready": "A delivery workflow may consume the plan.",

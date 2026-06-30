@@ -5,6 +5,11 @@ coding → tests → independent review → fix → independent verify → diff 
 push — using the **same** `core/` rules, schemas, statuses, risk gates and report shapes as the Claude
 Dynamic Workflow adapter. No second methodology, no Claude-specific runtime.
 
+When the Codex skill is invoked, the run is in Workflow Mode: this pipeline owns orchestration, subagent
+sequencing, validation gates, git-delivery gates, and final status meanings. The latest explicit user
+instruction still wins, target project rules supply project facts/style/build/test constraints, and global
+safety rules remain active.
+
 > First-phase status discipline (kept from `README.md`): treat any exact `codex exec` flag, output-schema
 > mode, or sandbox flag as **assumed** until a local Codex smoke run proves it in this repository. The
 > deterministic surface below (`bin/`, `scripts/`, `core/`) is plain Node and is already verified here.
@@ -140,7 +145,13 @@ independent review → fix → independent verify(re-materialize tests from test
   project/sandbox root, no-code-modification rule, and evidence schema. Verifiers must not rediscover the
   workflow installation just to run tests.
 
-### 3c. publish-delivery (git — the only stage that writes git)
+### 3c. publish-delivery / Git Delivery (git — the only stage that writes git)
+`DELIVERED` is a local verified diff, not a remote delivery. Before any git write, the workflow must compare
+the starting and ending workspace snapshots, identify exactly which files belong to this task, exclude
+pre-existing unrelated changes and untracked files, reject `AGENTS.md` / secrets / personal config /
+out-of-scope files, and present the exact file list plus change summary to the user. Until the user confirms
+commit/push, the status is `PUBLISH_READY`.
+
 **Customer git-choice gate runs FIRST, before any branch op / commit / push:**
 1. `node bin/git-state.mjs --cwd <target> --mode <customer's choice or omitted> --target-branch <name>`.
 2. If `branchChoice.needsChoice === true` → **STOP and ask the customer**, presenting **only**
@@ -150,8 +161,9 @@ independent review → fix → independent verify(re-materialize tests from test
    - `new-branch` — cut a fresh branch from the current commit, then commit/push;
    - `switch-existing` — checkout a customer-named existing branch (`targetBranch`), then commit/push;
    - `current-branch` — stay on the current branch and commit/push directly.
-3. Once a valid choice is in, proceed: clone/prepare → branch op per choice → `git apply` the verified diff →
-   commit (reject staging `.env`/keys/personal config) → push (**never `--force`**; the agent must screen
+3. Once a valid choice and explicit publish confirmation are in, proceed: clone/prepare → branch op per
+   choice → `git apply` the verified diff → stage exact pathspecs only (never `git add .`) → commit (reject
+   staging `.env`/keys/personal config) → push (**never `--force`**; the agent must screen
    every git command with `bin/core git-guard` first — on the Codex side this is a **convention**, not a
    runtime block; only the Claude adapter has a PreToolUse hook that enforces the same red lines at runtime)
    → independent remote verify → `publish-status` (`bin/core publish-status`).
@@ -167,6 +179,13 @@ Codex and Claude emit the same fields because they come from the same `core/` + 
 - `finalStatus` (plan / delivery / publish / auto enums in `core/status.json`);
 - `delivery-manifest.json`, `publish-report.md`, `execution-log.md`;
 - the git branch-choice record (`branchChoice.resolvedMode` + original vs final branch + created/switched).
+
+Completion meanings are intentionally separate:
+
+- `DELIVERED`: local verified diff exists.
+- `PUBLISH_READY`: verified delivery is ready for exact-file git delivery but awaits user confirmation.
+- `PUBLISHED`: commit + normal push + independent remote verification completed.
+- `PUBLISH_BLOCKED` / `PUBLISH_UNVERIFIED`: local implementation may be complete, but remote delivery is not.
 
 ## 5. Local repos & worktrees, detached HEAD, cross-platform (reqs 5/6/12)
 

@@ -22,6 +22,7 @@ const clean = {
 export const CASES = [
   ['clean publish -> PUBLISHED', clean, 'PUBLISHED'],
   ['prior PUBLISH_BLOCKED short-circuits', { ...clean, priorStatus: 'PUBLISH_BLOCKED' }, 'PUBLISH_BLOCKED'],
+  ['prior PUBLISH_READY short-circuits', { ...clean, priorStatus: 'PUBLISH_READY' }, 'PUBLISH_READY'],
   ['prior PUBLISH_NEEDS_CHOICE short-circuits', { ...clean, priorStatus: 'PUBLISH_NEEDS_CHOICE' }, 'PUBLISH_NEEDS_CHOICE'],
   ['high-risk gated -> PUBLISH_BLOCKED', { ...clean, highRiskBlocked: true }, 'PUBLISH_BLOCKED'],
   ['upstream not delivered -> PUBLISH_BLOCKED', { ...clean, deliverableStatus: 'BLOCKED' }, 'PUBLISH_BLOCKED'],
@@ -34,6 +35,7 @@ export const CASES = [
   ['persist explicit false + allowLegacy STILL BLOCKED (legacy only bypasses absent)', { ...clean, deliveryPersistVerified: false, allowLegacyUnverifiedDelivery: true }, 'PUBLISH_BLOCKED'],
   ['diff apply-check failed -> PUBLISH_BLOCKED', { ...clean, diffApplyCheckPassed: false }, 'PUBLISH_BLOCKED'],
   ['branch not allowed -> PUBLISH_BLOCKED', { ...clean, branchAllowed: false }, 'PUBLISH_BLOCKED'],
+  ['verified delivery awaiting user confirmation -> PUBLISH_READY', { ...clean, awaitingUserConfirmation: true, pushPerformed: false, remoteVerified: null }, 'PUBLISH_READY'],
   ['dryRun -> PUBLISH_DRYRUN', { ...clean, dryRun: true }, 'PUBLISH_DRYRUN'],
   ['push not performed -> PUBLISH_BLOCKED', { ...clean, pushPerformed: false }, 'PUBLISH_BLOCKED'],
   // --- remote verification is the final fact: never claim success without it ---

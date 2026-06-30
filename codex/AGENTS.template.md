@@ -48,6 +48,9 @@ is the safe first target; `deliver-from-plan` (sandbox) and `publish-delivery` (
 ## Execution Rules
 
 - One Codex invocation per stage; pass JSON files between stages in a timestamped run directory.
+- Invoking `$ai-engineering-workflow` enters Workflow Mode: this workflow owns orchestration, validation
+  gates, git-delivery gates, and final status meanings. The latest explicit user instruction and safety
+  rules still override.
 - Use `codex exec` **only** for model work: requirement understanding, code analysis, implementation
   planning, risk identification, test planning, coding, independent review, fixing, independent verification.
 - Use plain Node for **all** deterministic work — never ask the model to do bookkeeping (all paths via `<toolkit-root>`):
@@ -68,6 +71,9 @@ is the safe first target; `deliver-from-plan` (sandbox) and `publish-delivery` (
 ## Customer Git-Choice Gate (publish stage — mandatory)
 
 Before ANY branch op / commit / push:
+0. After verification, compare the starting and ending workspace snapshots, identify exact task files, reject
+   `AGENTS.md` / secrets / personal config / out-of-scope files, and show the exact file list to the user.
+   Until the user confirms commit/push, status is `PUBLISH_READY`.
 1. Run `node "<toolkit-root>/bin/git-state.mjs" --cwd <target> --mode <customer choice if any> --target-branch <name if any>`.
 2. If the result's `branchChoice.needsChoice` is true → **stop and ask the customer**, offering **only** the
    options where `available` is true (never show an invalid one, never auto-pick). Treat this as
@@ -79,7 +85,8 @@ Before ANY branch op / commit / push:
 ## Safety (unchanged across adapters)
 
 Never `git push --force`/`-f`; never delete a remote branch or rewrite history (run every git command past
-`node "<toolkit-root>/bin/core.mjs" git-guard` first). Never stage `.env`/keys/`*.pem`/personal config. Protected branches
+`node "<toolkit-root>/bin/core.mjs" git-guard` first). Never use `git add .`; stage exact pathspecs only.
+Never stage `.env`/keys/`*.pem`/personal config. Protected branches
 (main/master/release) require explicit opt-in. High-risk domains (payment/permission/secret/auth/
 irreversible) hit a human gate. Block any change outside the planned SCOPE.
 
@@ -96,6 +103,8 @@ irreversible) hit a human gate. Block any change outside the planned SCOPE.
   locate the workflow installation to run tests.
 - **Customer git-branch choice before any branch op / commit / push** (see the gate above) — never
   auto-decide; offer only options the current environment actually supports.
+- **Completion status is strict** — `DELIVERED` is local verified diff only; `PUBLISH_READY` awaits user
+  confirmation; only `PUBLISHED` means commit + push + independent remote verification completed.
 - **The customer project's existing conventions win** — match its code style, structure, test layout and
   tooling; do not impose this methodology's defaults over established project norms.
 

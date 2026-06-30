@@ -13,6 +13,7 @@
 //
 // Decision order (PUBLISH_BLOCKED short-circuits; only a pushed-and-remote-verified run earns PUBLISHED):
 //   priorStatus already PUBLISH_BLOCKED                                  -> PUBLISH_BLOCKED
+//   delivery is verified but user has not confirmed git writes           -> PUBLISH_READY
 //   high-risk domain and not explicitly allowed (human gate)             -> PUBLISH_BLOCKED
 //   upstream delivery not DELIVERED / DELIVERED_WITH_OPEN_ITEMS          -> PUBLISH_BLOCKED
 //   upstream delivery manifest self-marks its persistence unverified     -> PUBLISH_BLOCKED
@@ -26,6 +27,7 @@
 //
 // input = {
 //   priorStatus,            // current status before this gate ('PUBLISH_BLOCKED' short-circuits)
+//   awaitingUserConfirmation, // bool: verified delivery is ready, but user has not confirmed commit/push
 //   highRiskBlocked,        // bool: high-risk domain present and auto-publish not allowed
 //   deliverableStatus,      // delivery-manifest.finalStatus
 //   deliveryPersistVerified,// bool|undefined: delivery-manifest.persistVerification.ok (R2-1 protocol: a
@@ -46,6 +48,7 @@ export function computePublishStatus(input) {
   const i = input || {}
   const reasons = []
   if (i.priorStatus === 'PUBLISH_BLOCKED') return { finalStatus: 'PUBLISH_BLOCKED', reasons }
+  if (i.priorStatus === 'PUBLISH_READY') return { finalStatus: 'PUBLISH_READY', reasons }
   // customer must explicitly choose the branch mode before any commit/push; absence stops here, not BLOCKED
   if (i.priorStatus === 'PUBLISH_NEEDS_CHOICE') return { finalStatus: 'PUBLISH_NEEDS_CHOICE', reasons }
 
@@ -57,6 +60,7 @@ export function computePublishStatus(input) {
   if (i.deliveryPersistVerified !== true && i.allowLegacyUnverifiedDelivery !== true) { reasons.push('上游交付 manifest 缺 persistVerification.ok===true（旧产物/未经新协议核验）：默认拒绝；确需发布旧产物请显式传 allowLegacyUnverifiedDelivery=true。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
   if (i.diffApplyCheckPassed !== true) { reasons.push('交付 diff 未通过 git apply --check，拒绝发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
   if (i.branchAllowed === false) { reasons.push('目标分支不被策略允许（默认禁止直接 push main/master/release；需显式 allowMainPush）。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }
+  if (i.awaitingUserConfirmation === true) { reasons.push('已通过实现/审查/独立验证，等待用户确认精确暂存、提交和普通 push。'); return { finalStatus: 'PUBLISH_READY', reasons } }
 
   if (i.dryRun === true) { reasons.push('dryRun：已准备分支/提交，但按要求未实际 push。'); return { finalStatus: 'PUBLISH_DRYRUN', reasons } }
   if (i.pushPerformed !== true) { reasons.push('push 未成功执行（凭据缺失/被拒/网络），未发布。'); return { finalStatus: 'PUBLISH_BLOCKED', reasons } }

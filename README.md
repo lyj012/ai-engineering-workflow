@@ -201,6 +201,9 @@ These examples are static, public, and safe to inspect. They are not customer ou
 | `BLOCKED_MISSING_INDEPENDENT_VERIFIER` | Implementation/review evidence exists without a completed independent Verifier subagent. |
 | `DELIVERED` | Delivery workflow produced a verified sandbox diff with no open items. |
 | `DELIVERED_WITH_OPEN_ITEMS` | Delivery produced a diff, but some verification remained manual or environment-dependent. |
+| `PUBLISH_READY` | Verified local delivery is ready for exact-file commit/push, but awaits explicit user confirmation. |
+| `PUBLISH_NEEDS_CHOICE` | Publish is stopped before git writes until the user chooses a valid branch strategy. |
+| `PUBLISHED` | Commit, normal push, and independent remote verification all completed. |
 
 ## Repository Layout
 
