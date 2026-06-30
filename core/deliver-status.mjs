@@ -36,10 +36,14 @@
 //                                      //   security/crash finding); openItems (non-compile P1/P2 failures / unverified
 //                                      //   tools / new-tool warning) -> WITH_OPEN_ITEMS; null/not-applicable -> no effect.
 // }
+import { computeMultiAgentGate } from './multi-agent-status.mjs'
+
 export function computeDeliverStatus(input) {
   const i = input || {}
   const reasons = []
   if (i.priorStatus === 'BLOCKED') return { finalStatus: 'BLOCKED', reasons }
+  const multiAgentGate = computeMultiAgentGate(i)
+  if (!multiAgentGate.ok) return multiAgentGate
 
   const reviews = Array.isArray(i.reviews) ? i.reviews : []
   const verify = i.verify || null

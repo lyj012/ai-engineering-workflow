@@ -86,10 +86,103 @@ function halt(stage, reason, status) { const e = new Error(`HALT@${stage}: ${rea
 
 // >>> DELIVER-STATUS-START — 与 core/deliver-status.mjs 同一逻辑（行为由 scripts/self-check.mjs 比对锁定，单测见 scripts/deliver-status.test.mjs）；勿删本标记与 END 标记
 // 确定性终态判定：BLOCKED 短路；唯有"全程干净 + diff 已落盘且 apply-check 通过且有变更文件"才给乐观态（#1/#2）
+const DEFAULT_MULTI_AGENT_STAGES = ['analysis', 'implementation', 'review', 'verification']
+function normalizeMultiAgentStage(stage) {
+  return String(stage || '').trim().toLowerCase()
+}
+function multiAgentStageComplete(roles, stage) {
+  return roles.some(role => normalizeMultiAgentStage(role.stage) === stage &&
+    role.spawned === true &&
+    role.completed === true &&
+    role.resultValidated === true &&
+    role.unverified !== true)
+}
+function multiAgentStageRole(roles, stage) {
+  return roles.find(role => normalizeMultiAgentStage(role.stage) === stage &&
+    role.spawned === true &&
+    role.completed === true &&
+    role.resultValidated === true &&
+    role.unverified !== true) || null
+}
+function knownMultiAgentThreadId(role) {
+  if (!role) return null
+  const id = role.threadId ?? role.runtimeThreadId ?? role.executionId ?? null
+  return id === undefined ? null : id
+}
+function sameKnownMultiAgentThread(a, b) {
+  const aId = knownMultiAgentThreadId(a)
+  const bId = knownMultiAgentThreadId(b)
+  return aId !== null && bId !== null && String(aId) === String(bId)
+}
+function computeMultiAgentGate(input) {
+  const i = input || {}
+  const m = i.multiAgent || {}
+  const reasons = []
+  const requiredStages = Array.isArray(m.requiredStages) && m.requiredStages.length
+    ? m.requiredStages.map(normalizeMultiAgentStage)
+    : DEFAULT_MULTI_AGENT_STAGES
+  if (m.required !== true) {
+    if (!i.multiAgent && i.requireMultiAgent !== true) return { ok: true, finalStatus: null, reasons: [], reasonCode: null }
+    reasons.push('multiAgent.required 不是 true，不能视为多 Agent Workflow 交付。')
+    return { ok: false, finalStatus: 'BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION', reasons, reasonCode: 'MULTI_AGENT_NOT_REQUIRED' }
+  }
+  if (m.fallbackUsed === true) {
+    reasons.push('检测到单 Agent 降级 fallbackUsed=true。')
+    return { ok: false, finalStatus: 'BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION', reasons, reasonCode: 'SINGLE_AGENT_FALLBACK_USED' }
+  }
+  if (m.parentAgentImplemented === true || m.parentAgentImplementedBeforeImplementerSpawn === true) {
+    reasons.push('主线程在真实 Implementer Subagent 完成前修改了项目代码。')
+    return { ok: false, finalStatus: 'BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION', reasons, reasonCode: 'PARENT_AGENT_IMPLEMENTED_BEFORE_IMPLEMENTER_SPAWN' }
+  }
+  if (m.parentAgentRanTestsWithoutVerifier === true) {
+    reasons.push('主线程运行了实现阶段测试，但缺少独立 Verifier 证据。')
+    return { ok: false, finalStatus: 'BLOCKED_MISSING_INDEPENDENT_VERIFIER', reasons, reasonCode: 'MISSING_INDEPENDENT_VERIFIER' }
+  }
+  if (m.preflightPassed !== true || m.spawnSupported === false || m.agentsDiscoverable === false || m.unavailable === true) {
+    reasons.push('MULTI_AGENT_PREFLIGHT 未通过，或 Codex Subagent 不可用/不可发现。')
+    return { ok: false, finalStatus: 'BLOCKED_MULTI_AGENT_UNAVAILABLE', reasons, reasonCode: 'MULTI_AGENT_PREFLIGHT_FAILED' }
+  }
+  if (m.executed !== true) {
+    reasons.push('multiAgent.executed 不是 true，缺少真实 Subagent 执行记录。')
+    return { ok: false, finalStatus: 'BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION', reasons, reasonCode: 'INCOMPLETE_MULTI_AGENT_EXECUTION' }
+  }
+  const roles = Array.isArray(m.roles) ? m.roles : []
+  if (roles.some(role => role && role.unverified === true)) {
+    reasons.push('存在 unverified=true 的必需 Agent 执行记录，不能伪造成成功。')
+    return { ok: false, finalStatus: 'BLOCKED_MULTI_AGENT_UNAVAILABLE', reasons, reasonCode: 'UNVERIFIED_AGENT_EXECUTION' }
+  }
+  const missing = requiredStages.filter(stage => !multiAgentStageComplete(roles, stage))
+  if (missing.includes('verification') && !missing.includes('implementation') && !missing.includes('review')) {
+    reasons.push('缺少独立 Verifier Subagent 完成且结果已校验的证据。')
+    return { ok: false, finalStatus: 'BLOCKED_MISSING_INDEPENDENT_VERIFIER', reasons, reasonCode: 'MISSING_INDEPENDENT_VERIFIER' }
+  }
+  if (missing.includes('review') && !missing.includes('implementation')) {
+    reasons.push('缺少独立 Reviewer Subagent 完成且结果已校验的证据。')
+    return { ok: false, finalStatus: 'BLOCKED_MISSING_INDEPENDENT_REVIEWER', reasons, reasonCode: 'MISSING_INDEPENDENT_REVIEWER' }
+  }
+  if (missing.length) {
+    reasons.push(`多 Agent 执行链不完整，缺少阶段：${missing.join(', ')}。`)
+    return { ok: false, finalStatus: 'BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION', reasons, reasonCode: 'INCOMPLETE_MULTI_AGENT_EXECUTION' }
+  }
+  const implementer = multiAgentStageRole(roles, 'implementation')
+  const reviewer = multiAgentStageRole(roles, 'review')
+  const verifier = multiAgentStageRole(roles, 'verification')
+  if (sameKnownMultiAgentThread(implementer, reviewer)) {
+    reasons.push('Implementer 与 Reviewer 使用了同一个已知线程，缺少独立审查。')
+    return { ok: false, finalStatus: 'BLOCKED_MISSING_INDEPENDENT_REVIEWER', reasons, reasonCode: 'MISSING_INDEPENDENT_REVIEWER' }
+  }
+  if (sameKnownMultiAgentThread(implementer, verifier) || sameKnownMultiAgentThread(reviewer, verifier)) {
+    reasons.push('Verifier 与其他语义阶段使用了同一个已知线程，缺少独立验证。')
+    return { ok: false, finalStatus: 'BLOCKED_MISSING_INDEPENDENT_VERIFIER', reasons, reasonCode: 'MISSING_INDEPENDENT_VERIFIER' }
+  }
+  return { ok: true, finalStatus: null, reasons: [], reasonCode: null }
+}
 function computeDeliverStatus(input) {
   const i = input || {}
   const reasons = []
   if (i.priorStatus === 'BLOCKED') return { finalStatus: 'BLOCKED', reasons }
+  const multiAgentGate = computeMultiAgentGate(i)
+  if (!multiAgentGate.ok) return multiAgentGate
 
   const reviews = Array.isArray(i.reviews) ? i.reviews : []
   const verify = i.verify || null
@@ -680,11 +773,29 @@ const filesReconcile = reconcileChangedFiles({
   optionalScopeFiles: (scaffold && scaffold.optionalScopeFiles) || [],
 })
 
+const deliveryAgentExecution = {
+  required: true,
+  requiredStages: ['test-materialization', 'implementation', 'review', 'verification'],
+  preflightPassed: true,
+  executed: true,
+  fallbackUsed: false,
+  parentAgentImplemented: false,
+  roles: [
+    ...(materialize ? [{ stage: 'test-materialization', role: 'deliver-from-plan:MaterializeTests', codexAgent: 'claude:agent', spawned: true, completed: true, resultValidated: materialize.doneTrustworthy !== false, threadId: null }] : []),
+    ...(implement ? [{ stage: 'implementation', role: 'deliver-from-plan:Implement', codexAgent: 'claude:agent', spawned: true, completed: true, resultValidated: !!implement.passed, threadId: null }] : []),
+    ...reviews.map(r => ({ stage: 'review', role: 'independent-reviewer', codexAgent: 'claude:agent', spawned: true, completed: true, resultValidated: !!r.verdict, threadId: null })),
+    ...(fix ? [{ stage: 'fix', role: 'deliver-from-plan:Fix', codexAgent: 'claude:agent', spawned: true, completed: true, resultValidated: !!fix.passed, threadId: null }] : []),
+    ...(verify ? [{ stage: 'verification', role: 'deliver-from-plan:Verify', codexAgent: 'claude:agent', spawned: true, completed: true, resultValidated: !!verify.donePassedVerified, threadId: null }] : []),
+    ...(browserResult ? [{ stage: 'browser-verification', role: 'deliver-from-plan:BrowserVerify', codexAgent: 'claude:agent', spawned: true, completed: true, resultValidated: browserResult.status !== 'error', threadId: null }] : []),
+  ],
+}
+
 // step 2：确定性终态（纯函数；非 halt 路径才重算；diff 也是判定输入 —— #1/#2 不再以 DELIVERED 收尾失败交付）
 let statusInput = null
 if (!halted) {
   statusInput = {
     priorStatus: finalStatus,
+    multiAgent: deliveryAgentExecution,
     implementPassed: !!(implement && implement.passed),
     verify: verify ? { donePassedVerified: verify.donePassedVerified, scopeCleanVerified: verify.scopeCleanVerified, redGreenVerified: verify.redGreenVerified, testsIntact: verify.testsIntact } : null,
     reviews: reviews.map(r => ({ verdict: r.verdict, blocking: r.blocking })),
@@ -727,6 +838,7 @@ const deliverManifest = {
   fixHistory,
   reviewComplete: !reviewIncomplete,
   independentVerify: verify ? { donePassedVerified: verify.donePassedVerified, doneExitCodeVerified: verify.doneExitCodeVerified, redGreenVerified: verify.redGreenVerified, independentTestsPassed: verify.independentTestsPassed, testsIntact: verify.testsIntact, scopeCleanVerified: verify.scopeCleanVerified } : null,
+  multiAgent: deliveryAgentExecution,
   browserVerify: browserResult ? { applicable: browserResult.applicable, finalBrowserStatus: browserResult.finalBrowserStatus, adapterUsed: browserResult.value ? browserResult.value.adapterUsed : null, evidenceDir: browserResult.value ? browserResult.value.evidenceDir : null, checksPassed: browserResult.value ? browserResult.value.checks.filter(c => c.passed).length : 0, checksTotal: browserResult.value ? browserResult.value.checks.length : 0, consoleErrorCount: browserResult.value ? browserResult.value.consoleErrors.length : 0, failedKeyRequests: browserResult.value ? browserResult.value.failedKeyRequests : [], screenshots: browserResult.value ? browserResult.value.screenshots : [] } : null,
   codeQuality: codeQuality ? { applicable: codeQuality.applicable, specSource: codeQuality.specSource, language: codeQuality.language, buildTool: codeQuality.buildTool, compileRan: codeQuality.compileRan, compilePassed: codeQuality.compilePassed, compileCommand: codeQuality.compileCommand, compileExitCode: codeQuality.compileExitCode, compileOutputTail: codeQuality.compileOutputTail, staticChecks: codeQuality.staticChecks.map(c => ({ tool: c.tool, command: c.command, exitCode: c.exitCode, status: c.status, severity: c.severity, outputTail: c.outputTail })), introducedNewTool: codeQuality.introducedNewTool, summary: codeQuality.summary } : null,
   openItems: [

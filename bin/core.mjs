@@ -34,12 +34,14 @@ import { applyPlanPatch } from '../core/plan-patch.mjs'
 import { checkScope } from '../core/scope-check.mjs'
 import { maskRemoteUrl, hasEmbeddedCredentials, inspectRemoteUrl } from '../core/mask-remote-url.mjs'
 import { verifyRemotePublish } from '../core/verify-remote-publish.mjs'
+import { computeMultiAgentGate } from '../core/multi-agent-status.mjs'
 
 const HANDLERS = {
   'scope-check': (i) => checkScope(i),
   'readiness': (i) => ({ readinessForDev: computeReadiness(i) }),
   'status-combo': (i) => ({ valid: isValidStatusReadinessCombo(i.finalStatus, i.readiness) }),
   'deliver-status': (i) => computeDeliverStatus(i),
+  'multi-agent-gate': (i) => computeMultiAgentGate(i),
   'publish-status': (i) => computePublishStatus(i),
   'persist-outcome': (i) => computePersistOutcome(i),
   'repo-fingerprint': (i) => compareRepoFingerprint(i.planFp, i.currentFp),

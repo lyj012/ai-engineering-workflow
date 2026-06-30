@@ -27,6 +27,7 @@ Codex calls `core/` through the CLIs below. One source of truth.
 | `node bin/git-state.mjs [--cwd d] [--mode m] [--target-branch b] [--remote r]` | git state (branch / detached HEAD / worktree / dirty) + valid commit options | `core/git-state.mjs`, `core/branch-choice.mjs` |
 | `node bin/core.mjs readiness PASS` | plan readiness from final status | `core/readiness.mjs` |
 | `node bin/core.mjs deliver-status '<json>'` | delivery final status | `core/deliver-status.mjs` |
+| `node bin/core.mjs multi-agent-gate '<json>'` | mandatory Codex Subagent preflight/execution gate | `core/multi-agent-status.mjs` |
 | `node bin/core.mjs publish-status '<json>'` | publish final status | `core/publish-status.mjs` |
 | `node bin/core.mjs persist-outcome '<json>'` | persist read-back outcome / downgrade | `core/persist-outcome.mjs` |
 | `node bin/core.mjs repo-fingerprint '<json>'` | stale-plan detection | `core/repo-fingerprint.mjs` |
@@ -55,16 +56,41 @@ Codex model stages must run through real Codex custom subagents from `codex/agen
 from `codex/agent-role-map.json`. The parent skill is an orchestrator only: spawn the mapped agent, wait for
 it, validate its result, and record the execution. It must not simulate semantic roles in the parent thread.
 
+Before any target business, test, or config file can be modified, the parent skill must run
+`MULTI_AGENT_PREFLIGHT`: load the Claude-to-Codex role map, verify required `aiew_*` agents are installed and
+discoverable, verify the runtime can spawn subagents, create and validate the first required subagent
+response, initialize `agent-execution.json`, and record the workspace baseline (`git status --short`,
+`git diff`, untracked files, current branch, and `HEAD`). A failed preflight stops the workflow before
+planning-to-implementation handoff; the parent must not take over as a single-agent implementer.
+
 Required failure modes:
 
 - required subagent missing / spawn failed / result invalid -> `BLOCKED_MULTI_AGENT_UNAVAILABLE`;
 - parent thread performs subagent-reserved code, review, fix, verify, browser verify, or publish work ->
   `BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION`;
+- parent thread modified project code before a real Implementer completed ->
+  `BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION` / `PARENT_AGENT_IMPLEMENTED_BEFORE_IMPLEMENTER_SPAWN`;
+- only Reviewer ran, or any of analysis / implementation / review / verification is missing ->
+  `BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION`;
+- implementation exists but no independent Reviewer completed ->
+  `BLOCKED_MISSING_INDEPENDENT_REVIEWER`;
+- implementation or tests were run without an independent Verifier ->
+  `BLOCKED_MISSING_INDEPENDENT_VERIFIER`;
 - `multiAgent.required === true` and `multiAgent.executed !== true` -> BLOCKED;
 - `fallbackUsed === true` -> BLOCKED.
 
 Each plan/delivery/publish run must write `agent-execution.json` or embed the same `multiAgent` record in
 the manifest. Runtime thread IDs are recorded only when Codex exposes them; otherwise use `null`.
+Unknown IDs are not success evidence by themselves; each role also needs `spawned`, `completed`, and
+`resultValidated` to be true. If Codex cannot provide verifiable execution evidence, mark the role
+`unverified=true` and block instead of inventing a successful run.
+
+Run the pure gate whenever `agent-execution.json` or a manifest is assembled:
+
+```bash
+node bin/core.mjs multi-agent-gate --input <json-file>
+node bin/core.mjs deliver-status --input <json-file>
+```
 
 ### 3a. plan-from-requirement (read-only — never writes the target)
 `preflight → requirement → locate → analyze → gap → plan → risk → test-plan → review → (rework) → assemble`

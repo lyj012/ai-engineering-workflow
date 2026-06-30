@@ -27,6 +27,9 @@ function main() {
   if (map.namespace !== 'aiew_') errors.push('agent namespace must be aiew_')
   if (map.statusOnUnavailable !== 'BLOCKED_MULTI_AGENT_UNAVAILABLE') errors.push('missing unavailable status')
   if (map.statusOnContractViolation !== 'BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION') errors.push('missing contract violation status')
+  if (map.statusOnIncompleteExecution !== 'BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION') errors.push('missing incomplete execution status')
+  if (map.statusOnMissingIndependentReviewer !== 'BLOCKED_MISSING_INDEPENDENT_REVIEWER') errors.push('missing missing-reviewer status')
+  if (map.statusOnMissingIndependentVerifier !== 'BLOCKED_MISSING_INDEPENDENT_VERIFIER') errors.push('missing missing-verifier status')
 
   const names = new Set()
   for (const role of map.roles || []) {
@@ -74,6 +77,8 @@ function main() {
     'Wait for that agent to complete',
     'BLOCKED_MULTI_AGENT_UNAVAILABLE',
     'BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION',
+    'BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION',
+    'BLOCKED_MISSING_INDEPENDENT_VERIFIER',
     'agent-execution.json',
     'fallbackUsed',
   ]) {

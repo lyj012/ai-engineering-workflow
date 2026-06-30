@@ -9,6 +9,11 @@
   },
   "deliveryStatuses": {
     "BLOCKED": "Workflow stopped before a safe handoff.",
+    "BLOCKED_MULTI_AGENT_UNAVAILABLE": "Mandatory Codex multi-agent preflight failed, a required subagent was unavailable, or execution evidence was unverified.",
+    "BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION": "The parent thread performed work reserved for a real subagent, or the workflow attempted a single-agent fallback.",
+    "BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION": "The required analysis, implementation, review, and verification subagent chain did not all complete with validated results.",
+    "BLOCKED_MISSING_INDEPENDENT_REVIEWER": "Implementation evidence exists, but no independent reviewer subagent completed with validated results.",
+    "BLOCKED_MISSING_INDEPENDENT_VERIFIER": "Implementation/review evidence exists, but no independent verifier subagent completed with validated results.",
     "DELIVERED": "Delivery produced a verified sandbox diff with no open items.",
     "DELIVERED_WITH_OPEN_ITEMS": "Delivery produced a diff, but some verification remains manual or environment-dependent."
   },

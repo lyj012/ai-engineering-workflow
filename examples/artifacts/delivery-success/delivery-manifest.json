@@ -48,6 +48,66 @@
     "redGreenVerified": true,
     "scopeCleanVerified": true
   },
+  "multiAgent": {
+    "required": true,
+    "requiredStages": ["analysis", "test-materialization", "implementation", "review", "verification"],
+    "preflightPassed": true,
+    "executed": true,
+    "fallbackUsed": false,
+    "parentAgentImplemented": false,
+    "workspaceBaseline": {
+      "preExistingStatusShort": "",
+      "preExistingUntracked": [],
+      "head": "example-head"
+    },
+    "roles": [
+      {
+        "stage": "analysis",
+        "role": "repo_analyst",
+        "codexAgent": "aiew_repo_analyst",
+        "spawned": true,
+        "completed": true,
+        "resultValidated": true,
+        "threadId": null
+      },
+      {
+        "stage": "test-materialization",
+        "role": "test_materializer",
+        "codexAgent": "aiew_test_materializer",
+        "spawned": true,
+        "completed": true,
+        "resultValidated": true,
+        "threadId": null
+      },
+      {
+        "stage": "implementation",
+        "role": "implementer",
+        "codexAgent": "aiew_implementer",
+        "spawned": true,
+        "completed": true,
+        "resultValidated": true,
+        "threadId": null
+      },
+      {
+        "stage": "review",
+        "role": "independent_reviewer",
+        "codexAgent": "aiew_independent_reviewer",
+        "spawned": true,
+        "completed": true,
+        "resultValidated": true,
+        "threadId": null
+      },
+      {
+        "stage": "verification",
+        "role": "delivery_verifier",
+        "codexAgent": "aiew_delivery_verifier",
+        "spawned": true,
+        "completed": true,
+        "resultValidated": true,
+        "threadId": null
+      }
+    ]
+  },
   "diffApplyCheckPassed": true,
   "openItems": []
 }

@@ -61,10 +61,27 @@ coding task. The required shape is:
 
 If this `SKILL.md` conflicts with those contracts, follow the contract files and report the mismatch.
 
-## 0.2 Mandatory Codex Subagents
+## 0.2 Mandatory Multi-Agent Preflight And Codex Subagents
 
 This workflow requires real Codex subagent threads for every semantic stage in
 `<toolkit-root>/codex/agent-role-map.json`.
+
+Before modifying any project file, run the mandatory `MULTI_AGENT_PREFLIGHT`. This is a hard gate, not a
+recommendation. It must:
+
+1. load `<toolkit-root>/codex/agent-role-map.json`;
+2. decide which mapped roles this mode requires;
+3. confirm the mapped `aiew_*` Codex agents are installed and discoverable;
+4. confirm the current Codex environment can spawn subagents;
+5. spawn the first required real subagent and wait for a valid response;
+6. initialize `agent-execution.json`;
+7. record the starting workspace baseline: `git status --short`, `git diff`, untracked files, branch, and
+   `HEAD`;
+8. switch the parent thread into orchestrator-only mode.
+
+If preflight cannot prove these facts, stop immediately with
+`finalStatus=BLOCKED_MULTI_AGENT_UNAVAILABLE`. Do not modify business code, tests, config, docs for the
+target task, or run the implementation phase. Do not silently fall back to single-agent execution.
 
 The parent Codex agent may only orchestrate:
 
@@ -81,7 +98,9 @@ The parent Codex agent may only orchestrate:
 The parent Codex agent must not:
 
 - write business code;
+- use `apply_patch` or file-writing shell commands for target business/test/config changes;
 - simulate Implementer, Reviewer, Fixer, Verifier, Browser Verifier, or Publisher roles in the parent thread;
+- implement, fix, review, or verify project code itself;
 - replace a failed subagent with parent-agent work;
 - call a second "perspective" in the same thread and claim it is independent;
 - let Implementer review or verify its own work.
@@ -98,6 +117,24 @@ If any required Codex subagent is missing, cannot be spawned, fails to complete,
 stop with `finalStatus=BLOCKED_MULTI_AGENT_UNAVAILABLE`. If the parent agent performs work reserved for a
 subagent, stop with `finalStatus=BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION`.
 
+Specific hard failures:
+
+- parent thread modifies project code before a real Implementer subagent completes:
+  `BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION` with reason
+  `PARENT_AGENT_IMPLEMENTED_BEFORE_IMPLEMENTER_SPAWN`;
+- parent thread runs implementation tests without a real independent Verifier:
+  `BLOCKED_MISSING_INDEPENDENT_VERIFIER`;
+- only a Reviewer was spawned, or analysis/implementation/verification roles are missing:
+  `BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION`;
+- implementation evidence exists but no independent Reviewer completed:
+  `BLOCKED_MISSING_INDEPENDENT_REVIEWER`;
+- implementation/review evidence exists but no independent Verifier completed:
+  `BLOCKED_MISSING_INDEPENDENT_VERIFIER`.
+
+Only creating a Reviewer does not mean the multi-agent workflow ran. A post-hoc Reviewer cannot repair or
+legitimize a parent-thread implementation that happened before the Implementer subagent was spawned. Such
+changes are untrusted candidate changes, not valid workflow delivery.
+
 Required independence:
 
 - Implementer, Reviewer, Fixer, and Verifier must be different subagent executions.
@@ -113,17 +150,20 @@ Add or extend each plan/delivery manifest with:
 {
   "multiAgent": {
     "required": true,
+    "requiredStages": ["analysis", "test-materialization", "implementation", "review", "verification"],
+    "preflightPassed": true,
     "executed": true,
     "fallbackUsed": false,
+    "parentAgentImplemented": false,
     "roles": [
       {
-        "stage": "Implement",
+        "stage": "implementation",
         "role": "implementer",
         "codexAgent": "aiew_implementer",
         "spawned": true,
         "completed": true,
         "resultValidated": true,
-        "runtimeThreadId": null
+        "threadId": null
       }
     ]
   }
@@ -133,6 +173,20 @@ Add or extend each plan/delivery manifest with:
 Also write `agent-execution.json` beside the plan/delivery artifacts. Do not fabricate thread IDs; use
 `null` when the runtime does not expose one. `fallbackUsed=true`, missing Implementer/Reviewer/Verifier
 evidence, or `multiAgent.executed !== true` is a blocking failure.
+
+Use the deterministic gate before claiming delivery:
+
+```bash
+node "<toolkit-root>/bin/core.mjs" multi-agent-gate --input <agent-execution-or-manifest-json>
+node "<toolkit-root>/bin/core.mjs" deliver-status --input <delivery-status-json>
+```
+
+Successful delivery requires all of the following to be true:
+
+`multiAgent.required === true`, `multiAgent.preflightPassed === true`, `multiAgent.executed === true`,
+`multiAgent.fallbackUsed === false`, `multiAgent.parentAgentImplemented === false`, Implementer completed,
+Reviewer completed, Verifier completed, review passed, and verify passed. Otherwise do not return
+`DELIVERED` or `PUBLISHED`.
 
 ## 1. Read The Current Repository Automatically
 

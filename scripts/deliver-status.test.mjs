@@ -9,6 +9,26 @@ import { computeDeliverStatus } from '../core/deliver-status.mjs'
 // initial placeholder used by the workflow on the non-halt path — NOT a real failure).
 const clean = {
   priorStatus: 'FAILED',
+  multiAgent: {
+    required: true,
+    requiredStages: ['analysis', 'test-materialization', 'implementation', 'review', 'verification'],
+    preflightPassed: true,
+    executed: true,
+    fallbackUsed: false,
+    parentAgentImplemented: false,
+    roles: [
+      { stage: 'analysis', role: 'repo_analyst', codexAgent: 'aiew_repo_analyst', spawned: true, completed: true, resultValidated: true, threadId: 'analysis-1' },
+      { stage: 'test-materialization', role: 'test_materializer', codexAgent: 'aiew_test_materializer', spawned: true, completed: true, resultValidated: true, threadId: 'tests-1' },
+      { stage: 'implementation', role: 'implementer', codexAgent: 'aiew_implementer', spawned: true, completed: true, resultValidated: true, threadId: 'implement-1' },
+      { stage: 'review', role: 'independent_reviewer', codexAgent: 'aiew_independent_reviewer', spawned: true, completed: true, resultValidated: true, threadId: 'review-1' },
+      { stage: 'verification', role: 'delivery_verifier', codexAgent: 'aiew_delivery_verifier', spawned: true, completed: true, resultValidated: true, threadId: 'verify-1' },
+    ],
+    workspaceBaseline: {
+      preExistingUntracked: [],
+      preflightHead: 'abc123',
+      preflightStatusShort: '',
+    },
+  },
   implementPassed: true,
   verify: { donePassedVerified: true, scopeCleanVerified: true, redGreenVerified: true },
   reviews: [{ verdict: 'ok', blocking: false }],
@@ -21,6 +41,65 @@ const clean = {
 
 export const CASES = [
   ['clean run -> DELIVERED', clean, 'DELIVERED'],
+  ['codex required but no multiAgent -> incomplete', { ...clean, multiAgent: undefined, requireMultiAgent: true }, 'BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION'],
+  ['parent implemented before implementer then reviewer -> contract violation', {
+    ...clean,
+    multiAgent: {
+      ...clean.multiAgent,
+      parentAgentImplemented: true,
+      parentAgentImplementedBeforeImplementerSpawn: true,
+      roles: [
+        { stage: 'review', role: 'independent_reviewer', codexAgent: 'aiew_independent_reviewer', spawned: true, completed: true, resultValidated: true, threadId: 'review-only' },
+      ],
+    },
+  }, 'BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION'],
+  ['only reviewer executed -> incomplete multi-agent execution', {
+    ...clean,
+    multiAgent: {
+      ...clean.multiAgent,
+      roles: [
+        { stage: 'review', role: 'independent_reviewer', codexAgent: 'aiew_independent_reviewer', spawned: true, completed: true, resultValidated: true, threadId: 'review-only' },
+      ],
+    },
+  }, 'BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION'],
+  ['missing verifier role -> missing independent verifier', {
+    ...clean,
+    multiAgent: {
+      ...clean.multiAgent,
+      roles: clean.multiAgent.roles.filter(role => role.stage !== 'verification'),
+    },
+  }, 'BLOCKED_MISSING_INDEPENDENT_VERIFIER'],
+  ['missing test materializer role -> incomplete multi-agent execution', {
+    ...clean,
+    multiAgent: {
+      ...clean.multiAgent,
+      roles: clean.multiAgent.roles.filter(role => role.stage !== 'test-materialization'),
+    },
+  }, 'BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION'],
+  ['parent ran tests without verifier -> missing independent verifier', {
+    ...clean,
+    multiAgent: {
+      ...clean.multiAgent,
+      parentAgentRanTestsWithoutVerifier: true,
+      roles: clean.multiAgent.roles.filter(role => role.stage !== 'verification'),
+    },
+  }, 'BLOCKED_MISSING_INDEPENDENT_VERIFIER'],
+  ['agent unavailable at preflight -> unavailable', {
+    ...clean,
+    multiAgent: { ...clean.multiAgent, preflightPassed: false, spawnSupported: false },
+  }, 'BLOCKED_MULTI_AGENT_UNAVAILABLE'],
+  ['dirty baseline before run does not imply parent violation', {
+    ...clean,
+    multiAgent: {
+      ...clean.multiAgent,
+      parentAgentImplemented: false,
+      workspaceBaseline: {
+        preExistingUntracked: ['notes.txt'],
+        preflightHead: 'abc123',
+        preflightStatusShort: '?? notes.txt',
+      },
+    },
+  }, 'DELIVERED'],
   ['prior BLOCKED short-circuits', { ...clean, priorStatus: 'BLOCKED' }, 'BLOCKED'],
   ['implement not green -> BLOCKED', { ...clean, implementPassed: false }, 'BLOCKED'],
   ['no independent verify -> BLOCKED', { ...clean, verify: null }, 'BLOCKED'],

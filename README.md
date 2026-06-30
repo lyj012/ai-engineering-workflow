@@ -193,6 +193,11 @@ These examples are static, public, and safe to inspect. They are not customer ou
 | `CONDITIONAL` | No P0 blocker, but important P1 issues remain; use human judgment before coding. |
 | `FAILED_WITH_FINDINGS` | Review found blockers or the plan is not reliable enough to implement. |
 | `BLOCKED` | Workflow stopped before a safe handoff, usually because prerequisites or verification were missing. |
+| `BLOCKED_MULTI_AGENT_UNAVAILABLE` | Codex mandatory multi-agent preflight failed, or required subagent evidence was unavailable/unverified. |
+| `BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION` | Parent thread implemented/fixed/reviewed/verified instead of a real mapped subagent, or used single-agent fallback. |
+| `BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION` | The required analysis, implementation, review, and verification subagent chain was incomplete. |
+| `BLOCKED_MISSING_INDEPENDENT_REVIEWER` | Implementation evidence exists without a completed independent Reviewer subagent. |
+| `BLOCKED_MISSING_INDEPENDENT_VERIFIER` | Implementation/review evidence exists without a completed independent Verifier subagent. |
 | `DELIVERED` | Delivery workflow produced a verified sandbox diff with no open items. |
 | `DELIVERED_WITH_OPEN_ITEMS` | Delivery produced a diff, but some verification remained manual or environment-dependent. |
 

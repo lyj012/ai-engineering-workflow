@@ -5,14 +5,27 @@
   "required": [
     "schemaVersion", "workflow", "finalStatus", "gate", "scope",
     "filesChanged", "scopeViolations", "reviewVerdicts", "reviewComplete",
-    "independentVerify", "diffApplyCheckPassed", "openItems"
+    "independentVerify", "diffApplyCheckPassed", "openItems", "multiAgent"
   ],
   "properties": {
     "schemaVersion": { "type": "string" },
     "workflow": { "type": "string" },
     "sourcePlan": { "type": "string" },
     "targetRepo": { "type": "string" },
-    "finalStatus": { "type": "string", "enum": ["DELIVERED", "DELIVERED_WITH_OPEN_ITEMS", "BLOCKED", "FAILED"] },
+    "finalStatus": {
+      "type": "string",
+      "enum": [
+        "DELIVERED",
+        "DELIVERED_WITH_OPEN_ITEMS",
+        "BLOCKED",
+        "FAILED",
+        "BLOCKED_MULTI_AGENT_UNAVAILABLE",
+        "BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION",
+        "BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION",
+        "BLOCKED_MISSING_INDEPENDENT_REVIEWER",
+        "BLOCKED_MISSING_INDEPENDENT_VERIFIER"
+      ]
+    },
     "gate": {
       "type": "object",
       "required": ["finalStatus", "readinessForDev"],
@@ -50,6 +63,42 @@
     "fixHistory": { "type": "array" },
     "reviewComplete": { "type": "boolean" },
     "independentVerify": { "type": "object" },
+    "multiAgent": {
+      "type": "object",
+      "required": ["required", "preflightPassed", "executed", "fallbackUsed", "parentAgentImplemented", "roles"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "requiredStages": { "type": "array", "items": { "type": "string" } },
+        "preflightPassed": { "type": "boolean" },
+        "executed": { "type": "boolean" },
+        "fallbackUsed": { "type": "boolean" },
+        "parentAgentImplemented": { "type": "boolean" },
+        "parentAgentImplementedBeforeImplementerSpawn": { "type": "boolean" },
+        "parentAgentRanTestsWithoutVerifier": { "type": "boolean" },
+        "spawnSupported": { "type": "boolean" },
+        "agentsDiscoverable": { "type": "boolean" },
+        "workspaceBaseline": { "type": "object" },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["stage", "role", "codexAgent", "spawned", "completed", "resultValidated"],
+            "properties": {
+              "stage": { "type": "string" },
+              "role": { "type": "string" },
+              "codexAgent": { "type": "string" },
+              "spawned": { "type": "boolean" },
+              "completed": { "type": "boolean" },
+              "resultValidated": { "type": "boolean" },
+              "threadId": {},
+              "runtimeThreadId": {},
+              "executionId": {},
+              "unverified": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
     "diffApplyCheckPassed": { "type": "boolean" },
     "openItems": { "type": "array", "items": { "type": "string" } }
   }

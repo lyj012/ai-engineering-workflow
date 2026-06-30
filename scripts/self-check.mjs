@@ -8,6 +8,7 @@ import { validateDeliveryArtifacts } from './validate-delivery-artifacts.mjs'
 import { validatePublishRecord } from './validate-publish-record.mjs'
 import { computeDeliverStatus as coreComputeDeliverStatus } from '../core/deliver-status.mjs'
 import { runDeliverStatusTests, CASES as DELIVER_STATUS_CASES } from './deliver-status.test.mjs'
+import { runMultiAgentStatusTests } from './multi-agent-status.test.mjs'
 import { computeReadiness as coreComputeReadiness } from '../core/readiness.mjs'
 import { runReadinessTests, CASES as READINESS_CASES } from './readiness.test.mjs'
 import { computePersistOutcome as coreComputePersistOutcome } from '../core/persist-outcome.mjs'
@@ -237,6 +238,7 @@ if (exists(planContractFile) && exists('core/schemas/plan-artifacts.schema.json'
 
 // deliver final-status logic (#6): run the unit tests, and behaviour-diff the workflow's inline copy
 // against the canonical core/deliver-status.mjs over fixed vectors so they cannot drift (covers #1/#2).
+for (const failure of runMultiAgentStatusTests()) errors.push(failure)
 for (const failure of runDeliverStatusTests()) errors.push(failure)
 
 const deliverWf = '.claude/workflows/deliver-from-plan.js'
@@ -580,6 +582,24 @@ errors.push(...validatePlanArtifacts(path.join(root, 'examples/artifacts/plan-re
 errors.push(...validateDeliveryArtifacts(path.join(root, 'examples/artifacts/delivery-success')))
 errors.push(...validatePublishRecord(path.join(root, 'examples/artifacts/publish-record-example')))
 
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aiew-delivery-schema-'))
+  try {
+    const src = path.join(root, 'examples/artifacts/delivery-success')
+    fs.cpSync(src, tmp, { recursive: true })
+    const manifestPath = path.join(tmp, 'delivery-manifest.json')
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    manifest.multiAgent.required = false
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
+    const negative = validateDeliveryArtifacts(tmp)
+    if (!negative.some(error => error.includes('BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION'))) {
+      errors.push('delivery validation must reject DELIVERED manifests with multiAgent.required=false')
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+}
+
 for (const file of ['app.sh', 'test.sh']) {
   const plan = JSON.parse(read('examples/artifacts/plan-ready/plan.json'))
   if (!plan.affected.files.includes(file)) errors.push(`plan.json affected.files missing ${file}`)
@@ -641,5 +661,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, remote-url credential mask+parity, remote-verify recompute+parity, scope-check logic, sandbox+persist scripts, core CLI input modes, portable diff generation, UTF-8 shell materialization, tests-fingerprint, deterministic test-runner, rm-path guards, codex skill entry + refs, delivery+publish schema, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, multi-agent gate, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, remote-url credential mask+parity, remote-verify recompute+parity, scope-check logic, sandbox+persist scripts, core CLI input modes, portable diff generation, UTF-8 shell materialization, tests-fingerprint, deterministic test-runner, rm-path guards, codex skill entry + refs, delivery+publish schema, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)

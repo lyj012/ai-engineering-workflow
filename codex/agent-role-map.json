@@ -3,6 +3,9 @@
   "namespace": "aiew_",
   "statusOnUnavailable": "BLOCKED_MULTI_AGENT_UNAVAILABLE",
   "statusOnContractViolation": "BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION",
+  "statusOnIncompleteExecution": "BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION",
+  "statusOnMissingIndependentReviewer": "BLOCKED_MISSING_INDEPENDENT_REVIEWER",
+  "statusOnMissingIndependentVerifier": "BLOCKED_MISSING_INDEPENDENT_VERIFIER",
   "roles": [
     {
       "id": "requirement_analyst",

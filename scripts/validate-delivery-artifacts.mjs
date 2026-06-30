@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { validate } from './validate-plan-artifacts.mjs'
+import { computeMultiAgentGate } from '../core/multi-agent-status.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const schema = JSON.parse(fs.readFileSync(path.join(root, 'core/schemas/delivery-artifacts.schema.json'), 'utf8'))
@@ -13,7 +14,12 @@ const schema = JSON.parse(fs.readFileSync(path.join(root, 'core/schemas/delivery
 export function validateDeliveryArtifacts(deliveryDir) {
   const dir = path.resolve(deliveryDir)
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'delivery-manifest.json'), 'utf8'))
-  return validate(manifest, schema, dir)
+  const errors = validate(manifest, schema, dir)
+  if (manifest.finalStatus === 'DELIVERED' || manifest.finalStatus === 'DELIVERED_WITH_OPEN_ITEMS') {
+    const gate = computeMultiAgentGate({ multiAgent: manifest.multiAgent, requireMultiAgent: true })
+    if (!gate.ok) errors.push(`${dir}.multiAgent: ${gate.finalStatus} ${gate.reasonCode || ''}`.trim())
+  }
+  return errors
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
