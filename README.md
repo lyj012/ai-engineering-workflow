@@ -95,13 +95,29 @@ To confirm `Workflow` is available, start Claude Code from this repository root 
 
 ## Codex Quick Start
 
-Install or expose this repository's Skill once so Codex can discover:
+Install the Skill once so Codex can discover it globally:
 
-```text
-.agents/skills/ai-engineering-workflow/SKILL.md
+```powershell
+cd <repo>
+powershell -ExecutionPolicy Bypass -File .\scripts\install-codex-skill.ps1
 ```
 
-Then open any target project in Codex and use either:
+The default install mode creates a user-level link at:
+
+```text
+%USERPROFILE%\.codex\skills\ai-engineering-workflow
+```
+
+that points back to this repository's `.agents/skills/ai-engineering-workflow` directory. Because the Skill
+resolves symlinks/junctions before walking upward, it can still find this repository's `core/`, `bin/`,
+`scripts/`, and `codex/` directories. To install a fully copied, self-contained user-level package instead:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-codex-skill.ps1 -Mode Copy -Force
+```
+
+After installing, restart Codex or open a new thread so the Skill list refreshes. Then open any target
+project in Codex and use either:
 
 ```text
 /skills -> ai-engineering-workflow

@@ -104,6 +104,7 @@ const required = [
   'CONTRIBUTING.md',
   'SECURITY.md',
   'scripts/self-check.mjs',
+  'scripts/install-codex-skill.ps1',
   'examples/minimal-target/app.sh',
   'examples/minimal-target/README.md',
   'examples/requirements/simple-greeting.md',

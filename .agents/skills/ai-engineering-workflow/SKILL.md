@@ -26,14 +26,17 @@ Resolve the toolkit root once, then use absolute paths derived from it for every
 Priority:
 
 1. If this skill is installed inside the `ai-engineering-workflow` repository, locate the repository root by
-   walking upward from this `SKILL.md` until `core/`, `bin/`, `scripts/`, and `codex/` all exist.
+   resolving the real path of this `SKILL.md` first (follow symlinks/junctions), then walking upward until
+   `core/`, `bin/`, `scripts/`, and `codex/` all exist.
 2. If the user explicitly provides a toolkit path for this run, use it.
 3. If `AIEW_HOME` is set, use it as a backwards-compatible override.
 4. If none of the above locates the toolkit root, stop with a clear installation error. Do not ask for
    `AIEW_HOME` as normal setup.
 
-The toolkit root is the directory containing `core/`, `bin/`, `scripts/`, `codex/`, and this skill's
-`.agents/skills/ai-engineering-workflow/SKILL.md` entry. Never hard-code a machine-specific path.
+The toolkit root is either the repository root that contains `core/`, `bin/`, `scripts/`, `codex/`, and this
+skill's `.agents/skills/ai-engineering-workflow/SKILL.md` entry, or a self-contained user-level skill package
+that contains `SKILL.md` alongside `core/`, `bin/`, `scripts/`, and `codex/`. Never hard-code a
+machine-specific path.
 
 Run the deterministic self-check before relying on the toolkit in a new environment:
 

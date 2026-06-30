@@ -19,6 +19,14 @@ explicitly wants to share it. The public repository tracks only this template.
 The `ai-engineering-workflow` skill resolves the shared toolkit from its own installed location. `AIEW_HOME`
 may still be used as a backwards-compatible override, but it is not required for normal use.
 
+Install the user-level Skill once with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File <toolkit-root>\scripts\install-codex-skill.ps1
+```
+
+Use `-Mode Copy -Force` only when a copied self-contained install is preferred over the default link.
+
 ## Toolkit Root
 
 The shared toolkit is the repository containing `core/`, `bin/`, `scripts/`, `codex/`, and

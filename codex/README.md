@@ -57,9 +57,17 @@ is retained only as an optional compatibility override. A target project's `AGEN
 guidance: read it when present, continue when absent. The skill delegates every status / gate / git /
 validation decision to `bin/` + `scripts/` (no logic copied into the prompt).
 
-To use it in a customer project, install or expose this repository's `ai-engineering-workflow` skill once,
-then open the customer project and invoke the skill. Do not require each project to copy the skill, generate
-`AGENTS.md`, or set a toolkit environment variable as normal usage.
+To use it in a customer project, install this repository's `ai-engineering-workflow` skill once:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-codex-skill.ps1
+```
+
+The default install creates a user-level link under `%USERPROFILE%\.codex\skills\ai-engineering-workflow`.
+The Skill resolves the link's real target before walking upward, so it can locate the repository toolkit
+without `AIEW_HOME`. For a self-contained copied install, use `-Mode Copy -Force`. After installing, restart
+Codex or open a new thread, then open the customer project and invoke the skill. Do not require each project
+to copy the skill, generate `AGENTS.md`, or set a toolkit environment variable as normal usage.
 
 ## First Runnable Target
 
@@ -110,6 +118,7 @@ Verified in this repository (plain Node, runs here):
 - the Codex skill `.agents/skills/ai-engineering-workflow/SKILL.md` exists as a real, well-formed entry
   point (valid `name` + `description` frontmatter, the format Codex documents), and every deterministic
   command it tells Codex to run is verified to work here.
+- `scripts/install-codex-skill.ps1` installs the user-level Skill entry in link or copied mode.
 
 Pending local Codex verification (not yet exercised — do not claim runnable until proven):
 
@@ -117,7 +126,7 @@ Pending local Codex verification (not yet exercised — do not claim runnable un
   Desktop is available in this environment to verify recognition / `/skills` / implicit selection);
 
 - exact `codex exec` command shape, `--output-schema` sufficiency, and sandbox flags per stage;
-- exact user-level Skill installation mechanics for the current Codex Desktop build;
+- an end-to-end Codex Desktop smoke test proving the installed user-level Skill appears in `/skills`;
 - that one Codex invocation can drive the full loop end to end with bounded internal stages;
 - a real Codex run that produces a plan/delivery directory passing `validate-plan-artifacts.mjs`;
 - the cross-platform CLIs are written with `spawnSync`/argv (no single-shell dep) but have only been run on

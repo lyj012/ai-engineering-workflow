@@ -103,17 +103,20 @@ commands run on Windows and macOS.
 ## 6. How a user starts it in Codex Desktop
 
 1. Open the customer project in Codex Desktop.
-2. Select `/skills -> ai-engineering-workflow`, or type `$ai-engineering-workflow`.
-3. Enter the development requirement. The skill reads the current repository, optional project guidance such
+2. If the Skill has not been installed on this machine, run
+   `powershell -ExecutionPolicy Bypass -File <toolkit-root>\scripts\install-codex-skill.ps1`, then restart
+   Codex or open a new thread.
+3. Select `/skills -> ai-engineering-workflow`, or type `$ai-engineering-workflow`.
+4. Enter the development requirement. The skill reads the current repository, optional project guidance such
    as `AGENTS.md` when present, and runs the analysis → plan → code → test → review → fix → verify loop.
-4. At the publish stage Codex stops at the **git-choice gate** and asks you to pick a valid strategy before
+5. At the publish stage Codex stops at the **git-choice gate** and asks you to pick a valid strategy before
    any commit/push.
 
 ## 7. Capability assumptions — verify locally before claiming runnable (req 14)
 
-Assumed and **pending a local Codex smoke run**: exact Codex Desktop user-level skill discovery behavior; the
-exact `codex exec` invocation and output-schema/sandbox flags; that one skill invocation can drive the
-complete loop end to end with bounded internal stages.
+Assumed and **pending a local Codex smoke run**: exact Codex Desktop `/skills` refresh/discovery behavior
+after installation; the exact `codex exec` invocation and output-schema/sandbox flags; that one skill
+invocation can drive the complete loop end to end with bounded internal stages.
 Per the repo discipline: **do not claim the Codex adapter is runnable until a real Codex run has produced a
 plan/delivery directory that passes the matching validator** (`validate-plan-artifacts.mjs` for plan,
 `validate-delivery-artifacts.mjs` for delivery, `validate-publish-record.mjs` for the publish record) **+
