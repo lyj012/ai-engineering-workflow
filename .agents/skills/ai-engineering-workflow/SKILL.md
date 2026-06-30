@@ -46,6 +46,20 @@ node "<toolkit-root>/scripts/self-check.mjs"
 
 If self-check fails, report the failure and continue only with the parts that are still safe and explicit.
 
+## 0.1 Load And Obey The Pipeline Contract
+
+After resolving `<toolkit-root>`, read these files before planning or coding:
+
+1. `<toolkit-root>/codex/pipeline.md`
+2. `<toolkit-root>/codex/plan-from-requirement.md`
+
+Treat them as the execution contract for this skill. Do not simplify the workflow into a normal direct-edit
+coding task. The required shape is:
+
+`plan-from-requirement (read-only) -> validated plan artifacts -> deliver-from-plan (sandbox only) -> independent review/fix/verify -> validated delivery artifacts + changes.diff -> optional publish`.
+
+If this `SKILL.md` conflicts with those contracts, follow the contract files and report the mismatch.
+
 ## 1. Read The Current Repository Automatically
 
 The current Codex workspace is the target repository unless the user names another target.
@@ -66,15 +80,23 @@ Unless the user explicitly says "only analyze", "do not edit", or "plan only", e
 delivery loop:
 
 1. clarify only blockers that cannot be safely inferred;
-2. produce a concise internal plan grounded in the repository;
-3. implement the smallest scoped change;
-4. run the strongest practical tests/checks discovered from the repository;
-5. independently review the result;
-6. fix issues and rerun relevant checks, with a bounded loop;
-7. deliver a short final report with changed files, tests, remaining risks, and unverified items.
+2. run the read-only plan-from-requirement flow from `codex/plan-from-requirement.md`;
+3. persist the required plan artifacts: `requirement.json`, `plan.json`, `risks.json`, `test-plan.json`,
+   `final-plan.md`, and `run-manifest.json`;
+4. run `validate-plan-artifacts.mjs` and compute readiness with `bin/core.mjs readiness`;
+5. continue to implementation only when readiness is `ready`;
+6. run deliver-from-plan in a sandbox copy, never by directly editing the target repository;
+7. perform independent review, fix, and independent verification as separate stages, with a bounded loop;
+8. produce `changes.diff`, `delivery-report.md`, and `delivery-manifest.json`;
+9. run `validate-delivery-artifacts.mjs` and the applicable deterministic delivery checks;
+10. deliver a short final report with changed files, tests, remaining risks, and unverified items.
 
 Do not require the user to manually start plan, delivery, review, or verification stages. The stage names are
 internal workflow structure.
+
+The target repository must remain unchanged through plan and delivery. The only allowed direct write to the
+target repository is the optional publish stage after the user explicitly asks for publishing and the git
+choice gate has passed.
 
 ## 3. Deterministic Decisions
 
@@ -112,12 +134,17 @@ Ask only when a missing answer would materially change API shape, data shape, se
 migrations, destructive behavior, money movement, or irreversible side effects. Avoid low-value question
 lists.
 
-The plan must identify the expected files, core logic, tests/checks, risks, and acceptance criteria. If the
-user requested analysis only, stop after this plan.
+The plan must identify the expected files, core logic, tests/checks, risks, and acceptance criteria. It is
+not complete until all required plan artifacts exist and `validate-plan-artifacts.mjs` passes. If the user
+requested analysis only, stop after this validated plan.
 
-## 5. Implementation
+## 5. Sandbox Implementation
 
-Implement conservatively:
+Implement only inside the sandbox prepared by `bin/sandbox-prepare.mjs`. Do not directly edit the target
+repository during delivery. Generate the final patch with `bin/diff-from-sandbox.mjs`, then verify it can be
+applied to the target baseline before reporting delivery.
+
+Implement conservatively inside the sandbox:
 
 - match existing structure and style;
 - reuse existing services, utilities, components, enums, and tests;
@@ -139,9 +166,11 @@ Discover checks from the target repository instead of asking the user for comman
 After implementation:
 
 1. run the smallest relevant checks first, then broader checks when practical;
-2. review the diff against the requirement, scope, risk list, and tests;
-3. fix discovered issues and rerun relevant checks;
-4. stop after a reasonable bounded loop, normally two fix-review cycles unless a clear small fix remains.
+2. run an independent review stage that did not author the implementation;
+3. fix discovered issues in the sandbox and rerun relevant checks;
+4. run an independent verification stage that re-materializes or re-checks the tests from `test-plan.json`;
+5. stop after a reasonable bounded loop, normally two fix-review cycles unless a clear small fix remains;
+6. validate `delivery-manifest.json` with `validate-delivery-artifacts.mjs` before final delivery.
 
 Never report passing tests or verification that did not actually run.
 

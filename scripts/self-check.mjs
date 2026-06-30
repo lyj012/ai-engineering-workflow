@@ -527,12 +527,29 @@ if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guar
   if (exists(oldSkillFile)) errors.push(`old Codex skill entry must not be kept in parallel: ${oldSkillFile}`)
   if (!exists(skillFile)) errors.push(`missing Codex skill entry ${skillFile}`)
   else {
-    const fm = /^---\n([\s\S]*?)\n---/.exec(read(skillFile))
+    const skillText = read(skillFile)
+    const fm = /^---\n([\s\S]*?)\n---/.exec(skillText)
     if (!fm) errors.push(`${skillFile} is missing YAML frontmatter`)
     else if (!/(^|\n)name:\s*\S/.test(fm[1]) || !/(^|\n)description:\s*\S/.test(fm[1])) errors.push(`${skillFile} frontmatter must include name and description`)
     else {
       if (!/(^|\n)name:\s*ai-engineering-workflow\s*(\n|$)/.test(fm[1])) errors.push(`${skillFile} frontmatter name must be ai-engineering-workflow`)
       if (!/autonomous software engineering workflow/i.test(fm[1])) errors.push(`${skillFile} description must identify the skill as an autonomous engineering workflow`)
+    }
+    for (const needle of [
+      '<toolkit-root>/codex/pipeline.md',
+      '<toolkit-root>/codex/plan-from-requirement.md',
+      'validate-plan-artifacts.mjs',
+      'validate-delivery-artifacts.mjs',
+      'sandbox copy',
+      'never by directly editing the target repository',
+      'changes.diff',
+      'delivery-manifest.json',
+      'requirement.json',
+      'test-plan.json',
+      'independent review stage',
+      'independent verification stage',
+    ]) {
+      if (!skillText.includes(needle)) errors.push(`${skillFile} must enforce pipeline contract detail: ${needle}`)
     }
   }
   // the skill + AGENTS template orchestrate these shared assets — none may be a dangling reference
