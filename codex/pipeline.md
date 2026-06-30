@@ -35,6 +35,7 @@ Codex calls `core/` through the CLIs below. One source of truth.
 | `node bin/core.mjs git-guard '"<command>"'` | red-line git command guard (force-push, delete remote, …) | `core/git-guard.mjs` |
 | `node bin/core.mjs branch-choice '<json>'` | resolve the customer commit-strategy choice | `core/branch-choice.mjs` |
 | `node bin/core.mjs scope-check '<json>'` | changed files vs the plan's SCOPE | `core/scope-check.mjs` |
+| `node bin/execution-context.mjs --workflow-root <w> --project-root <p>` | run-scoped absolute roots + starting workspace snapshot for every subagent | `core/execution-context.mjs` |
 | `node bin/sandbox-prepare.mjs --src <t> --dest <s>` | copy target→sandbox; strip history/build/secrets/symlinks | (cross-platform fs) |
 | `node bin/diff-from-sandbox.mjs --base <t> --sandbox <s> --out <changes.diff>` | generate portable applyable patch without `git diff --no-index --label` | isolated baseline git repo |
 | `node bin/tests-fingerprint.mjs --dir <testsDir>` | canonical, order-independent fingerprint of the tests/ tree (the freeze and the verify-time recompute agree by construction) | `node:crypto` sha256 |
@@ -51,6 +52,30 @@ All read JSON in / print JSON out, run on bare `node` (Windows / macOS / Linux),
 Each model stage is one `codex exec` run reading the previous stage's JSON and writing the next stage's
 JSON into a timestamped run directory; each deterministic step is a CLI above. The artifact filenames and
 the schemas they satisfy are exactly the Claude ones (`core/schemas/plan-artifacts.schema.json`).
+
+At workflow start, the parent must build one stable `execution_context` with `bin/execution-context.mjs`:
+
+```json
+{
+  "workflowRoot": "<absolute ai-engineering-workflow toolkit root>",
+  "projectRoot": "<absolute target project root>",
+  "workspaceRoot": "<absolute current target workspace or sandbox root>",
+  "taskArtifactRoot": "<absolute run artifact directory, or empty string before it exists>",
+  "changedFiles": [],
+  "workspaceBaseline": {
+    "branch": "",
+    "head": "",
+    "statusShort": "",
+    "diffStat": "",
+    "untrackedFiles": []
+  }
+}
+```
+
+The parent must inject this object into every subagent prompt and update only the fields that actually
+change, such as `workspaceRoot`, `taskArtifactRoot`, and `changedFiles`. Subagents must use these absolute
+paths and must not infer or search for the workflow root. Starting and ending workspace snapshots are
+compared in the final report so pre-existing user files are not mislabeled as workflow output.
 
 Codex model stages must run through real Codex custom subagents from `codex/agents/aiew_*.toml`, generated
 from `codex/agent-role-map.json`. The parent skill is an orchestrator only: spawn the mapped agent, wait for
@@ -111,6 +136,9 @@ independent review → fix → independent verify(re-materialize tests from test
 - Subagents: `aiew_test_materializer`, `aiew_implementer`, `aiew_independent_reviewer`, `aiew_fixer`,
   `aiew_delivery_verifier`, `aiew_browser_verifier` when applicable, and `aiew_verification_runner` for
   safe command execution.
+- Verifier inputs are self-contained: goal, acceptance criteria, changed files, allowed commands,
+  project/sandbox root, no-code-modification rule, and evidence schema. Verifiers must not rediscover the
+  workflow installation just to run tests.
 
 ### 3c. publish-delivery (git — the only stage that writes git)
 **Customer git-choice gate runs FIRST, before any branch op / commit / push:**

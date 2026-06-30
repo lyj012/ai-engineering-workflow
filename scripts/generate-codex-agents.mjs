@@ -36,15 +36,29 @@ function agentInstructions(role, sourceText) {
     'You are a Codex custom subagent for AI Engineering Workflow.',
     'You must run as a real independent subagent thread when spawned by the ai-engineering-workflow parent.',
     'Do not let the parent thread simulate your role. If you were not actually spawned, report BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION.',
+    'The parent must provide an execution_context object with absolute workflowRoot, projectRoot, workspaceRoot, and taskArtifactRoot paths.',
+    'Use only the absolute paths in execution_context. Do not infer, search for, or guess the workflow root.',
     'Return only the result requested by the parent stage and do not broaden scope.',
     'Do not commit, push, rewrite git history, or access secrets.',
     'Use Chinese for user-facing findings unless the target project requires otherwise.',
   ].join('\n')
   const mode = `\n\nSandbox mode for this role: ${role.sandboxMode}.\nCodex agent name: ${role.codexAgent}.\nClaude source role: ${role.claudeRole}.\nSource path: ${role.source.path}${role.source.phase ? `#${role.source.phase}` : ''}.\n`
+  const context = [
+    '',
+    'Required execution_context contract:',
+    '- workflowRoot: absolute path to the installed ai-engineering-workflow toolkit.',
+    '- projectRoot: absolute path to the target project repository.',
+    '- workspaceRoot: absolute path where this stage may inspect or work.',
+    '- taskArtifactRoot: absolute path for plan/delivery artifacts when available.',
+    '- changedFiles: target-root-relative files for this task when known.',
+    '- workspaceBaseline: starting git status/diff/untracked snapshot when available.',
+    '',
+    'If execution_context is missing or paths are relative, report BLOCKED_MULTI_AGENT_UNAVAILABLE instead of guessing. Verifier roles must rely on the parent-provided requirement, acceptance criteria, changed files, allowed commands, projectRoot/workspaceRoot, and required evidence format; they must not rediscover the workflow installation.',
+  ].join('\n')
   const independence = role.independentThreadRequired
     ? '\nThis role requires an independent thread. The implementer must not review itself; reviewer/verifier roles must not trust implementer self-reports.\n'
     : '\nThis role does not require a separate judgment boundary, but it still must respect the assigned scope.\n'
-  return `${common}${mode}${independence}\nAuthoritative role instructions:\n\n${sourceText.trim()}\n`
+  return `${common}${mode}${context}${independence}\nAuthoritative role instructions:\n\n${sourceText.trim()}\n`
 }
 
 function sourceInstructions(role) {
@@ -55,10 +69,11 @@ function sourceInstructions(role) {
   if (role.source.type === 'workflow-inline') {
     return [
       `This role is sourced from an inline Claude Workflow stage, not a separate .claude/agents file.`,
-      `Open and follow ${role.source.path}, phase "${role.source.phase}", label "${role.source.label}".`,
+      `The parent prompt must provide the complete stage task, inputs, acceptance criteria, allowed commands, evidence format, and execution_context.`,
+      `Use the parent-provided stage task as the executable contract. Do not search for the workflow source path.`,
+      `Read ${role.source.path}, phase "${role.source.phase}", label "${role.source.label}" only when the parent explicitly asks you to inspect the source and supplies execution_context.workflowRoot.`,
       `Preserve the stage's safety rules, inputs, outputs, schema expectations, sandbox boundaries, retry/fix behavior, and fail-closed conditions.`,
-      `Do not copy or reinterpret a shorter role definition when the workflow source is available; the workflow phase prompt is the source of truth.`,
-      `If the source workflow phase cannot be read, return BLOCKED_MULTI_AGENT_UNAVAILABLE and do not perform the stage in the parent thread.`,
+      `If required execution_context paths are missing, return BLOCKED_MULTI_AGENT_UNAVAILABLE and do not perform the stage in the parent thread.`,
     ].join('\n')
   }
   throw new Error(`unsupported source type for ${role.id}: ${role.source.type}`)

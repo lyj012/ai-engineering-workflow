@@ -55,6 +55,20 @@
     "executed": true,
     "fallbackUsed": false,
     "parentAgentImplemented": false,
+    "executionContext": {
+      "workflowRoot": "<toolkit-root>",
+      "projectRoot": "examples/minimal-target",
+      "workspaceRoot": "examples/minimal-target",
+      "taskArtifactRoot": "examples/artifacts/delivery-success",
+      "changedFiles": ["app.sh", "test.sh"],
+      "workspaceBaseline": {
+        "branch": "main",
+        "head": "example-head",
+        "statusShort": "",
+        "diffStat": "",
+        "untrackedFiles": []
+      }
+    },
     "workspaceBaseline": {
       "preExistingStatusShort": "",
       "preExistingUntracked": [],

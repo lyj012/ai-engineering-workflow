@@ -61,6 +61,42 @@ coding task. The required shape is:
 
 If this `SKILL.md` conflicts with those contracts, follow the contract files and report the mismatch.
 
+## 0.1.1 Build Stable Execution Context
+
+Before spawning any subagent, build one run-scoped execution context with absolute paths:
+
+```bash
+node "<toolkit-root>/bin/execution-context.mjs" \
+  --workflow-root "<toolkit-root>" \
+  --project-root "<target-project-root>" \
+  --workspace-root "<target-project-root>" \
+  --task-artifact-root "<plan-or-delivery-run-dir>"
+```
+
+The resulting `execution_context` must be passed verbatim to every subagent prompt:
+
+```text
+execution_context:
+  workflowRoot: <absolute toolkit root>
+  projectRoot: <absolute target project root>
+  workspaceRoot: <absolute current workspace or sandbox root>
+  taskArtifactRoot: <absolute artifact directory, or empty string before it exists>
+  changedFiles: [...]
+  workspaceBaseline:
+    branch: ...
+    head: ...
+    statusShort: ...
+    diffStat: ...
+    untrackedFiles: [...]
+
+Do not infer or search for the workflow root.
+Use the exact absolute paths supplied above.
+```
+
+`WORKFLOW_ROOT`, `PROJECT_ROOT`, and `TASK_ARTIFACT_ROOT` are protocol values, not things a subagent should
+rediscover. If a subagent reports that it cannot find the workflow, treat that as missing execution context,
+not as a reason for the parent thread to implement or verify directly.
+
 ## 0.2 Mandatory Multi-Agent Preflight And Codex Subagents
 
 This workflow requires real Codex subagent threads for every semantic stage in
@@ -77,7 +113,8 @@ recommendation. It must:
 6. initialize `agent-execution.json`;
 7. record the starting workspace baseline: `git status --short`, `git diff`, untracked files, branch, and
    `HEAD`;
-8. switch the parent thread into orchestrator-only mode.
+8. attach the same `execution_context` to the preflight record;
+9. switch the parent thread into orchestrator-only mode.
 
 If preflight cannot prove these facts, stop immediately with
 `finalStatus=BLOCKED_MULTI_AGENT_UNAVAILABLE`. Do not modify business code, tests, config, docs for the
@@ -89,6 +126,8 @@ The parent Codex agent may only orchestrate:
 - run deterministic Node CLIs;
 - Spawn the mapped Codex custom agent;
 - give the subagent only the inputs allowed for its stage;
+- include the stable `execution_context` with absolute `workflowRoot`, `projectRoot`, `workspaceRoot`, and
+  `taskArtifactRoot`;
 - Wait for that agent to complete;
 - validate the returned structure/artifact;
 - record execution evidence;
@@ -155,6 +194,20 @@ Add or extend each plan/delivery manifest with:
     "executed": true,
     "fallbackUsed": false,
     "parentAgentImplemented": false,
+    "executionContext": {
+      "workflowRoot": "<absolute toolkit root>",
+      "projectRoot": "<absolute target project root>",
+      "workspaceRoot": "<absolute workspace or sandbox root>",
+      "taskArtifactRoot": "<absolute artifact directory>",
+      "changedFiles": [],
+      "workspaceBaseline": {
+        "branch": "",
+        "head": "",
+        "statusShort": "",
+        "diffStat": "",
+        "untrackedFiles": []
+      }
+    },
     "roles": [
       {
         "stage": "implementation",
@@ -302,6 +355,10 @@ After implementation:
 
 Never report passing tests or verification that did not actually run.
 
+Verifier input must be self-contained. Give the verifier the goal, acceptance criteria, changed files,
+allowed validation commands, project root or sandbox root, "do not modify code", and required evidence
+format. The verifier should not need to locate or read the workflow installation to run tests.
+
 ## 7. Publish Gate
 
 Do not commit or push unless the user explicitly asks for publishing.
@@ -324,6 +381,12 @@ Keep the final response high signal:
 4. tests/checks run and results;
 5. unverified items;
 6. known risks or user actions.
+
+When reporting untracked files, distinguish baseline facts from inference. If no starting snapshot exists,
+say that whether a file existed before the task cannot be proven from the current state alone.
+
+If a subagent initially fails due to missing `execution_context` and then succeeds after corrected context
+injection, include a short flow exception note with failure, recovery, and final impact.
 
 Do not dump process logs. Mention old compatibility only when it matters: the former
 `ai-engineering-delivery` name has been replaced by `ai-engineering-workflow`; `AIEW_HOME` remains only an

@@ -65,6 +65,7 @@ node bin/core.mjs git-guard '"git push --force origin main"'        # 4. the git
 node scripts/validate-plan-artifacts.mjs examples/artifacts/plan-ready              # 5. validate an example PLAN
 node scripts/validate-delivery-artifacts.mjs examples/artifacts/delivery-success    # 6. validate an example DELIVERY
 node bin/sandbox-prepare.mjs --src examples/minimal-target --dest /tmp/sb           # 7. prepare a clean sandbox (history + all symlinks stripped; secrets stripped by filename pattern, not a content scan)
+node bin/execution-context.mjs --workflow-root . --project-root examples/minimal-target # 8. emit absolute roots + starting workspace snapshot for subagents
 ```
 
 For complex JSON on Windows PowerShell, prefer `--input file.json` or `--stdin`, for example

@@ -25,6 +25,7 @@ core/                         # platform-neutral single source of truth (pure, u
 bin/                          # cross-platform deterministic CLIs (Codex calls these; Win/macOS/Linux)
   git-state.mjs               # read-only git state + valid commit options
   core.mjs                    # dispatcher over every core/ decision, including multi-agent-gate
+  execution-context.mjs       # absolute roots + starting workspace snapshot for every subagent
 
 codex/agents/                 # Generated Codex custom subagents (aiew_*), sourced from Claude roles
   aiew_*.toml
@@ -122,6 +123,8 @@ Verified in this repository (plain Node, runs here):
   repository instead of relying on `git diff --no-index --label`;
 - `bin/core.mjs multi-agent-gate` fails closed when mandatory Codex subagents are unavailable, incomplete,
   non-independent, unverified, or replaced by parent-thread implementation;
+- `bin/execution-context.mjs` records stable `workflowRoot` / `projectRoot` / `workspaceRoot` /
+  `taskArtifactRoot` values and the starting git snapshot before subagents run;
 - the Codex skill `.agents/skills/ai-engineering-workflow/SKILL.md` exists as a real, well-formed entry
   point (valid `name` + `description` frontmatter, the format Codex documents), and every deterministic
   command it tells Codex to run is verified to work here.

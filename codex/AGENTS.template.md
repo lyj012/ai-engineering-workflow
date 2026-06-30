@@ -53,10 +53,14 @@ is the safe first target; `deliver-from-plan` (sandbox) and `publish-delivery` (
 - Use plain Node for **all** deterministic work — never ask the model to do bookkeeping (all paths via `<toolkit-root>`):
   - decisions: `node "<toolkit-root>/bin/core.mjs" <readiness|deliver-status|publish-status|persist-outcome|repo-fingerprint|project-type|git-guard|branch-choice> --input <json-file>`
     - Windows PowerShell-safe forms: `node "<toolkit-root>\bin\core.mjs" readiness PASS`, `node "<toolkit-root>\bin\core.mjs" scope-check --input .\scope-check.json`, or `Get-Content .\scope-check.json -Raw | node "<toolkit-root>\bin\core.mjs" scope-check --stdin`
+  - execution context before spawning any subagent: `node "<toolkit-root>/bin/execution-context.mjs" --workflow-root "<toolkit-root>" --project-root <target> --workspace-root <target> --task-artifact-root <run-dir>`
   - git facts (read-only): `node "<toolkit-root>/bin/git-state.mjs" --cwd <repo> [--mode <m>] [--target-branch <b>]`
   - diff generation: `node "<toolkit-root>/bin/diff-from-sandbox.mjs" --base <target> --sandbox <sandbox> --out <delivery-dir>/changes.diff`
   - validation per stage: `node "<toolkit-root>/scripts/validate-plan-artifacts.mjs" <plan-dir>` · `validate-delivery-artifacts.mjs <delivery-dir>` · `validate-publish-record.mjs <publish-dir>`; integrity: `node "<toolkit-root>/scripts/self-check.mjs"`
 - Keep Claude-specific `Workflow`, `phase()`, `agent()`, and resume semantics out of Codex prompts.
+- Pass the same `execution_context` object to every subagent. It must contain absolute `workflowRoot`,
+  `projectRoot`, `workspaceRoot`, and `taskArtifactRoot`. Subagents must use those paths and must not infer
+  or search for the workflow root.
 - Keep Codex-specific CLI flags and sandbox behavior out of `core/`.
 - `plan-from-requirement` and `deliver-from-plan` never modify the target repository (deliver works in a
   sandbox copy and stops at a verified `changes.diff`).
@@ -87,6 +91,9 @@ irreversible) hit a human gate. Block any change outside the planned SCOPE.
 - **Never deliver on failing tests** — the DONE command must pass, and the independent verifier's tests
   (re-materialized from the test-plan, not the in-tree copy) must pass, before a delivery is anything but
   BLOCKED.
+- **Verifier inputs are self-contained** — pass goal, acceptance criteria, changed files, allowed commands,
+  project/sandbox root, no-code-modification rule, and evidence format. The verifier should not need to
+  locate the workflow installation to run tests.
 - **Customer git-branch choice before any branch op / commit / push** (see the gate above) — never
   auto-decide; offer only options the current environment actually supports.
 - **The customer project's existing conventions win** — match its code style, structure, test layout and

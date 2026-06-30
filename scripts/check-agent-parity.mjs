@@ -47,6 +47,9 @@ function main() {
       for (const needle of [`name = "${role.codexAgent}"`, 'description = ', 'developer_instructions = ', role.source.path]) {
         if (!txt.includes(needle)) errors.push(`${path.relative(root, toml)} missing ${needle}`)
       }
+      for (const needle of ['execution_context', 'workflowRoot', 'Do not infer, search for, or guess the workflow root']) {
+        if (!txt.includes(needle)) errors.push(`${path.relative(root, toml)} missing execution context contract: ${needle}`)
+      }
       if (/C:\\Users\\lenovo|D:\\JavaWeb/.test(txt)) errors.push(`${path.relative(root, toml)} contains machine absolute path`)
     }
   }
@@ -80,6 +83,8 @@ function main() {
     'BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION',
     'BLOCKED_MISSING_INDEPENDENT_VERIFIER',
     'agent-execution.json',
+    'execution_context',
+    'execution-context.mjs',
     'fallbackUsed',
   ]) {
     if (!skill.includes(needle)) errors.push(`SKILL.md missing multi-agent contract phrase: ${needle}`)
