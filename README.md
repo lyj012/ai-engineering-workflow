@@ -4,9 +4,11 @@
 
 AI engineering workflow contracts and adapters for turning a user requirement into a reviewed engineering plan, then into a sandboxed code diff with explicit verification evidence.
 
-The Claude Code Dynamic Workflows adapter is the stable implementation. The Codex adapter exposes the same
+The Claude Code Dynamic Workflows adapter is the mature implementation. The Codex adapter exposes the same
 workflow through a selectable Skill named `ai-engineering-workflow`; it shares the platform-neutral artifact
-contracts in `core/` instead of duplicating methodology, schemas, or status definitions.
+contracts in `core/` instead of duplicating methodology, schemas, or status definitions. Codex has completed
+one real Windows 10 + Codex multi-subagent end-to-end validation, including analysis, implementation,
+independent review, fix, independent verification, tests, commit, and remote push.
 
 ## What This Does
 
@@ -45,11 +47,11 @@ business logic, status, schema, or report shape is maintained twice.
 | Persist artifacts (write JSON/MD) | subagent / `bin/persist-artifacts` | `bin/persist-artifacts.mjs` | cross-platform script | ✅ tested |
 | Schema validation (plan / delivery / publish) | `self-check` | `validate-*.mjs` | `core/schemas/` | ✅ runs |
 | Git red-line guard (no force-push, …) | PreToolUse hook | `bin/core.mjs git-guard` | `core/git-guard` | ✅ runs |
-| Codex Desktop recognizes & runs the skill | n/a | `.agents/skills/ai-engineering-workflow/SKILL.md` | — | ⚠️ NOT verified (no Codex Desktop here) |
-| Codex custom subagents | `.claude/agents` + inline Workflow roles | `codex/agents/aiew_*.toml` | `codex/agent-role-map.json` + generator | ✅ generated/parity; ⚠️ runtime smoke pending |
+| Codex Desktop recognizes & runs the skill | n/a | `.agents/skills/ai-engineering-workflow/SKILL.md` | — | ✅ Windows 10 + Codex e2e run |
+| Codex custom subagents | `.claude/agents` + inline Workflow roles | `codex/agents/aiew_*.toml` | `codex/agent-role-map.json` + generator | ✅ generated/parity + real multi-agent run |
 
-`✅` = runs and is tested in this repository (`node scripts/self-check.mjs`). `⚠️` = implemented but not yet
-exercised on a real remote / on Codex Desktop / on Windows-macOS — see `codex/README.md` Verified-vs-Pending.
+`✅` = runs and is tested in this repository (`node scripts/self-check.mjs`) or has a recorded real workflow
+run. Cross-platform Codex compatibility is still being validated — see `codex/README.md` Verified-vs-Pending.
 
 ## 3-Minute Quick Experience (no Claude or Codex required)
 
@@ -214,7 +216,7 @@ These examples are static, public, and safe to inspect. They are not customer ou
 |   |-- agents/                # Role prompts used by Claude workflows
 |   |-- skills/workflow-designer
 |   `-- workflows/             # Stable Claude Dynamic Workflow scripts
-|-- codex/                     # First-phase Codex adapter design and guidance
+|-- codex/                     # Codex adapter design, guidance, and generated subagent mapping
 |-- docs/                      # Methodology and design docs
 |-- examples/                  # Minimal target project and sanitized artifacts
 |-- evidence/                  # Curated public evidence; dynamic runs are ignored
@@ -251,11 +253,17 @@ Stable:
 - Requirement-to-plan workflow.
 - Plan-to-sandboxed-diff workflow.
 - Repository analysis workflow.
+- Codex Workflow Mode with stable execution context, mandatory real subagents, independent review/fix/verify,
+  and Git delivery states (`DELIVERED`, `PUBLISH_READY`, `PUBLISHED`).
+- One Windows 10 + Codex end-to-end run covering demand analysis, implementation, independent review, fix,
+  independent verification, tests, commit, and remote push.
 - Public examples and deterministic repository self-check.
 
-Experimental:
+Still validating:
 
-- Codex `plan-from-requirement` adapter design in `codex/`; exact CLI runner remains pending local Codex smoke verification.
+- macOS / Linux Codex environments.
+- More real projects and technology stacks.
+- Compatibility across different Codex versions.
 - Methodology research and docs-generation workflows.
 - Deep verification of environment-specific shell or PowerShell behavior.
 - Any use of external Skills through `args.skillDir`.

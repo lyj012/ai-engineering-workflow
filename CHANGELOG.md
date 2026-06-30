@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [1.0.0] - 2026-07-01
 
 - Add generated Codex custom subagent adapters (`codex/agents/aiew_*.toml`) sourced from existing Claude
   role prompts and workflow inline role stages.
@@ -9,8 +9,6 @@
 - Update the Codex Skill contract so the parent agent must spawn real subagents and fail closed on missing
   agents or parent-thread role simulation.
 - Extend the installer to install `aiew_*` Codex agents under `%USERPROFILE%\.codex\agents`.
-
-## Unreleased
 
 - Test-integrity hardening (test/impl boundary hole): close the gap where the deliver engine's most consequential evidence — "did the new-feature tests actually pass?" and "were the in-tree tests tampered with?" — was produced by a subagent re-implementing a `find|sha256` recipe in prose and reporting a boolean (fakeable by a lazy/buggy agent; nothing deterministic recomputed it). Add two shared, unit-tested, cross-platform CLIs: `bin/tests-fingerprint.mjs` (one canonical, order-independent fingerprint of the tests/ tree — the freeze in MaterializeTests and the recompute in independent Verify now call the *same* algorithm, so they agree by construction) and `bin/verify-tests.mjs` (runs a test/DONE command via `spawnSync` and reports its REAL exit code as the pass/fail fact — `passed === exit 0`, no judgment). `deliver-from-plan.js` is rewired (new `binDir` arg, default `bin`): MaterializeTests freezes the fingerprint via the script; independent Verify takes `donePassedVerified` / `redGreenVerified` / `independentTestsPassed` from the runner's exit code and `testsIntact` from the same fingerprint script. The Codex adapter (no agent) calls both for true determinism; both are registered in `scripts/self-check.mjs` and `codex/pipeline.md`. **Honest limit:** the Claude Workflow surface has no filesystem access, so a subagent still transports the result — this canonicalizes the pass/fail *logic* (one tested algorithm, shared, auditable) and gives Codex full determinism, but does not cryptographically seal the Claude path; the prompt-wiring changes are syntax/parity-checked here, not exercised by a real delivery run in this environment.
 - Converge Claude-side diff generation onto the shared scripts (closes the Claude/Codex asymmetry where Windows/portability hardening only reached Codex): `deliver-from-plan.js`'s Deliver step now builds a clean baseline with `bin/sandbox-prepare.mjs` (same strip set as the sandbox, so `node_modules`/build dirs aren't miscounted as deletions) and generates the patch with `bin/diff-from-sandbox.mjs` (portable, `--binary`, no absolute-path leak) — replacing the prose `git diff --no-index --src-prefix` path the file's own comment flagged as having a compatibility gap. Same mechanism as the Codex adapter (pipeline.md 3b). Prompt-only; self-check green.
@@ -41,6 +39,6 @@
 - Add public quick start, examples, sanitized artifacts, and repository self-checks.
 - Add open-source project files for contribution and security reporting.
 
-## 1.0.0 - 2026-06-24
+## Initial Public Draft - 2026-06-24
 
 - Initial public release of the Claude Code Dynamic Workflow methodology and scripts.

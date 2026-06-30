@@ -131,16 +131,16 @@ Verified in this repository (plain Node, runs here):
 - `scripts/install-codex-skill.ps1` installs the user-level Skill entry in link or copied mode.
 - `scripts/generate-codex-agents.mjs` generates Codex `aiew_*` subagents from `codex/agent-role-map.json`
   and existing Claude role sources; `scripts/check-agent-parity.mjs` blocks drift.
+- Windows 10 + Codex completed one real multi-subagent end-to-end validation against AgentProof, covering
+  requirement analysis, repository/risk/test planning, implementation, independent review, fixer repair,
+  independent verification, local tests, exact-file commit, remote push, and remote verification.
 
-Pending local Codex verification (not yet exercised — do not claim runnable until proven):
+Still pending broader Codex verification:
 
-- that Codex Desktop actually discovers, auto-selects and runs the renamed skill end to end (no Codex
-  Desktop is available in this environment to verify recognition / `/skills` / implicit selection);
-
-- exact `codex exec` command shape, `--output-schema` sufficiency, and sandbox flags per stage;
-- an end-to-end Codex Desktop smoke test proving the installed user-level Skill appears in `/skills`;
-- a runtime smoke test showing multiple `aiew_*` threads via `/agent`;
-- that one Codex invocation can drive the full loop end to end with bounded internal stages;
-- a real Codex run that produces a plan/delivery directory passing `validate-plan-artifacts.mjs`;
-- the cross-platform CLIs are written with `spawnSync`/argv (no single-shell dep) but have only been run on
-  Linux here — Windows/macOS execution is designed, not yet verified.
+- macOS / Linux Codex environments;
+- more real projects and technology stacks beyond the AgentProof validation run;
+- compatibility across different Codex versions;
+- exact `codex exec` command shape, `--output-schema` sufficiency, and sandbox flags where CLI behavior
+  changes by Codex version;
+- additional long-running smoke runs that confirm generated `aiew_*` subagents remain discoverable through
+  `/agent` after install/upgrade cycles.
