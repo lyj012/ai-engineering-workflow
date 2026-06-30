@@ -52,6 +52,7 @@ After resolving `<toolkit-root>`, read these files before planning or coding:
 
 1. `<toolkit-root>/codex/pipeline.md`
 2. `<toolkit-root>/codex/plan-from-requirement.md`
+3. `<toolkit-root>/codex/agent-role-map.json`
 
 Treat them as the execution contract for this skill. Do not simplify the workflow into a normal direct-edit
 coding task. The required shape is:
@@ -59,6 +60,79 @@ coding task. The required shape is:
 `plan-from-requirement (read-only) -> validated plan artifacts -> deliver-from-plan (sandbox only) -> independent review/fix/verify -> validated delivery artifacts + changes.diff -> optional publish`.
 
 If this `SKILL.md` conflicts with those contracts, follow the contract files and report the mismatch.
+
+## 0.2 Mandatory Codex Subagents
+
+This workflow requires real Codex subagent threads for every semantic stage in
+`<toolkit-root>/codex/agent-role-map.json`.
+
+The parent Codex agent may only orchestrate:
+
+- load contracts and project context;
+- run deterministic Node CLIs;
+- Spawn the mapped Codex custom agent;
+- give the subagent only the inputs allowed for its stage;
+- Wait for that agent to complete;
+- validate the returned structure/artifact;
+- record execution evidence;
+- decide the next gate from deterministic status code;
+- ask the user only for clarification or git-choice gates.
+
+The parent Codex agent must not:
+
+- write business code;
+- simulate Implementer, Reviewer, Fixer, Verifier, Browser Verifier, or Publisher roles in the parent thread;
+- replace a failed subagent with parent-agent work;
+- call a second "perspective" in the same thread and claim it is independent;
+- let Implementer review or verify its own work.
+
+For every semantic stage:
+
+1. Spawn the mapped `aiew_*` Codex custom agent from `codex/agent-role-map.json`.
+2. Wait for completion.
+3. Validate the result against the stage schema or artifact contract.
+4. Record that the agent actually ran in `agent-execution.json`.
+5. Continue only when the stage gate passes.
+
+If any required Codex subagent is missing, cannot be spawned, fails to complete, or returns an invalid result,
+stop with `finalStatus=BLOCKED_MULTI_AGENT_UNAVAILABLE`. If the parent agent performs work reserved for a
+subagent, stop with `finalStatus=BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION`.
+
+Required independence:
+
+- Implementer, Reviewer, Fixer, and Verifier must be different subagent executions.
+- Fix after review must be followed by a fresh Reviewer execution or a clearly new independent reviewer thread.
+- Verifier must not trust Implementer/Fixer self-reports; it must rerun tests and deterministic checks.
+- The independent review stage and independent verification stage must be separate real subagent executions.
+- Lite / Standard / Deep review lenses must follow `codex/pipeline.md` and `deliver-from-plan` semantics.
+- Read-only reviewers may run in parallel; write agents must not concurrently modify the same sandbox.
+
+Add or extend each plan/delivery manifest with:
+
+```json
+{
+  "multiAgent": {
+    "required": true,
+    "executed": true,
+    "fallbackUsed": false,
+    "roles": [
+      {
+        "stage": "Implement",
+        "role": "implementer",
+        "codexAgent": "aiew_implementer",
+        "spawned": true,
+        "completed": true,
+        "resultValidated": true,
+        "runtimeThreadId": null
+      }
+    ]
+  }
+}
+```
+
+Also write `agent-execution.json` beside the plan/delivery artifacts. Do not fabricate thread IDs; use
+`null` when the runtime does not expose one. `fallbackUsed=true`, missing Implementer/Reviewer/Verifier
+evidence, or `multiAgent.executed !== true` is a blocking failure.
 
 ## 1. Read The Current Repository Automatically
 
@@ -86,10 +160,10 @@ delivery loop:
 4. run `validate-plan-artifacts.mjs` and compute readiness with `bin/core.mjs readiness`;
 5. continue to implementation only when readiness is `ready`;
 6. run deliver-from-plan in a sandbox copy, never by directly editing the target repository;
-7. perform independent review, fix, and independent verification as separate stages, with a bounded loop;
+7. perform independent review, fix, and independent verification as real subagent stages, with a bounded loop;
 8. produce `changes.diff`, `delivery-report.md`, and `delivery-manifest.json`;
 9. run `validate-delivery-artifacts.mjs` and the applicable deterministic delivery checks;
-10. deliver a short final report with changed files, tests, remaining risks, and unverified items.
+10. write `agent-execution.json` and deliver a short final report with changed files, tests, remaining risks, and unverified items.
 
 Do not require the user to manually start plan, delivery, review, or verification stages. The stage names are
 internal workflow structure.
@@ -166,9 +240,9 @@ Discover checks from the target repository instead of asking the user for comman
 After implementation:
 
 1. run the smallest relevant checks first, then broader checks when practical;
-2. run an independent review stage that did not author the implementation;
-3. fix discovered issues in the sandbox and rerun relevant checks;
-4. run an independent verification stage that re-materializes or re-checks the tests from `test-plan.json`;
+2. Spawn `aiew_independent_reviewer` for plan review and `aiew_independent_reviewer` per required code-review lens for delivery review;
+3. Spawn `aiew_fixer` for discovered issues in the sandbox and rerun relevant checks;
+4. Spawn `aiew_delivery_verifier` for independent verification that re-materializes or re-checks the tests from `test-plan.json`;
 5. stop after a reasonable bounded loop, normally two fix-review cycles unless a clear small fix remains;
 6. validate `delivery-manifest.json` with `validate-delivery-artifacts.mjs` before final delivery.
 

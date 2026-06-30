@@ -51,11 +51,28 @@ Each model stage is one `codex exec` run reading the previous stage's JSON and w
 JSON into a timestamped run directory; each deterministic step is a CLI above. The artifact filenames and
 the schemas they satisfy are exactly the Claude ones (`core/schemas/plan-artifacts.schema.json`).
 
+Codex model stages must run through real Codex custom subagents from `codex/agents/aiew_*.toml`, generated
+from `codex/agent-role-map.json`. The parent skill is an orchestrator only: spawn the mapped agent, wait for
+it, validate its result, and record the execution. It must not simulate semantic roles in the parent thread.
+
+Required failure modes:
+
+- required subagent missing / spawn failed / result invalid -> `BLOCKED_MULTI_AGENT_UNAVAILABLE`;
+- parent thread performs subagent-reserved code, review, fix, verify, browser verify, or publish work ->
+  `BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION`;
+- `multiAgent.required === true` and `multiAgent.executed !== true` -> BLOCKED;
+- `fallbackUsed === true` -> BLOCKED.
+
+Each plan/delivery/publish run must write `agent-execution.json` or embed the same `multiAgent` record in
+the manifest. Runtime thread IDs are recorded only when Codex exposes them; otherwise use `null`.
+
 ### 3a. plan-from-requirement (read-only — never writes the target)
 `preflight → requirement → locate → analyze → gap → plan → risk → test-plan → review → (rework) → assemble`
 - Deterministic: triage routing, `readiness` from final status (`bin/core readiness`), artifact validation,
   `run-manifest.json` assembly, `final-plan.md`. A plan is `readinessForDev=ready` only per
   `core/status.json` rules; materially-ambiguous requirements emit `NEEDS_CLARIFICATION`, not a guess.
+- Subagents: `aiew_requirement_analyst`, `aiew_repo_analyst`, `aiew_solution_architect`,
+  `aiew_risk_auditor`, `aiew_test_planner`, and `aiew_independent_reviewer`.
 
 ### 3b. deliver-from-plan (sandbox — never writes the target)
 `readiness gate → scaffold(sandbox copy, strip .git + secrets) → materialize tests(red→green) → implement →
@@ -65,6 +82,9 @@ independent review → fix → independent verify(re-materialize tests from test
   and `bin/verify-tests.mjs` (DONE / red-green / independent re-test pass-fail decided by the real exit code,
   not a model's self-report), `bin/diff-from-sandbox.mjs` for `changes.diff`, and the final `git apply --check`.
 - **Stops at a verified `changes.diff` + `delivery-manifest.json`. No commit, no push.** (Same as Claude.)
+- Subagents: `aiew_test_materializer`, `aiew_implementer`, `aiew_independent_reviewer`, `aiew_fixer`,
+  `aiew_delivery_verifier`, `aiew_browser_verifier` when applicable, and `aiew_verification_runner` for
+  safe command execution.
 
 ### 3c. publish-delivery (git — the only stage that writes git)
 **Customer git-choice gate runs FIRST, before any branch op / commit / push:**
@@ -83,6 +103,8 @@ independent review → fix → independent verify(re-materialize tests from test
    → independent remote verify → `publish-status` (`bin/core publish-status`).
 - Safety unchanged (req 10): no force-push, no secret commit, protected-branch block (main/master/release
   need explicit opt-in), high-risk-domain human gate, SCOPE-overflow block.
+- Subagents: `aiew_publisher` for isolated publish writer stages and `aiew_remote_publish_verifier` for
+  independent remote verification. Git red-line checks remain deterministic via `bin/core.mjs git-guard`.
 
 ## 4. Output parity (req 11)
 

@@ -26,6 +26,9 @@ bin/                          # cross-platform deterministic CLIs (Codex calls t
   git-state.mjs               # read-only git state + valid commit options
   core.mjs                    # dispatcher over every core/ decision
 
+codex/agents/                 # Generated Codex custom subagents (aiew_*), sourced from Claude roles
+  aiew_*.toml
+
 scripts/
   validate-plan-artifacts.mjs # schema validation
   self-check.mjs              # integrity + inline-vs-core parity + unit tests
@@ -66,8 +69,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-codex-skill.ps1
 The default install creates a user-level link under `%USERPROFILE%\.agents\skills\ai-engineering-workflow`.
 The Skill resolves the link's real target before walking upward, so it can locate the repository toolkit
 without `AIEW_HOME`. For a self-contained copied install, use `-Mode Copy -Force`. After installing, restart
-Codex or open a new thread, then open the customer project and invoke the skill. Do not require each project
-to copy the skill, generate `AGENTS.md`, or set a toolkit environment variable as normal usage.
+Codex or open a new thread, then open the customer project and invoke the skill. The same installer also
+copies generated subagents to `%USERPROFILE%\.codex\agents\aiew_*.toml`; use `/agent` when available to
+inspect runtime subagent activity. Do not require each project to copy the skill, generate `AGENTS.md`, or
+set a toolkit environment variable as normal usage.
 
 ## First Runnable Target
 
@@ -119,6 +124,8 @@ Verified in this repository (plain Node, runs here):
   point (valid `name` + `description` frontmatter, the format Codex documents), and every deterministic
   command it tells Codex to run is verified to work here.
 - `scripts/install-codex-skill.ps1` installs the user-level Skill entry in link or copied mode.
+- `scripts/generate-codex-agents.mjs` generates Codex `aiew_*` subagents from `codex/agent-role-map.json`
+  and existing Claude role sources; `scripts/check-agent-parity.mjs` blocks drift.
 
 Pending local Codex verification (not yet exercised — do not claim runnable until proven):
 
@@ -127,6 +134,7 @@ Pending local Codex verification (not yet exercised — do not claim runnable un
 
 - exact `codex exec` command shape, `--output-schema` sufficiency, and sandbox flags per stage;
 - an end-to-end Codex Desktop smoke test proving the installed user-level Skill appears in `/skills`;
+- a runtime smoke test showing multiple `aiew_*` threads via `/agent`;
 - that one Codex invocation can drive the full loop end to end with bounded internal stages;
 - a real Codex run that produces a plan/delivery directory passing `validate-plan-artifacts.mjs`;
 - the cross-platform CLIs are written with `spawnSync`/argv (no single-shell dep) but have only been run on

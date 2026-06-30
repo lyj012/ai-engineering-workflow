@@ -1,0 +1,248 @@
+{
+  "schemaVersion": "1.0",
+  "namespace": "aiew_",
+  "statusOnUnavailable": "BLOCKED_MULTI_AGENT_UNAVAILABLE",
+  "statusOnContractViolation": "BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION",
+  "roles": [
+    {
+      "id": "requirement_analyst",
+      "codexAgent": "aiew_requirement_analyst",
+      "claudeRole": "requirement-analyst",
+      "source": { "type": "claude-agent", "path": ".claude/agents/requirement-analyst.md" },
+      "description": "需求理解、清晰度判断、歧义与验收信号提取。",
+      "sandboxMode": "read-only",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "plan-from-requirement", "phases": ["Requirement", "Triage"], "input": "requirement + target + constraints", "output": "requirement.json fields and triage verdict" }
+      ]
+    },
+    {
+      "id": "repo_analyst",
+      "codexAgent": "aiew_repo_analyst",
+      "claudeRole": "repo-analyst",
+      "source": { "type": "claude-agent", "path": ".claude/agents/repo-analyst.md" },
+      "description": "只读仓库定位、组件分析、差距分析、项目风格识别。",
+      "sandboxMode": "read-only",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "plan-from-requirement", "phases": ["Preflight", "Locate", "ProjectStyle", "Analyze", "Gap"], "input": "target repo + requirement analysis", "output": "located components, current behavior, project-code-style, gap analysis" },
+        { "workflow": "analyze-repo", "phases": ["Preflight", "Understand", "Scan", "Select", "Analyze"], "input": "target repo + audit request", "output": "component analysis and evidence" }
+      ]
+    },
+    {
+      "id": "solution_architect",
+      "codexAgent": "aiew_solution_architect",
+      "claudeRole": "solution-architect",
+      "source": { "type": "claude-agent", "path": ".claude/agents/solution-architect.md" },
+      "description": "实现方案设计、返工补充和方案报告汇总。",
+      "sandboxMode": "read-only",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "plan-from-requirement", "phases": ["Plan", "Rework", "Report"], "input": "requirement + analysis + gap + risks", "output": "plan.json, final-plan.md updates" }
+      ]
+    },
+    {
+      "id": "risk_auditor",
+      "codexAgent": "aiew_risk_auditor",
+      "claudeRole": "risk-auditor",
+      "source": { "type": "claude-agent", "path": ".claude/agents/risk-auditor.md" },
+      "description": "工程风险识别：一致性、状态机、幂等并发、权限、异常和回滚。",
+      "sandboxMode": "read-only",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "plan-from-requirement", "phases": ["Risk"], "input": "plan + component analysis", "output": "risks.json" },
+        { "workflow": "analyze-repo", "phases": ["Risk"], "input": "component analysis", "output": "risk report" }
+      ]
+    },
+    {
+      "id": "test_planner",
+      "codexAgent": "aiew_test_planner",
+      "claudeRole": "test-planner",
+      "source": { "type": "claude-agent", "path": ".claude/agents/test-planner.md" },
+      "description": "测试方案与验收标准设计。",
+      "sandboxMode": "read-only",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "plan-from-requirement", "phases": ["TestPlan"], "input": "risks + plan + project commands", "output": "test-plan.json" },
+        { "workflow": "analyze-repo", "phases": ["TestPlan"], "input": "risks + scan result", "output": "test plan" }
+      ]
+    },
+    {
+      "id": "independent_reviewer",
+      "codexAgent": "aiew_independent_reviewer",
+      "claudeRole": "independent-reviewer",
+      "source": { "type": "claude-agent", "path": ".claude/agents/independent-reviewer.md" },
+      "description": "未参与产出的只读独立审查者。",
+      "sandboxMode": "read-only",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "plan-from-requirement", "phases": ["Review"], "input": "plan artifacts", "output": "review verdict and mustFix" },
+        { "workflow": "deliver-from-plan", "phases": ["Review"], "input": "sandbox diff + plan + lens", "output": "review findings by lens" }
+      ]
+    },
+    {
+      "id": "verification_runner",
+      "codexAgent": "aiew_verification_runner",
+      "claudeRole": "verification-runner",
+      "source": { "type": "claude-agent", "path": ".claude/agents/verification-runner.md" },
+      "description": "安全命令执行与真实退出码记录；不做质量评分。",
+      "sandboxMode": "workspace-write",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "deliver-from-plan", "phases": ["Verify", "CodeQuality"], "input": "approved commands + sandbox", "output": "command results and exit codes" }
+      ]
+    },
+    {
+      "id": "workflow_reviewer",
+      "codexAgent": "aiew_workflow_reviewer",
+      "claudeRole": "workflow-reviewer",
+      "source": { "type": "claude-agent", "path": ".claude/agents/workflow-reviewer.md" },
+      "description": "Workflow 成果最终质量门禁评审。",
+      "sandboxMode": "read-only",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "methodology/review", "phases": ["Review"], "input": "workflow artifacts + requirements", "output": "verdict, score, coverage, issues" }
+      ]
+    },
+    {
+      "id": "doc_writer",
+      "codexAgent": "aiew_doc_writer",
+      "claudeRole": "doc-writer",
+      "source": { "type": "claude-agent", "path": ".claude/agents/doc-writer.md" },
+      "description": "基于已核实材料写指定技术文档。",
+      "sandboxMode": "workspace-write",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "wf-docs-generation", "phases": ["WriteDocs"], "input": "doc spec + verified evidence", "output": "one assigned document" }
+      ]
+    },
+    {
+      "id": "methodology_researcher",
+      "codexAgent": "aiew_methodology_researcher",
+      "claudeRole": "methodology-researcher",
+      "source": { "type": "claude-agent", "path": ".claude/agents/methodology-researcher.md" },
+      "description": "带证据的方法论研究角色。",
+      "sandboxMode": "read-only",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "wf-methodology-research", "phases": ["Research"], "input": "research stream", "output": "structured findings with evidence" }
+      ]
+    },
+    {
+      "id": "test_materializer",
+      "codexAgent": "aiew_test_materializer",
+      "claudeRole": "deliver-from-plan:MaterializeTests",
+      "source": { "type": "workflow-inline", "path": ".claude/workflows/deliver-from-plan.js", "phase": "MaterializeTests", "label": "materialize-tests" },
+      "description": "把 test-plan 物化为可运行测试，并完成先红后绿和测试指纹冻结。",
+      "sandboxMode": "workspace-write",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "deliver-from-plan", "phases": ["MaterializeTests"], "input": "plan test-plan.json + sandbox", "output": "tests/, DONE command, red/green evidence, tests fingerprint" }
+      ]
+    },
+    {
+      "id": "implementer",
+      "codexAgent": "aiew_implementer",
+      "claudeRole": "deliver-from-plan:Implement",
+      "source": { "type": "workflow-inline", "path": ".claude/workflows/deliver-from-plan.js", "phase": "Implement", "label": "implement#<round>" },
+      "description": "只在沙箱内按方案实现 SCOPE 内代码并跑 DONE。",
+      "sandboxMode": "workspace-write",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "deliver-from-plan", "phases": ["Implement"], "input": "sandbox + coding workflow + plan + tests", "output": "implementation result, filesChanged, DONE result" }
+      ]
+    },
+    {
+      "id": "fixer",
+      "codexAgent": "aiew_fixer",
+      "claudeRole": "deliver-from-plan:Fix",
+      "source": { "type": "workflow-inline", "path": ".claude/workflows/deliver-from-plan.js", "phase": "Fix", "label": "fix#<round>" },
+      "description": "全新实例，按独立审查意见在沙箱内做最小修复，禁止改测试。",
+      "sandboxMode": "workspace-write",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "deliver-from-plan", "phases": ["Fix"], "input": "review findings + sandbox", "output": "fix result, addressed/stillOpen, DONE result" }
+      ]
+    },
+    {
+      "id": "delivery_verifier",
+      "codexAgent": "aiew_delivery_verifier",
+      "claudeRole": "deliver-from-plan:Verify",
+      "source": { "type": "workflow-inline", "path": ".claude/workflows/deliver-from-plan.js", "phase": "Verify", "label": "independent-verify" },
+      "description": "独立验证者：复跑 DONE、重物化复测、检查测试完整性、SCOPE 和 diff。",
+      "sandboxMode": "workspace-write",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "deliver-from-plan", "phases": ["Verify"], "input": "sandbox + frozen tests + test-plan", "output": "verification facts and changedFilesVerified" }
+      ]
+    },
+    {
+      "id": "browser_verifier",
+      "codexAgent": "aiew_browser_verifier",
+      "claudeRole": "deliver-from-plan:BrowserVerify",
+      "source": { "type": "workflow-inline", "path": ".claude/workflows/deliver-from-plan.js", "phase": "BrowserVerify", "label": "browser-verify" },
+      "description": "Web 项目真实浏览器验证者；无能力时如实跳过，不伪造通过。",
+      "sandboxMode": "workspace-write",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "optionalWhen": "project is non-web or browser capability unavailable",
+      "workflows": [
+        { "workflow": "deliver-from-plan", "phases": ["BrowserVerify"], "input": "sandbox + requirement + project type", "output": "browser verification status and evidence" }
+      ]
+    },
+    {
+      "id": "publisher",
+      "codexAgent": "aiew_publisher",
+      "claudeRole": "publish-delivery:Clone/Branch/Apply/Commit/Push",
+      "source": { "type": "workflow-inline", "path": ".claude/workflows/publish-delivery.js", "phase": "Clone/Branch/Apply/Commit/Push", "label": "publish writer stages" },
+      "description": "隔离发布工作副本内执行 clone/branch/apply/commit/push；保持 Git 安全门禁。",
+      "sandboxMode": "workspace-write",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "publish-delivery", "phases": ["Clone", "Branch", "Apply", "Commit", "Push"], "input": "validated delivery + customer git choice", "output": "commit/push facts" }
+      ]
+    },
+    {
+      "id": "remote_publish_verifier",
+      "codexAgent": "aiew_remote_publish_verifier",
+      "claudeRole": "publish-delivery:RemoteVerify",
+      "source": { "type": "workflow-inline", "path": ".claude/workflows/publish-delivery.js", "phase": "RemoteVerify", "label": "remote-verify" },
+      "description": "发布后独立只读核验远程 SHA、提交文件、禁入文件和工作树状态。",
+      "sandboxMode": "read-only",
+      "semantic": true,
+      "independentThreadRequired": true,
+      "workflows": [
+        { "workflow": "publish-delivery", "phases": ["RemoteVerify"], "input": "publish facts", "output": "remote verification facts" }
+      ]
+    }
+  ],
+  "mechanicalOperations": [
+    { "name": "readiness", "implementation": "bin/core.mjs readiness" },
+    { "name": "deliver-status", "implementation": "bin/core.mjs deliver-status" },
+    { "name": "publish-status", "implementation": "bin/core.mjs publish-status" },
+    { "name": "repo fingerprint", "implementation": "bin/core.mjs repo-fingerprint" },
+    { "name": "tests fingerprint", "implementation": "bin/tests-fingerprint.mjs" },
+    { "name": "test exit code", "implementation": "bin/verify-tests.mjs" },
+    { "name": "scope check", "implementation": "bin/core.mjs scope-check" },
+    { "name": "branch choice", "implementation": "bin/git-state.mjs + core/branch-choice.mjs" },
+    { "name": "git guard", "implementation": "bin/core.mjs git-guard" },
+    { "name": "diff generation", "implementation": "bin/diff-from-sandbox.mjs" },
+    { "name": "artifact validation", "implementation": "scripts/validate-*.mjs" },
+    { "name": "remote publish recompute", "implementation": "core/verify-remote-publish.mjs" }
+  ]
+}

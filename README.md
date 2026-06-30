@@ -46,6 +46,7 @@ business logic, status, schema, or report shape is maintained twice.
 | Schema validation (plan / delivery / publish) | `self-check` | `validate-*.mjs` | `core/schemas/` | ✅ runs |
 | Git red-line guard (no force-push, …) | PreToolUse hook | `bin/core.mjs git-guard` | `core/git-guard` | ✅ runs |
 | Codex Desktop recognizes & runs the skill | n/a | `.agents/skills/ai-engineering-workflow/SKILL.md` | — | ⚠️ NOT verified (no Codex Desktop here) |
+| Codex custom subagents | `.claude/agents` + inline Workflow roles | `codex/agents/aiew_*.toml` | `codex/agent-role-map.json` + generator | ✅ generated/parity; ⚠️ runtime smoke pending |
 
 `✅` = runs and is tested in this repository (`node scripts/self-check.mjs`). `⚠️` = implemented but not yet
 exercised on a real remote / on Codex Desktop / on Windows-macOS — see `codex/README.md` Verified-vs-Pending.
@@ -135,6 +136,15 @@ The Skill resolves the toolkit from its own installed location, reads the curren
 and treats `AGENTS.md` as optional project guidance when present. Users do not need to set `AIEW_HOME`,
 provide an absolute toolkit path, generate a project `AGENTS.md`, or manually run each stage. `AIEW_HOME`
 remains only as a backwards-compatible override for older setups.
+
+The installer also installs generated Codex subagents under:
+
+```text
+%USERPROFILE%\.codex\agents\aiew_*.toml
+```
+
+These are generated from existing Claude roles and workflow inline prompts. Use `/agent` in Codex, when
+available, to confirm real subagent threads during a smoke run.
 
 ## Claude Quick Start
 

@@ -105,6 +105,9 @@ const required = [
   'SECURITY.md',
   'scripts/self-check.mjs',
   'scripts/install-codex-skill.ps1',
+  'scripts/generate-codex-agents.mjs',
+  'scripts/check-agent-parity.mjs',
+  'codex/agent-role-map.json',
   'examples/minimal-target/app.sh',
   'examples/minimal-target/README.md',
   'examples/requirements/simple-greeting.md',
@@ -444,6 +447,10 @@ for (const failure of runTestsFingerprintTests()) errors.push(failure)
 for (const failure of runVerifyTestsTests()) errors.push(failure)
 // rm-path safety guard for the destructive bin scripts (refuse src/root/overlap/symlink delete targets)
 for (const failure of runSafeRmTests()) errors.push(failure)
+{
+  const r = run(process.execPath, ['scripts/check-agent-parity.mjs'])
+  if (!r.ok) errors.push(`agent parity check failed: ${(r.stderr || r.stdout).trim()}`)
+}
 // branch-choice resolution: behaviour-diff the publish workflow inline copy against core/branch-choice.mjs
 // (whole-object deep compare over fixed vectors) so Claude and the Codex adapter cannot drift apart.
 {

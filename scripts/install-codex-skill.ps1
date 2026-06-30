@@ -4,6 +4,8 @@ param(
 
   [string]$CodexSkillsDir = (Join-Path $HOME '.agents\skills'),
 
+  [string]$CodexAgentsDir = (Join-Path $HOME '.codex\agents'),
+
   [switch]$Force
 )
 
@@ -13,8 +15,10 @@ $skillName = 'ai-engineering-workflow'
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $sourceSkillDir = Join-Path $repoRoot '.agents\skills\ai-engineering-workflow'
 $sourceSkillFile = Join-Path $sourceSkillDir 'SKILL.md'
+$sourceAgentsDir = Join-Path $repoRoot 'codex\agents'
 $destinationRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($CodexSkillsDir)
 $destination = Join-Path $destinationRoot $skillName
+$agentsDestinationRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($CodexAgentsDir)
 
 function Assert-Exists([string]$path, [string]$label) {
   if (-not (Test-Path -LiteralPath $path)) {
@@ -32,11 +36,15 @@ function Assert-SafeDestination([string]$skillsRoot, [string]$target) {
 }
 
 Assert-Exists $sourceSkillFile 'Codex skill entry'
-foreach ($dir in @('bin', 'core', 'scripts', 'codex')) {
+foreach ($dir in @('bin', 'core', 'scripts', 'codex', 'codex\agents')) {
   Assert-Exists (Join-Path $repoRoot $dir) "Toolkit directory $dir"
 }
 
+& node (Join-Path $repoRoot 'scripts\generate-codex-agents.mjs') | Out-Host
+& node (Join-Path $repoRoot 'scripts\check-agent-parity.mjs') | Out-Host
+
 New-Item -ItemType Directory -Force -Path $destinationRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $agentsDestinationRoot | Out-Null
 
 if (Test-Path -LiteralPath $destination) {
   if (-not $Force) {
@@ -73,6 +81,24 @@ if ($Mode -eq 'Link') {
 $installedSkill = Join-Path $destination 'SKILL.md'
 Assert-Exists $installedSkill 'Installed Codex skill'
 
+if ($Force) {
+  Get-ChildItem -LiteralPath $agentsDestinationRoot -Filter 'aiew_*.toml' -File -ErrorAction SilentlyContinue |
+    Remove-Item -Force
+}
+
+$installedAgents = @()
+foreach ($agentFile in Get-ChildItem -LiteralPath $sourceAgentsDir -Filter 'aiew_*.toml' -File) {
+  $agentDest = Join-Path $agentsDestinationRoot $agentFile.Name
+  if ((Test-Path -LiteralPath $agentDest) -and -not $Force) {
+    throw "Codex agent already exists: $agentDest. Re-run with -Force to replace aiew_ namespace agents only."
+  }
+  Copy-Item -LiteralPath $agentFile.FullName -Destination $agentDest -Force
+  Assert-Exists $agentDest "Installed Codex agent $($agentFile.Name)"
+  $installedAgents += $agentFile.Name
+}
+
 Write-Host "Installed $skillName to $destination"
+Write-Host "Installed Codex agents to $agentsDestinationRoot"
+foreach ($agent in $installedAgents) { Write-Host " - $agent" }
 Write-Host "Mode: $Mode"
-Write-Host "Restart Codex or open a new thread, then use /skills -> $skillName or `$ai-engineering-workflow."
+Write-Host "Restart Codex or open a new thread, then use /skills -> $skillName or `$ai-engineering-workflow. Use /agent to inspect subagent activity when supported."
