@@ -68,6 +68,9 @@ Ambiguous requirements that materially affect API shape, data shape, security, p
 
 ## Codex Capability Assumptions
 
-The design assumes Codex can be invoked non-interactively through `codex exec` and can read repository guidance from a local `AGENTS.md` generated from `AGENTS.template.md`. Exact command flags should be treated as pending until a local smoke run proves them in this repository.
+The design assumes Codex can be invoked non-interactively through `codex exec` and that the
+`ai-engineering-workflow` Skill can read repository guidance files when present. A local `AGENTS.md` may add
+project rules, but it is not required to start the workflow. Exact command flags should be treated as pending
+until a local smoke run proves them in this repository.
 
 Do not claim the Codex adapter is runnable until a real command has produced a plan artifact directory and the validation command passes.

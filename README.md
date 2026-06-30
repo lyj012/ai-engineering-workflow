@@ -4,7 +4,9 @@
 
 AI engineering workflow contracts and adapters for turning a user requirement into a reviewed engineering plan, then into a sandboxed code diff with explicit verification evidence.
 
-The Claude Code Dynamic Workflows adapter is the stable implementation. The Codex adapter is being added in phases and shares the platform-neutral artifact contracts in `core/` instead of duplicating methodology, schemas, or status definitions.
+The Claude Code Dynamic Workflows adapter is the stable implementation. The Codex adapter exposes the same
+workflow through a selectable Skill named `ai-engineering-workflow`; it shares the platform-neutral artifact
+contracts in `core/` instead of duplicating methodology, schemas, or status definitions.
 
 ## What This Does
 
@@ -43,7 +45,7 @@ business logic, status, schema, or report shape is maintained twice.
 | Persist artifacts (write JSON/MD) | subagent / `bin/persist-artifacts` | `bin/persist-artifacts.mjs` | cross-platform script | ✅ tested |
 | Schema validation (plan / delivery / publish) | `self-check` | `validate-*.mjs` | `core/schemas/` | ✅ runs |
 | Git red-line guard (no force-push, …) | PreToolUse hook | `bin/core.mjs git-guard` | `core/git-guard` | ✅ runs |
-| Codex Desktop recognizes & runs the skill | n/a | `.agents/skills/.../SKILL.md` | — | ⚠️ NOT verified (no Codex Desktop here) |
+| Codex Desktop recognizes & runs the skill | n/a | `.agents/skills/ai-engineering-workflow/SKILL.md` | — | ⚠️ NOT verified (no Codex Desktop here) |
 
 `✅` = runs and is tested in this repository (`node scripts/self-check.mjs`). `⚠️` = implemented but not yet
 exercised on a real remote / on Codex Desktop / on Windows-macOS — see `codex/README.md` Verified-vs-Pending.
@@ -64,17 +66,16 @@ node scripts/validate-delivery-artifacts.mjs examples/artifacts/delivery-success
 node bin/sandbox-prepare.mjs --src examples/minimal-target --dest /tmp/sb           # 7. prepare a clean sandbox (history + all symlinks stripped; secrets stripped by filename pattern, not a content scan)
 ```
 
-On Windows use `$env:AIEW_HOME` (PowerShell) or `%AIEW_HOME%` (CMD) for paths; the Node scripts themselves
-are cross-platform. For complex JSON on Windows PowerShell, prefer `--input file.json` or `--stdin`, for
-example `node bin/core.mjs scope-check --input .\scope-check.json`; this avoids PowerShell 5 quote
-stripping. To then run the *model* stages, use the Claude `Workflow` quick start below, or open the project
-in Codex and invoke the `ai-engineering-delivery` skill.
+For complex JSON on Windows PowerShell, prefer `--input file.json` or `--stdin`, for example
+`node bin/core.mjs scope-check --input .\scope-check.json`; this avoids PowerShell 5 quote stripping. To then
+run the *model* stages, use the Claude `Workflow` quick start below, or open a target project in Codex and
+invoke the `ai-engineering-workflow` skill from `/skills` or by typing `$ai-engineering-workflow`.
 
 ## Requirements
 
 - Claude Code with Dynamic Workflows enabled for the stable `.claude/` workflows.
 - A visible `Workflow` tool in the Claude Code session for Claude runs.
-- OpenAI Codex CLI for the experimental `codex/` adapter.
+- OpenAI Codex Desktop or CLI for the `ai-engineering-workflow` Skill adapter.
 - `bash`, `git`, and common POSIX tools for the demo and self-check scripts.
 - `pwsh` only when you want to verify PowerShell-specific behavior. If `pwsh` is missing, PowerShell checks must be marked as open manual verification.
 
@@ -92,7 +93,34 @@ node --version
 
 To confirm `Workflow` is available, start Claude Code from this repository root and check that the tool picker or tool list includes `Workflow`. If it does not, this repository can still be read as methodology, but the runnable workflows cannot be executed in that session.
 
-## Quick Start
+## Codex Quick Start
+
+Install or expose this repository's Skill once so Codex can discover:
+
+```text
+.agents/skills/ai-engineering-workflow/SKILL.md
+```
+
+Then open any target project in Codex and use either:
+
+```text
+/skills -> ai-engineering-workflow
+```
+
+or:
+
+```text
+$ai-engineering-workflow
+
+<your development requirement>
+```
+
+The Skill resolves the toolkit from its own installed location, reads the current repository automatically,
+and treats `AGENTS.md` as optional project guidance when present. Users do not need to set `AIEW_HOME`,
+provide an absolute toolkit path, generate a project `AGENTS.md`, or manually run each stage. `AIEW_HOME`
+remains only as a backwards-compatible override for older setups.
+
+## Claude Quick Start
 
 Clone into any directory name. The repository does not need to be named `workflow`.
 
@@ -118,7 +146,8 @@ Workflow({ scriptPath: "<repo>/.claude/workflows/deliver-from-plan.js", args: {
 }})
 ```
 
-The complete sample input and sanitized output shape are in `examples/`. See `codex/` for the first-phase Codex plan adapter design.
+The complete sample input and sanitized output shape are in `examples/`. See `codex/` for the Codex Skill
+adapter design.
 
 ## Examples
 

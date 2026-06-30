@@ -34,7 +34,7 @@ scripts/
   plan-from-requirement.js deliver-from-plan.js publish-delivery.js auto-deliver.js analyze-repo.js
 
 .agents/skills/               # Codex skill entry point (scanned by Codex CLI / IDE / Desktop app)
-  ai-engineering-delivery/SKILL.md
+  ai-engineering-workflow/SKILL.md
 
 codex/                        # Codex execution shape (no Claude runtime)
   AGENTS.template.md pipeline.md plan-from-requirement.md
@@ -46,17 +46,20 @@ without any Claude `Workflow`/`agent()` runtime. `.claude/` inlines the same `co
 
 ## Skill Entry Point (Codex)
 
-`.agents/skills/ai-engineering-delivery/SKILL.md` is the recognizable Codex entry. Codex (CLI / IDE / app)
-scans `.agents/skills` from the working directory up to the repo root, so a user runs the whole flow via
-`/skills`, `$ai-engineering-delivery`, or implicit selection by the skill's `description` — **without being
-told to read any markdown file** (req: start from the skill, not a manual file pointer). The skill only
-**orchestrates**: it delegates every status / gate / git / validation decision to `bin/` + `scripts/` (no
-logic copied into the prompt) and obeys the hard constraints in `AGENTS.md` (from `AGENTS.template.md`).
+`.agents/skills/ai-engineering-workflow/SKILL.md` is the recognizable Codex entry. Codex (CLI / IDE / app)
+scans installed/user skills and workspace `.agents/skills`, so a user starts the whole flow via `/skills`
+and choosing `ai-engineering-workflow`, by typing `$ai-engineering-workflow`, or by implicit selection from
+the skill's `description`.
 
-To use it in a customer project: make the toolkit reachable (clone this repo and point `AIEW_HOME` at it),
-make the skill discoverable from that project (copy `.agents/skills/ai-engineering-delivery/` into the
-customer repo or a parent dir Codex scans, or install it at the Codex user level), and generate the project
-`AGENTS.md` from `codex/AGENTS.template.md`.
+The skill is the workflow launcher, not just a guidance document. It resolves this toolkit from its own
+installed location by walking upward until `core/`, `bin/`, `scripts/`, and `codex/` are found. `AIEW_HOME`
+is retained only as an optional compatibility override. A target project's `AGENTS.md` is optional project
+guidance: read it when present, continue when absent. The skill delegates every status / gate / git /
+validation decision to `bin/` + `scripts/` (no logic copied into the prompt).
+
+To use it in a customer project, install or expose this repository's `ai-engineering-workflow` skill once,
+then open the customer project and invoke the skill. Do not require each project to copy the skill, generate
+`AGENTS.md`, or set a toolkit environment variable as normal usage.
 
 ## First Runnable Target
 
@@ -104,17 +107,18 @@ Verified in this repository (plain Node, runs here):
 - Windows-safe core input forms are supported: `readiness PASS`, `--input file.json`, and `--stdin`;
 - `bin/diff-from-sandbox.mjs` generates applyable `changes.diff` files through an isolated baseline git
   repository instead of relying on `git diff --no-index --label`;
-- the Codex skill `.agents/skills/ai-engineering-delivery/SKILL.md` exists as a real, well-formed entry
+- the Codex skill `.agents/skills/ai-engineering-workflow/SKILL.md` exists as a real, well-formed entry
   point (valid `name` + `description` frontmatter, the format Codex documents), and every deterministic
   command it tells Codex to run is verified to work here.
 
 Pending local Codex verification (not yet exercised — do not claim runnable until proven):
 
-- that Codex Desktop actually discovers, auto-selects and runs the skill end to end (no Codex Desktop is
-  available in this environment to verify recognition / `/skills` / implicit selection);
+- that Codex Desktop actually discovers, auto-selects and runs the renamed skill end to end (no Codex
+  Desktop is available in this environment to verify recognition / `/skills` / implicit selection);
 
 - exact `codex exec` command shape, `--output-schema` sufficiency, and sandbox flags per stage;
-- that Codex Desktop reads a root `AGENTS.md` and one-invocation-per-stage is workable end to end;
+- exact user-level Skill installation mechanics for the current Codex Desktop build;
+- that one Codex invocation can drive the full loop end to end with bounded internal stages;
 - a real Codex run that produces a plan/delivery directory passing `validate-plan-artifacts.mjs`;
 - the cross-platform CLIs are written with `spawnSync`/argv (no single-shell dep) but have only been run on
   Linux here — Windows/macOS execution is designed, not yet verified.

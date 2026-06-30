@@ -103,16 +103,17 @@ commands run on Windows and macOS.
 ## 6. How a user starts it in Codex Desktop
 
 1. Open the customer project in Codex Desktop.
-2. Generate a local `AGENTS.md` from `codex/AGENTS.template.md` at the repo root (kept out of git).
-3. Ask Codex to run the workflow for a requirement; Codex follows `AGENTS.md`, runs each model stage with
-   `codex exec` and each deterministic step with the `bin/` / `scripts/` CLIs above, persisting artifacts.
+2. Select `/skills -> ai-engineering-workflow`, or type `$ai-engineering-workflow`.
+3. Enter the development requirement. The skill reads the current repository, optional project guidance such
+   as `AGENTS.md` when present, and runs the analysis → plan → code → test → review → fix → verify loop.
 4. At the publish stage Codex stops at the **git-choice gate** and asks you to pick a valid strategy before
    any commit/push.
 
 ## 7. Capability assumptions — verify locally before claiming runnable (req 14)
 
-Assumed and **pending a local Codex smoke run**: that Codex Desktop reads a root `AGENTS.md`; the exact
-`codex exec` invocation and output-schema/sandbox flags; that one Codex invocation per stage is workable.
+Assumed and **pending a local Codex smoke run**: exact Codex Desktop user-level skill discovery behavior; the
+exact `codex exec` invocation and output-schema/sandbox flags; that one skill invocation can drive the
+complete loop end to end with bounded internal stages.
 Per the repo discipline: **do not claim the Codex adapter is runnable until a real Codex run has produced a
 plan/delivery directory that passes the matching validator** (`validate-plan-artifacts.mjs` for plan,
 `validate-delivery-artifacts.mjs` for delivery, `validate-publish-record.mjs` for the publish record) **+

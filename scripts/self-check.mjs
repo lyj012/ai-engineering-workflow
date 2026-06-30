@@ -521,12 +521,18 @@ if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guar
 // Codex skill entry point: the recognizable `.agents/skills` entry must exist with valid name+description
 // frontmatter (the format Codex documents), so the entry can't silently break or disappear.
 {
-  const skillFile = '.agents/skills/ai-engineering-delivery/SKILL.md'
+  const skillFile = '.agents/skills/ai-engineering-workflow/SKILL.md'
+  const oldSkillFile = '.agents/skills/ai-engineering-delivery/SKILL.md'
+  if (exists(oldSkillFile)) errors.push(`old Codex skill entry must not be kept in parallel: ${oldSkillFile}`)
   if (!exists(skillFile)) errors.push(`missing Codex skill entry ${skillFile}`)
   else {
     const fm = /^---\n([\s\S]*?)\n---/.exec(read(skillFile))
     if (!fm) errors.push(`${skillFile} is missing YAML frontmatter`)
     else if (!/(^|\n)name:\s*\S/.test(fm[1]) || !/(^|\n)description:\s*\S/.test(fm[1])) errors.push(`${skillFile} frontmatter must include name and description`)
+    else {
+      if (!/(^|\n)name:\s*ai-engineering-workflow\s*(\n|$)/.test(fm[1])) errors.push(`${skillFile} frontmatter name must be ai-engineering-workflow`)
+      if (!/autonomous software engineering workflow/i.test(fm[1])) errors.push(`${skillFile} description must identify the skill as an autonomous engineering workflow`)
+    }
   }
   // the skill + AGENTS template orchestrate these shared assets — none may be a dangling reference
   for (const ref of [
