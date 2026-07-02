@@ -51,6 +51,27 @@ export function runValidateDeliveryArtifactsTests() {
     if (!bad.errors.some(error => error.includes('git apply --check failed'))) {
       failures.push('validator --base should reject malformed diff via git apply --check')
     }
+
+    const drift = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    drift.filesChanged = ['delete.txt']
+    drift.statusInput.diff.filesChanged = ['delete.txt']
+    drift.browserVerify = { applicable: true, finalBrowserStatus: 'failed', openItems: [] }
+    drift.statusInput.browser = { applicable: true, status: 'passed', openItems: [] }
+    fs.writeFileSync(manifestPath, JSON.stringify(drift, null, 2), 'utf8')
+    fs.writeFileSync(path.join(work, 'changes.diff'), [
+      'diff --git a/delete.txt b/delete.txt',
+      'deleted file mode 100644',
+      'index 01310a4..0000000',
+      '--- a/delete.txt',
+      '+++ /dev/null',
+      '@@ -1 +0,0 @@',
+      '-remove me',
+      '',
+    ].join('\n'), 'utf8')
+    const driftResult = validateDeliveryArtifactsDetailed(work)
+    if (!driftResult.errors.some(error => error.includes('browserVerify: statusInput mismatch'))) {
+      failures.push('validator should reject top-level browserVerify/statusInput drift')
+    }
   } catch (e) {
     failures.push(`validate-delivery-artifacts test threw: ${e.message}`)
   } finally {

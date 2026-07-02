@@ -31,7 +31,7 @@ function publishStatusInput(record) {
     awaitingUserConfirmation: record.awaitingUserConfirmation,
     highRiskBlocked: record.highRiskBlocked,
     deliverableStatus: record.deliverableStatus,
-    deliveryPersistVerified: record.deliveryPersistVerified,
+    deliveryPersistVerified: record.deliveryPersistFieldPresent === true ? record.deliveryPersistVerified : undefined,
     allowLegacyUnverifiedDelivery: record.allowLegacyUnverifiedDelivery,
     diffApplyCheckPassed: record.diffApplyCheckPassed,
     branchAllowed: record.branch && record.branch.allowed,

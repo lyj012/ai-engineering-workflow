@@ -248,6 +248,14 @@ node "<toolkit-root>/bin/core.mjs" multi-agent-gate --input <agent-execution-or-
 node "<toolkit-root>/bin/core.mjs" deliver-status --input <delivery-status-json>
 ```
 
+The exact JSON object passed to `deliver-status` is a delivery artifact. Persist it verbatim as
+`delivery-manifest.json.statusInput`, alongside the top-level mirror fields used for human-readable
+reporting. Do not reconstruct `statusInput` from prose or final report sections after the fact. Delivery
+validation recomputes `computeDeliverStatus(manifest.statusInput)` and rejects drift between `statusInput`
+and top-level fields such as `independentVerify`, `reviewVerdicts`, `scopeViolations`,
+`filesReconcileIssues`, `filesChanged`, `diffApplyCheckPassed`, `deliveryPersisted`, `browserVerify`, and
+`codeQuality`.
+
 Successful delivery requires all of the following to be true:
 
 `multiAgent.required === true`, `multiAgent.preflightPassed === true`, `multiAgent.executed === true`,

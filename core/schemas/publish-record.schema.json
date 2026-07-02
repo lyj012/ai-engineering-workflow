@@ -3,7 +3,7 @@
   "title": "final-delivery.json — publish-delivery output record (shared by Claude + Codex)",
   "type": "object",
   "required": [
-    "schemaVersion", "workflow", "finalStatus", "dryRun", "gitPolicy",
+    "schemaVersion", "workflow", "finalStatus", "dryRun", "deliveryPersistFieldPresent", "gitPolicy",
     "branchChoiceProvided", "highRiskBlocked", "filesChanged", "openItems",
     "failedStages", "rollback"
   ],
@@ -14,6 +14,7 @@
     "finalStatus": { "type": "string", "enum": ["PUBLISH_READY", "PUBLISH_NEEDS_CHOICE", "PUBLISH_BLOCKED", "PUBLISH_DRYRUN", "PUBLISH_UNVERIFIED", "PUBLISHED", "PUBLISHED_WITH_OPEN_ITEMS"] },
     "dryRun": { "type": "boolean" },
     "deliverableStatus": { "type": "string", "enum": ["DELIVERED", "DELIVERED_WITH_OPEN_ITEMS", "BLOCKED", "FAILED"] },
+    "deliveryPersistFieldPresent": { "type": "boolean" },
     "deliveryPersistVerified": { "type": "boolean" },
     "diffApplyCheckPassed": { "type": "boolean" },
     "gitPolicy": {

@@ -32,6 +32,71 @@ function sameSet(a, b) {
   return left.length === right.length && left.every((value, index) => value === right[index])
 }
 
+function sameJson(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
+function comparableMultiAgent(value) {
+  if (!value || typeof value !== 'object') return value
+  return {
+    required: value.required,
+    requiredStages: value.requiredStages || [],
+    preflightPassed: value.preflightPassed,
+    executed: value.executed,
+    fallbackUsed: value.fallbackUsed,
+    parentAgent: value.parentAgent,
+    roles: value.roles || [],
+  }
+}
+
+function statusInputConsistencyErrors(manifest, dir) {
+  const errors = []
+  const s = manifest.statusInput && typeof manifest.statusInput === 'object' && !Array.isArray(manifest.statusInput)
+    ? manifest.statusInput
+    : null
+  if (!s) return errors
+  const mismatch = (name, a, b) => { if (!sameJson(a, b)) errors.push(`${dir}.${name}: statusInput mismatch`) }
+  const verify = manifest.independentVerify || {}
+  const statusVerify = s.verify || {}
+  mismatch('independentVerify.donePassedVerified', verify.donePassedVerified, statusVerify.donePassedVerified)
+  mismatch('independentVerify.scopeCleanVerified', verify.scopeCleanVerified, statusVerify.scopeCleanVerified)
+  mismatch('independentVerify.redGreenVerified', verify.redGreenVerified, statusVerify.redGreenVerified)
+  mismatch('independentVerify.testsIntact', verify.testsIntact, statusVerify.testsIntact)
+  mismatch('multiAgent', comparableMultiAgent(manifest.multiAgent), comparableMultiAgent(s.multiAgent))
+  mismatch('implementPassed', manifest.implementPassed, s.implementPassed)
+  mismatch('scopeViolations', manifest.scopeViolations || [], s.scopeViolations || [])
+  mismatch('filesReconcileIssues', manifest.filesReconcileIssues || [], s.filesReconcileIssues || [])
+  mismatch('diffApplyCheckPassed', manifest.diffApplyCheckPassed, s.diff && s.diff.diffApplyCheckPassed)
+  mismatch('filesChanged', manifest.filesChanged || [], s.diff ? (s.diff.filesChanged || []) : [])
+  mismatch('deliveryPersisted', manifest.deliveryPersisted, s.deliveryPersisted)
+  const statusReviews = Array.isArray(s.reviews) ? s.reviews : []
+  const topReviews = (manifest.reviewVerdicts || []).map(r => ({ verdict: r.verdict, blocking: r.blocking }))
+  mismatch('reviewVerdicts', topReviews, statusReviews)
+  if (manifest.browserVerify) {
+    const browserStatus = manifest.browserVerify.finalBrowserStatus === 'skipped-no-capability'
+      ? 'skipped'
+      : manifest.browserVerify.finalBrowserStatus
+    const topBrowser = {
+      applicable: manifest.browserVerify.applicable,
+      status: browserStatus,
+      openItems: manifest.browserVerify.openItems || [],
+    }
+    mismatch('browserVerify', topBrowser, s.browser)
+  }
+  if (manifest.codeQuality) {
+    const staticChecks = Array.isArray(manifest.codeQuality.staticChecks) ? manifest.codeQuality.staticChecks : []
+    const topCodeQuality = {
+      applicable: manifest.codeQuality.applicable,
+      compileRan: manifest.codeQuality.compileRan,
+      compilePassed: manifest.codeQuality.compilePassed,
+      hasP0Failure: staticChecks.some(c => c && c.status === 'failed' && c.severity === 'P0'),
+      openItems: manifest.codeQuality.openItems || [],
+    }
+    mismatch('codeQuality', topCodeQuality, s.codeQuality)
+  }
+  return errors
+}
+
 function deliverStatusInput(manifest) {
   if (manifest.statusInput && typeof manifest.statusInput === 'object' && !Array.isArray(manifest.statusInput)) {
     return manifest.statusInput
@@ -92,6 +157,7 @@ export function validateDeliveryArtifactsDetailed(deliveryDir, options = {}) {
     }
     errors = strictErrors
   }
+  errors.push(...statusInputConsistencyErrors(manifest, dir))
   if (manifest.finalStatus === 'DELIVERED' || manifest.finalStatus === 'DELIVERED_WITH_OPEN_ITEMS') {
     const gate = computeMultiAgentGate({ multiAgent: manifest.multiAgent, requireMultiAgent: true })
     if (!gate.ok) errors.push(`${dir}.multiAgent: ${gate.finalStatus} ${gate.reasonCode || ''}`.trim())

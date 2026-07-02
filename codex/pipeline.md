@@ -49,7 +49,7 @@ Codex calls `core/` through the CLIs below. One source of truth.
 | `node bin/verify-tests.mjs --cwd <d> -- <cmd...>` | run a test/DONE command; report its REAL exit code as the pass/fail fact (no model judgment) | `spawnSync` exit code |
 | `node bin/persist-artifacts.mjs --out-base <d> [--ts <s>]` | write a JSON/MD bundle to a fresh timestamped run dir | (cross-platform fs) |
 | `node scripts/validate-plan-artifacts.mjs <plan-dir>` | validate PLAN artifacts (requirement/plan/risks/test-plan) | `core/schemas/plan-artifacts.schema.json` |
-| `node scripts/validate-delivery-artifacts.mjs <delivery-dir>` | validate the DELIVERY contract (delivery-manifest.json) | `core/schemas/delivery-artifacts.schema.json` |
+| `node scripts/validate-delivery-artifacts.mjs <delivery-dir> [--base <clean-base-dir>]` | validate the DELIVERY contract (delivery-manifest.json); `--base` independently re-runs `git apply --check` | `core/schemas/delivery-artifacts.schema.json` |
 | `node scripts/validate-publish-record.mjs <publish-dir>` | validate the PUBLISH record (final-delivery.json) | `core/schemas/publish-record.schema.json` |
 
 All read JSON in / print JSON out, run on bare `node` (Windows / macOS / Linux), and contain no author paths.
@@ -139,6 +139,12 @@ independent review → fix → independent verify(re-materialize tests from test
   (`bin/core deliver-status`), `bin/tests-fingerprint.mjs` (freeze + verify-time tests-integrity fingerprint)
   and `bin/verify-tests.mjs` (DONE / red-green / independent re-test pass-fail decided by the real exit code,
   not a model's self-report), `bin/diff-from-sandbox.mjs` for `changes.diff`, and the final `git apply --check`.
+- The exact normalized object passed to `bin/core.mjs deliver-status` must be persisted verbatim as
+  `delivery-manifest.json.statusInput`. The manifest must also carry the top-level mirror fields
+  (`independentVerify`, `reviewVerdicts`, `scopeViolations`, `filesReconcileIssues`, `filesChanged`,
+  `diffApplyCheckPassed`, `deliveryPersisted`, `browserVerify`, `codeQuality`) so
+  `scripts/validate-delivery-artifacts.mjs` can recompute the status and reject any top-level/statusInput
+  drift. Do not reconstruct this object later from report prose.
 - **Stops at a verified `changes.diff` + `delivery-manifest.json`. No commit, no push.** (Same as Claude.)
 - Subagents: `aiew_test_materializer`, `aiew_implementer`, `aiew_independent_reviewer`, `aiew_fixer`,
   `aiew_delivery_verifier`, `aiew_browser_verifier` when applicable, and `aiew_verification_runner` for

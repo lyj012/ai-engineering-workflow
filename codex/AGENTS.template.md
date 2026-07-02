@@ -59,7 +59,8 @@ is the safe first target; `deliver-from-plan` (sandbox) and `publish-delivery` (
   - execution context before spawning any subagent: `node "<toolkit-root>/bin/execution-context.mjs" --workflow-root "<toolkit-root>" --project-root <target> --workspace-root <target> --task-artifact-root <run-dir>`
   - git facts (read-only): `node "<toolkit-root>/bin/git-state.mjs" --cwd <repo> [--mode <m>] [--target-branch <b>]`
   - diff generation: `node "<toolkit-root>/bin/diff-from-sandbox.mjs" --base <target> --sandbox <sandbox> --out <delivery-dir>/changes.diff`
-  - validation per stage: `node "<toolkit-root>/scripts/validate-plan-artifacts.mjs" <plan-dir>` · `validate-delivery-artifacts.mjs <delivery-dir>` · `validate-publish-record.mjs <publish-dir>`; integrity: `node "<toolkit-root>/scripts/self-check.mjs"`
+  - validation per stage: `node "<toolkit-root>/scripts/validate-plan-artifacts.mjs" <plan-dir>` · `validate-delivery-artifacts.mjs <delivery-dir> [--base <clean-base-dir>]` · `validate-publish-record.mjs <publish-dir>`; integrity: `node "<toolkit-root>/scripts/self-check.mjs"`
+  - the exact normalized JSON passed to `deliver-status` must be persisted as `delivery-manifest.json.statusInput`; the manifest must also keep top-level mirror fields so validation can recompute status and reject drift.
 - Keep Claude-specific `Workflow`, `phase()`, `agent()`, and resume semantics out of Codex prompts.
 - Pass the same `execution_context` object to every subagent. It must contain absolute `workflowRoot`,
   `projectRoot`, `workspaceRoot`, and `taskArtifactRoot`. Subagents must use those paths and must not infer

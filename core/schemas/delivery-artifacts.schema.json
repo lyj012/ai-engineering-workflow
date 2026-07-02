@@ -86,7 +86,28 @@
         "contentConsistent": { "type": "boolean" }
       }
     },
-    "statusInput": { "type": "object" },
+    "statusInput": {
+      "type": "object",
+      "required": ["multiAgent", "implementPassed", "verify", "reviews", "reviewIncomplete", "scopeViolations", "filesReconcileIssues", "diff"],
+      "properties": {
+        "priorStatus": { "type": "string" },
+        "multiAgent": { "type": "object" },
+        "implementPassed": { "type": "boolean" },
+        "verify": { "type": "object" },
+        "reviews": { "type": "array" },
+        "reviewIncomplete": { "type": "boolean" },
+        "materializeOpenLoopItems": { "type": "array", "items": { "type": "string" } },
+        "gateOpenQuestions": { "type": "array", "items": { "type": "string" } },
+        "gateRemainingGaps": { "type": "array", "items": { "type": "string" } },
+        "staleSeverity": {},
+        "scopeViolations": { "type": "array", "items": { "type": "string" } },
+        "filesReconcileIssues": { "type": "array", "items": { "type": "string" } },
+        "diff": { "type": "object" },
+        "browser": {},
+        "codeQuality": {},
+        "deliveryPersisted": { "type": "boolean" }
+      }
+    },
     "multiAgent": {
       "type": "object",
       "required": ["required", "preflightPassed", "executed", "fallbackUsed", "parentAgentImplemented", "roles"],

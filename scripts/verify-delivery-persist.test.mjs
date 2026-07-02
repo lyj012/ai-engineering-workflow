@@ -18,13 +18,57 @@ export function runVerifyDeliveryPersistTests() {
   try {
     work = fs.mkdtempSync(path.join(os.tmpdir(), 'delivery-persist-'))
     const manifestPath = path.join(work, 'delivery-manifest.json')
+    const multiAgent = {
+      required: true,
+      requiredStages: ['analysis', 'implementation', 'review', 'verification'],
+      preflightPassed: true,
+      executed: true,
+      fallbackUsed: false,
+      parentAgentImplemented: false,
+      roles: [
+        { stage: 'analysis', role: 'repo', codexAgent: 'aiew_repo_analyst', spawned: true, completed: true, resultValidated: true, threadId: 'a' },
+        { stage: 'implementation', role: 'impl', codexAgent: 'aiew_implementer', spawned: true, completed: true, resultValidated: true, threadId: 'i' },
+        { stage: 'review', role: 'review', codexAgent: 'aiew_independent_reviewer', spawned: true, completed: true, resultValidated: true, threadId: 'r' },
+        { stage: 'verification', role: 'verify', codexAgent: 'aiew_delivery_verifier', spawned: true, completed: true, resultValidated: true, threadId: 'v' },
+      ],
+    }
+    const statusInput = {
+      priorStatus: 'FAILED',
+      multiAgent,
+      implementPassed: true,
+      verify: { donePassedVerified: true, scopeCleanVerified: true, redGreenVerified: true, testsIntact: true },
+      reviews: [{ verdict: 'ok', blocking: false }],
+      reviewIncomplete: false,
+      materializeOpenLoopItems: [],
+      gateOpenQuestions: [],
+      gateRemainingGaps: [],
+      staleSeverity: null,
+      scopeViolations: [],
+      filesReconcileIssues: [],
+      diff: { ok: true, diffApplyCheckPassed: true, filesChanged: ['app.sh'] },
+      browser: null,
+      codeQuality: null,
+      deliveryPersisted: false,
+    }
     const manifest = {
+      schemaVersion: '1.0',
+      workflow: 'deliver-from-plan',
       finalStatus: 'DELIVERED',
+      gate: { finalStatus: 'PASS', readinessForDev: 'ready' },
+      scope: { scopeFiles: ['app.sh'] },
+      implementPassed: true,
       filesChanged: ['app.sh'],
+      scopeViolations: [],
+      filesReconcileIssues: [],
+      reviewVerdicts: [{ lens: 'correctness', verdict: 'ok', blocking: false }],
+      reviewComplete: true,
+      independentVerify: { donePassedVerified: true, scopeCleanVerified: true, redGreenVerified: true, testsIntact: true },
+      multiAgent,
       diffApplyCheckPassed: true,
       deliveryPersisted: false,
-      statusInput: { deliveryPersisted: false },
+      statusInput,
       persistVerification: { ok: false },
+      openItems: [],
     }
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
 
@@ -42,6 +86,22 @@ export function runVerifyDeliveryPersistTests() {
     if (!marked.persistVerification || marked.persistVerification.ok !== true) failures.push('persistVerification.ok was not atomically written to disk')
     if (marked.deliveryPersisted !== true) failures.push('deliveryPersisted=true was not atomically written to disk')
     if (!marked.statusInput || marked.statusInput.deliveryPersisted !== true) failures.push('statusInput.deliveryPersisted=true was not atomically written to disk')
+
+    const tampered = { ...marked, independentVerify: { ...marked.independentVerify, testsIntact: false }, deliveryPersisted: false, persistVerification: { ok: false } }
+    tampered.statusInput = { ...marked.statusInput, deliveryPersisted: false }
+    fs.writeFileSync(manifestPath, JSON.stringify(tampered, null, 2), 'utf8')
+    const badSemantic = run([
+      '--dir', work,
+      '--final-status', 'DELIVERED',
+      '--files-changed-json', JSON.stringify(['app.sh']),
+      '--diff-apply-check-passed', 'true',
+      '--mark-ok',
+    ])
+    if (badSemantic.status === 0) failures.push('persist verification accepted manifest with independentVerify/statusInput drift')
+    else {
+      const badReport = JSON.parse(badSemantic.stdout)
+      if (badReport.semanticOk !== false) failures.push('tampered manifest should report semanticOk=false')
+    }
 
     const mismatch = run([
       '--dir', work,

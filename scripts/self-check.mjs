@@ -674,6 +674,27 @@ errors.push(...validatePublishRecord(path.join(root, 'examples/artifacts/publish
   }
 }
 
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aiew-publish-legacy-persist-'))
+  try {
+    const src = path.join(root, 'examples/artifacts/publish-record-example')
+    fs.cpSync(src, tmp, { recursive: true })
+    const recordPath = path.join(tmp, 'final-delivery.json')
+    const record = JSON.parse(fs.readFileSync(recordPath, 'utf8'))
+    record.finalStatus = 'PUBLISHED'
+    record.deliveryPersistFieldPresent = false
+    record.deliveryPersistVerified = true
+    record.allowLegacyUnverifiedDelivery = false
+    fs.writeFileSync(recordPath, JSON.stringify(record, null, 2), 'utf8')
+    const negative = validatePublishRecord(tmp)
+    if (!negative.some(error => error.includes('recomputed PUBLISH_BLOCKED'))) {
+      errors.push('publish validation must reject records that fake deliveryPersistVerified=true while deliveryPersistFieldPresent=false')
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+}
+
 for (const file of ['app.sh', 'test.sh']) {
   const plan = JSON.parse(read('examples/artifacts/plan-ready/plan.json'))
   if (!plan.affected.files.includes(file)) errors.push(`plan.json affected.files missing ${file}`)
