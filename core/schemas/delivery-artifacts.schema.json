@@ -6,7 +6,7 @@
     "schemaVersion", "workflow", "finalStatus", "gate", "scope",
     "filesChanged", "scopeViolations", "reviewVerdicts", "reviewComplete",
     "independentVerify", "filesReconcileIssues", "diffApplyCheckPassed",
-    "deliveryPersisted", "persistVerification", "openItems", "multiAgent"
+    "deliveryPersisted", "persistVerification", "statusInput", "openItems", "multiAgent"
   ],
   "properties": {
     "schemaVersion": { "type": "string" },
@@ -86,6 +86,7 @@
         "contentConsistent": { "type": "boolean" }
       }
     },
+    "statusInput": { "type": "object" },
     "multiAgent": {
       "type": "object",
       "required": ["required", "preflightPassed", "executed", "fallbackUsed", "parentAgentImplemented", "roles"],
@@ -139,7 +140,7 @@
             "properties": {
               "stage": { "type": "string", "enum": ["analysis", "requirement-analysis", "repository-analysis", "risk-analysis", "solution-design", "test-planning", "test-materialization", "implementation", "review", "fix", "verification", "browser-verification", "publish", "remote-publish-verification"] },
               "role": { "type": "string" },
-              "codexAgent": { "type": "string", "pattern": "^aiew_[a-z0-9_]+$" },
+              "codexAgent": { "type": "string", "pattern": "^(aiew_[a-z0-9_]+|claude:agent)$" },
               "spawned": { "type": "boolean" },
               "completed": { "type": "boolean" },
               "resultValidated": { "type": "boolean" },

@@ -43,6 +43,7 @@ import { runTestsFingerprintTests } from './tests-fingerprint.test.mjs'
 import { runVerifyTestsTests } from './verify-tests.test.mjs'
 import { runSafeRmTests } from './safe-rm.test.mjs'
 import { runVerifyDeliveryPersistTests } from './verify-delivery-persist.test.mjs'
+import { runValidateDeliveryArtifactsTests } from './validate-delivery-artifacts.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -453,6 +454,7 @@ for (const failure of runVerifyTestsTests()) errors.push(failure)
 // rm-path safety guard for the destructive bin scripts (refuse src/root/overlap/symlink delete targets)
 for (const failure of runSafeRmTests()) errors.push(failure)
 for (const failure of runVerifyDeliveryPersistTests()) errors.push(failure)
+for (const failure of runValidateDeliveryArtifactsTests()) errors.push(failure)
 {
   const r = run(process.execPath, ['scripts/check-agent-parity.mjs'])
   if (!r.ok) errors.push(`agent parity check failed: ${(r.stderr || r.stdout).trim()}`)
@@ -613,11 +615,13 @@ errors.push(...validatePublishRecord(path.join(root, 'examples/artifacts/publish
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
     delete manifest.deliveryPersisted
     delete manifest.persistVerification
+    delete manifest.statusInput
     delete manifest.filesReconcileIssues
     delete manifest.independentVerify.testsIntact
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
     const strict = validateDeliveryArtifacts(tmp)
     if (!strict.some(error => error.includes('.persistVerification: missing required property')) ||
+        !strict.some(error => error.includes('.statusInput: missing required property')) ||
         !strict.some(error => error.includes('.independentVerify.testsIntact: missing required property'))) {
       errors.push('strict delivery validation must reject legacy manifests missing new verification fields')
     }

@@ -22,6 +22,8 @@ export function runVerifyDeliveryPersistTests() {
       finalStatus: 'DELIVERED',
       filesChanged: ['app.sh'],
       diffApplyCheckPassed: true,
+      deliveryPersisted: false,
+      statusInput: { deliveryPersisted: false },
       persistVerification: { ok: false },
     }
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
@@ -35,9 +37,11 @@ export function runVerifyDeliveryPersistTests() {
     ])
     if (ok.status !== 0) { failures.push(`verify-delivery-persist exited ${ok.status}: ${ok.stderr || ok.stdout}`); return failures }
     const report = JSON.parse(ok.stdout)
-    if (report.ok !== true || report.persistOkOnDisk !== true) failures.push('persist verification did not report ok=true on disk')
+    if (report.ok !== true || report.persistOkOnDisk !== true || report.deliveryPersistedOnDisk !== true) failures.push('persist verification did not report ok=true and deliveryPersisted=true on disk')
     const marked = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
     if (!marked.persistVerification || marked.persistVerification.ok !== true) failures.push('persistVerification.ok was not atomically written to disk')
+    if (marked.deliveryPersisted !== true) failures.push('deliveryPersisted=true was not atomically written to disk')
+    if (!marked.statusInput || marked.statusInput.deliveryPersisted !== true) failures.push('statusInput.deliveryPersisted=true was not atomically written to disk')
 
     const mismatch = run([
       '--dir', work,

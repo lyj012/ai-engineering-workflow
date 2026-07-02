@@ -834,6 +834,7 @@ const deliverManifest = {
   filesChanged: verifiedChanged || (diffResult ? diffResult.filesChanged : []) || (implement ? implement.filesChanged : []),
   filesChangedSource: verifiedChanged ? 'independent-verify' : ((diffResult && diffResult.filesChanged.length) ? 'diff' : 'implementer-self-report'),
   scopeViolations: implement ? implement.scopeViolations : [],
+  filesReconcileIssues: filesReconcile.issues,
   redLine: implement && implement.redLineHit ? implement.redLineReason : null,
   diffApplyCheckPassed: diffResult ? diffResult.diffApplyCheckPassed : null,
   diffStat: diffResult ? diffResult.diffStat : null,
@@ -861,6 +862,8 @@ const deliverManifest = {
   ],
   stalePlan: staleCmp ? { severity: staleCmp.severity, changed: staleCmp.changed, reasons: staleCmp.reasons } : null,
   filesReconcile: { consistent: filesReconcile.consistent, issues: filesReconcile.issues },
+  statusInput,
+  deliveryPersisted: false,
   failedStages,
 }
 // R2-1 持久化协议：persistVerification.ok 初始【必须 false】；仅在"完整写入→独立回读→内容深度一致"后才原子升 true，
@@ -901,26 +904,25 @@ if (scaffold && scaffold.runDir) {
   const writeVerified = !!(deliver && deliver.ok) && readbackOk && diskFinalStatus === finalStatus && contentConsistent
 
   if (writeVerified) {
-    // R2-1 步骤②：原子替换为 ok=true（先写同目录临时文件再 mv 覆盖）
-    deliverManifest.persistVerification.ok = true
-    const flip = await callAgent(
-      `把 ${scaffold.runDir}/delivery-manifest.json 用【原子方式】覆盖写为下面的规范 JSON：先写同目录临时文件（如 delivery-manifest.json.tmp）、写完后 mv 覆盖目标，不改其它文件。回报 ok/absOutDir/written/note。\ndelivery-manifest.json:\n${JSON.stringify(deliverManifest)}`,
-      { schema: DELIVER_SCHEMA, label: 'deliver-persist-confirm', phase: 'Deliver', agentType: AT, effort: 'low' }, true)
-    // R2-1 步骤③：替换后再次回读，确认磁盘 persistVerification.ok===true 真已落地
+    // R2-1 步骤②+③：确定性脚本原子标记 persistVerification.ok=true + deliveryPersisted=true，再回读确认。
     let confirmOk = false
-    if (flip.ok) {
-      const rb2 = await callAgent(
-        `你是独立校验者。调用确定性脚本确认 persistVerification.ok 已落盘：\`node ${binDir}/verify-delivery-persist.mjs --dir "${scaffold.runDir}" --final-status "${finalStatus}" --files-changed-json '${JSON.stringify(deliverManifest.filesChanged)}' --diff-apply-check-passed ${String(deliverManifest.diffApplyCheckPassed)}\`。只根据脚本 JSON 输出回报：readbackOk=report.persistOkOnDisk、diskFinalStatus=report.diskFinalStatus、contentConsistent=report.contentConsistent、note=report.note。绝不自行判断或修改文件。`,
-        { schema: DELIVER_READBACK_SCHEMA, label: 'deliver-persist-confirm-readback', phase: 'Deliver', agentType: AT, effort: 'low' }, true)
-      confirmOk = rb2.ok && rb2.value.readbackOk === true && (rb2.value.diskFinalStatus || '') === finalStatus
+    const rb2 = await callAgent(
+      `你是独立校验者。调用确定性脚本原子标记并确认 persistVerification.ok/deliveryPersisted 已落盘：\`node ${binDir}/verify-delivery-persist.mjs --dir "${scaffold.runDir}" --final-status "${finalStatus}" --files-changed-json '${JSON.stringify(deliverManifest.filesChanged)}' --diff-apply-check-passed ${String(deliverManifest.diffApplyCheckPassed)} --mark-ok\`。只根据脚本 JSON 输出回报：readbackOk=(report.persistOkOnDisk && report.deliveryPersistedOnDisk)、diskFinalStatus=report.diskFinalStatus、contentConsistent=report.contentConsistent、note=report.note。绝不自行判断或修改文件。`,
+      { schema: DELIVER_READBACK_SCHEMA, label: 'deliver-persist-confirm-readback', phase: 'Deliver', agentType: AT, effort: 'low' }, true)
+    confirmOk = rb2.ok && rb2.value.readbackOk === true && (rb2.value.diskFinalStatus || '') === finalStatus
+    if (!confirmOk) { deliverManifest.persistVerification.ok = false; deliverManifest.deliveryPersisted = false; if (deliverManifest.statusInput) deliverManifest.statusInput.deliveryPersisted = false; note('⚠ persistVerification 升 ok=true 后再回读未确认（写入/再读未坐实），退回 ok=false。') }
+    else {
+      deliverManifest.persistVerification.ok = true
+      deliverManifest.deliveryPersisted = true
+      if (deliverManifest.statusInput) deliverManifest.statusInput.deliveryPersisted = true
+      note('persistVerification：完整写入→独立回读→内容一致→原子升 ok=true→再回读确认，已坐实。')
     }
-    if (!confirmOk) { deliverManifest.persistVerification.ok = false; note('⚠ persistVerification 升 ok=true 后再回读未确认（写入/再读未坐实），退回 ok=false。') }
-    else note('persistVerification：完整写入→独立回读→内容一致→原子升 ok=true→再回读确认，已坐实。')
   }
 
   // 最终 persisted = 磁盘 persistVerification.ok 确为 true
   const persisted = deliverManifest.persistVerification.ok === true
   deliverManifest.deliveryPersisted = persisted
+  if (deliverManifest.statusInput) deliverManifest.statusInput.deliveryPersisted = persisted
   if (!halted && statusInput && !persisted) {
     const sr2 = computeDeliverStatus({ ...statusInput, deliveryPersisted: false })
     if (sr2.finalStatus !== finalStatus) { note(`⚠ 交付落盘/回读未坐实（写验=${writeVerified}，磁盘=${diskFinalStatus || '缺失'}），最终状态由 ${finalStatus} 降级为 ${sr2.finalStatus}。`); finalStatus = sr2.finalStatus; deliverManifest.finalStatus = finalStatus }

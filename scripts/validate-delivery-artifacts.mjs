@@ -4,6 +4,7 @@
 // so the validation logic is shared, not duplicated. Imported by scripts/self-check.mjs.
 import fs from 'node:fs'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { validate } from './validate-plan-artifacts.mjs'
 import { computeMultiAgentGate } from '../core/multi-agent-status.mjs'
@@ -19,8 +20,8 @@ function sortedUnique(values) {
 function diffFiles(diffText) {
   const files = []
   for (const line of diffText.split(/\r?\n/)) {
-    const match = line.match(/^\+\+\+ b\/(.+)$/)
-    if (match && match[1] !== '/dev/null') files.push(match[1])
+    const match = line.match(/^diff --git a\/(.+) b\/(.+)$/)
+    if (match) files.push(match[2] || match[1])
   }
   return sortedUnique(files)
 }
@@ -32,6 +33,9 @@ function sameSet(a, b) {
 }
 
 function deliverStatusInput(manifest) {
+  if (manifest.statusInput && typeof manifest.statusInput === 'object' && !Array.isArray(manifest.statusInput)) {
+    return manifest.statusInput
+  }
   const verify = manifest.independentVerify || null
   return {
     priorStatus: 'FAILED',
@@ -61,7 +65,17 @@ function isLegacyMissingError(error) {
   return error.includes('.filesReconcileIssues: missing required property') ||
     error.includes('.deliveryPersisted: missing required property') ||
     error.includes('.persistVerification: missing required property') ||
+    error.includes('.statusInput: missing required property') ||
     error.includes('.independentVerify.testsIntact: missing required property')
+}
+
+function applyCheck(baseDir, diffPath) {
+  const result = spawnSync('git', ['apply', '--check', diffPath], { cwd: baseDir, encoding: 'utf8' })
+  return {
+    ok: result.status === 0,
+    status: typeof result.status === 'number' ? result.status : 1,
+    output: ((result.stdout || '') + (result.stderr || '')).slice(-4000),
+  }
 }
 
 export function validateDeliveryArtifactsDetailed(deliveryDir, options = {}) {
@@ -106,6 +120,12 @@ export function validateDeliveryArtifactsDetailed(deliveryDir, options = {}) {
     if (!sameSet(filesFromDiff, manifest.filesChanged || [])) {
       errors.push(`${dir}.filesChanged: changes.diff files ${JSON.stringify(filesFromDiff)} do not match manifest filesChanged ${JSON.stringify(sortedUnique(manifest.filesChanged || []))}`)
     }
+    if (options.baseDir) {
+      const check = applyCheck(path.resolve(options.baseDir), diffPath)
+      if (!check.ok) errors.push(`${dir}/changes.diff: git apply --check failed against ${path.resolve(options.baseDir)} (exit ${check.status}): ${check.output}`)
+    } else if (manifest.finalStatus === 'DELIVERED' || manifest.finalStatus === 'DELIVERED_WITH_OPEN_ITEMS') {
+      warnings.push(`${dir}/changes.diff: apply check not independently reverified (pass --base <clean-base-dir> to re-run git apply --check)`)
+    }
   } else if (manifest.finalStatus === 'DELIVERED' || manifest.finalStatus === 'DELIVERED_WITH_OPEN_ITEMS') {
     errors.push(`${dir}/changes.diff: missing for delivered manifest`)
   }
@@ -118,13 +138,19 @@ export function validateDeliveryArtifacts(deliveryDir, options = {}) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2)
-  const deliveryDir = args.find(arg => arg !== '--allow-legacy')
+  let deliveryDir = null
+  let baseDir = null
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--allow-legacy') continue
+    if (args[i] === '--base') { baseDir = args[++i]; continue }
+    if (!deliveryDir) deliveryDir = args[i]
+  }
   const allowLegacy = args.includes('--allow-legacy')
   if (!deliveryDir) {
-    console.error('usage: node scripts/validate-delivery-artifacts.mjs <delivery-dir> [--allow-legacy]')
+    console.error('usage: node scripts/validate-delivery-artifacts.mjs <delivery-dir> [--allow-legacy] [--base <clean-base-dir>]')
     process.exit(2)
   }
-  const result = validateDeliveryArtifactsDetailed(deliveryDir, { allowLegacy })
+  const result = validateDeliveryArtifactsDetailed(deliveryDir, { allowLegacy, baseDir })
   const errors = result.errors
   if (errors.length) {
     console.error('DELIVERY ARTIFACT VALIDATION FAILED')
@@ -136,5 +162,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     for (const warning of result.warnings) console.log(`WARN: ${warning}`)
   } else {
     console.log('DELIVERY ARTIFACT VALIDATION PASSED')
+    for (const warning of result.warnings) console.log(`WARN: ${warning}`)
   }
 }

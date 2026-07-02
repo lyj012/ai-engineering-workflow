@@ -85,6 +85,7 @@ function main() {
   report.readbackOk = report.parseOk && report.contentConsistent
 
   if (report.readbackOk && a.markOk) {
+    manifest.deliveryPersisted = true
     manifest.persistVerification = {
       ...(manifest.persistVerification || {}),
       ok: true,
@@ -92,14 +93,19 @@ function main() {
       diskFinalStatus: manifest.finalStatus,
       contentConsistent: true,
     }
+    if (manifest.statusInput && typeof manifest.statusInput === 'object') {
+      manifest.statusInput.deliveryPersisted = true
+    }
     writeAtomic(manifestPath, manifest)
     const confirmed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
     report.persistOkOnDisk = confirmed.persistVerification && confirmed.persistVerification.ok === true
+    report.deliveryPersistedOnDisk = confirmed.deliveryPersisted === true
   } else {
     report.persistOkOnDisk = manifest.persistVerification && manifest.persistVerification.ok === true
+    report.deliveryPersistedOnDisk = manifest.deliveryPersisted === true
   }
 
-  report.ok = report.readbackOk && (a.markOk ? report.persistOkOnDisk : true)
+  report.ok = report.readbackOk && (a.markOk ? (report.persistOkOnDisk && report.deliveryPersistedOnDisk) : true)
   report.note = report.ok ? 'delivery manifest readback verified' : 'delivery manifest readback did not match expected content'
   process.stdout.write(JSON.stringify(report, null, 2) + '\n')
   process.exit(report.ok ? 0 : 1)
