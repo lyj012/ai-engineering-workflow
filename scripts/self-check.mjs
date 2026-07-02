@@ -4,7 +4,7 @@ import path from 'node:path'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { validatePlanArtifacts } from './validate-plan-artifacts.mjs'
-import { validateDeliveryArtifacts } from './validate-delivery-artifacts.mjs'
+import { validateDeliveryArtifacts, validateDeliveryArtifactsDetailed } from './validate-delivery-artifacts.mjs'
 import { validatePublishRecord } from './validate-publish-record.mjs'
 import { computeDeliverStatus as coreComputeDeliverStatus } from '../core/deliver-status.mjs'
 import { runDeliverStatusTests, CASES as DELIVER_STATUS_CASES } from './deliver-status.test.mjs'
@@ -42,6 +42,7 @@ import { runUtf8ShellTests } from './utf8-shell.test.mjs'
 import { runTestsFingerprintTests } from './tests-fingerprint.test.mjs'
 import { runVerifyTestsTests } from './verify-tests.test.mjs'
 import { runSafeRmTests } from './safe-rm.test.mjs'
+import { runVerifyDeliveryPersistTests } from './verify-delivery-persist.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -451,6 +452,7 @@ for (const failure of runTestsFingerprintTests()) errors.push(failure)
 for (const failure of runVerifyTestsTests()) errors.push(failure)
 // rm-path safety guard for the destructive bin scripts (refuse src/root/overlap/symlink delete targets)
 for (const failure of runSafeRmTests()) errors.push(failure)
+for (const failure of runVerifyDeliveryPersistTests()) errors.push(failure)
 {
   const r = run(process.execPath, ['scripts/check-agent-parity.mjs'])
   if (!r.ok) errors.push(`agent parity check failed: ${(r.stderr || r.stdout).trim()}`)
@@ -566,7 +568,7 @@ if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guar
   // the skill + AGENTS template orchestrate these shared assets — none may be a dangling reference
   for (const ref of [
     'bin/core.mjs', 'bin/git-state.mjs', 'bin/execution-context.mjs', 'bin/sandbox-prepare.mjs', 'bin/persist-artifacts.mjs', 'core/scope-check.mjs',
-    'bin/diff-from-sandbox.mjs', 'bin/tests-fingerprint.mjs', 'bin/verify-tests.mjs', 'bin/safe-rm.mjs', 'bin/inspect-remote.mjs',
+    'bin/diff-from-sandbox.mjs', 'bin/tests-fingerprint.mjs', 'bin/verify-tests.mjs', 'bin/verify-delivery-persist.mjs', 'bin/safe-rm.mjs', 'bin/inspect-remote.mjs',
     'scripts/validate-plan-artifacts.mjs', 'scripts/validate-delivery-artifacts.mjs', 'scripts/validate-publish-record.mjs',
     'core/schemas/plan-artifacts.schema.json', 'core/schemas/delivery-artifacts.schema.json', 'core/schemas/publish-record.schema.json',
     'codex/pipeline.md', 'codex/plan-from-requirement.md', 'codex/AGENTS.template.md',
@@ -596,6 +598,32 @@ errors.push(...validatePublishRecord(path.join(root, 'examples/artifacts/publish
     const negative = validateDeliveryArtifacts(tmp)
     if (!negative.some(error => error.includes('BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION'))) {
       errors.push('delivery validation must reject DELIVERED manifests with multiAgent.required=false')
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+}
+
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aiew-delivery-legacy-'))
+  try {
+    const src = path.join(root, 'examples/artifacts/delivery-success')
+    fs.cpSync(src, tmp, { recursive: true })
+    const manifestPath = path.join(tmp, 'delivery-manifest.json')
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    delete manifest.deliveryPersisted
+    delete manifest.persistVerification
+    delete manifest.filesReconcileIssues
+    delete manifest.independentVerify.testsIntact
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
+    const strict = validateDeliveryArtifacts(tmp)
+    if (!strict.some(error => error.includes('.persistVerification: missing required property')) ||
+        !strict.some(error => error.includes('.independentVerify.testsIntact: missing required property'))) {
+      errors.push('strict delivery validation must reject legacy manifests missing new verification fields')
+    }
+    const legacy = validateDeliveryArtifactsDetailed(tmp, { allowLegacy: true })
+    if (legacy.errors.length !== 0 || legacy.legacyUnverified !== true) {
+      errors.push('allowLegacy delivery validation must read legacy manifests as legacyUnverified without strict errors')
     }
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true })
@@ -703,5 +731,5 @@ if (errors.length) {
 
 console.log('SELF-CHECK PASSED')
 console.log(`tracked files scanned: ${trackedFiles.length}`)
-console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, multi-agent gate, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, remote-url credential mask+parity, remote-verify recompute+parity, scope-check logic, execution-context, sandbox+persist scripts, core CLI input modes, portable diff generation, UTF-8 shell materialization, tests-fingerprint, deterministic test-runner, rm-path guards, codex skill entry + refs, delivery+publish schema, example schemas, example test, diff apply')
+console.log('checks: paths/secrets, Workflow JS syntax, inline-vs-core schema parity, multi-agent gate, deliver-status logic+parity, publish-status logic+parity, readiness logic+parity, persist-outcome logic+parity, repo-fingerprint logic+parity, changed-files logic+parity, plan-patch logic+parity, git red-line guard, project-type logic+parity, git-state logic, branch-choice logic+parity, remote-url credential mask+parity, remote-verify recompute+parity, scope-check logic, execution-context, sandbox+persist scripts, delivery persist verification, core CLI input modes, portable diff generation, UTF-8 shell materialization, tests-fingerprint, deterministic test-runner, rm-path guards, codex skill entry + refs, delivery+publish schema, example schemas, example test, diff apply')
 for (const w of warn) console.log(`WARN: ${w}`)

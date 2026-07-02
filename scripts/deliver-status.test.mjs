@@ -30,7 +30,7 @@ const clean = {
     },
   },
   implementPassed: true,
-  verify: { donePassedVerified: true, scopeCleanVerified: true, redGreenVerified: true },
+  verify: { donePassedVerified: true, scopeCleanVerified: true, redGreenVerified: true, testsIntact: true },
   reviews: [{ verdict: 'ok', blocking: false }],
   reviewIncomplete: false,
   materializeOpenLoopItems: [],
@@ -116,15 +116,18 @@ export const CASES = [
   // --- open-item downgrades (still delivered, but not clean) ---
   ['materialize open loop item -> WITH_OPEN_ITEMS', { ...clean, materializeOpenLoopItems: ['no pwsh .ps1'] }, 'DELIVERED_WITH_OPEN_ITEMS'],
   ['non-blocking needs-work -> WITH_OPEN_ITEMS', { ...clean, reviews: [{ verdict: 'needs-work', blocking: false }] }, 'DELIVERED_WITH_OPEN_ITEMS'],
-  ['redGreen unconfirmed -> WITH_OPEN_ITEMS', { ...clean, verify: { donePassedVerified: true, scopeCleanVerified: true, redGreenVerified: false } }, 'DELIVERED_WITH_OPEN_ITEMS'],
+  ['redGreen unconfirmed -> WITH_OPEN_ITEMS', { ...clean, verify: { donePassedVerified: true, scopeCleanVerified: true, redGreenVerified: false, testsIntact: true } }, 'DELIVERED_WITH_OPEN_ITEMS'],
   ['gate open question -> WITH_OPEN_ITEMS', { ...clean, gateOpenQuestions: ['confirm field shape'] }, 'DELIVERED_WITH_OPEN_ITEMS'],
   // --- P1.4: these open-item sources must also downgrade (they go into manifest.openItems, so DELIVERED
   // with a non-empty openItems list would be self-contradictory; route them all through hasOpenItems) ---
-  ['tests tampered (testsIntact=false) -> WITH_OPEN_ITEMS', { ...clean, verify: { ...clean.verify, testsIntact: false } }, 'DELIVERED_WITH_OPEN_ITEMS'],
+  ['tests tampered (testsIntact=false) -> BLOCKED', { ...clean, verify: { ...clean.verify, testsIntact: false } }, 'BLOCKED'],
+  ['testsIntact missing in new manifest -> BLOCKED', { ...clean, verify: { donePassedVerified: true, scopeCleanVerified: true, redGreenVerified: true } }, 'BLOCKED'],
+  ['testsIntact missing with explicit legacy bypass -> DELIVERED', { ...clean, verify: { donePassedVerified: true, scopeCleanVerified: true, redGreenVerified: true }, allowLegacyUnverifiedDelivery: true }, 'DELIVERED'],
   ['testsIntact true -> DELIVERED', { ...clean, verify: { ...clean.verify, testsIntact: true } }, 'DELIVERED'],
   ['soft-stale plan -> WITH_OPEN_ITEMS', { ...clean, staleSeverity: 'soft' }, 'DELIVERED_WITH_OPEN_ITEMS'],
   ['stale severity none -> DELIVERED', { ...clean, staleSeverity: 'none' }, 'DELIVERED'],
-  ['filesReconcile issue -> WITH_OPEN_ITEMS', { ...clean, filesReconcileIssues: ['Diff 超出 SCOPE: x.js'] }, 'DELIVERED_WITH_OPEN_ITEMS'],
+  ['scope violation -> BLOCKED', { ...clean, scopeViolations: ['SecurityConfig.java'] }, 'BLOCKED'],
+  ['filesReconcile issue -> BLOCKED', { ...clean, filesReconcileIssues: ['Diff 超出 SCOPE: x.js'] }, 'BLOCKED'],
   ['empty filesReconcile -> DELIVERED', { ...clean, filesReconcileIssues: [] }, 'DELIVERED'],
   // --- real-browser verification (web projects only): four states ---
   ['browser passed (web) -> DELIVERED', { ...clean, browser: { applicable: true, status: 'passed', openItems: [] } }, 'DELIVERED'],

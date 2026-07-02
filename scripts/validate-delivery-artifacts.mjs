@@ -44,7 +44,8 @@ function deliverStatusInput(manifest) {
     gateOpenQuestions: manifest.gateOpenQuestions || [],
     gateRemainingGaps: manifest.gateRemainingGaps || [],
     staleSeverity: manifest.staleSeverity,
-    filesReconcileIssues: manifest.filesReconcileIssues || manifest.scopeViolations || [],
+    scopeViolations: manifest.scopeViolations || [],
+    filesReconcileIssues: manifest.filesReconcileIssues || [],
     browser: manifest.browserVerify || manifest.browser || null,
     codeQuality: manifest.codeQuality || null,
     diff: {
@@ -56,15 +57,39 @@ function deliverStatusInput(manifest) {
   }
 }
 
-export function validateDeliveryArtifacts(deliveryDir) {
+function isLegacyMissingError(error) {
+  return error.includes('.filesReconcileIssues: missing required property') ||
+    error.includes('.deliveryPersisted: missing required property') ||
+    error.includes('.persistVerification: missing required property') ||
+    error.includes('.independentVerify.testsIntact: missing required property')
+}
+
+export function validateDeliveryArtifactsDetailed(deliveryDir, options = {}) {
   const dir = path.resolve(deliveryDir)
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'delivery-manifest.json'), 'utf8'))
-  const errors = validate(manifest, schema, dir)
+  const warnings = []
+  let legacyUnverified = false
+  let errors = validate(manifest, schema, dir)
+  if (options.allowLegacy === true) {
+    const strictErrors = errors.filter(error => !isLegacyMissingError(error))
+    if (strictErrors.length !== errors.length) {
+      legacyUnverified = true
+      warnings.push(`${dir}: legacyUnverified=true (missing strict delivery verification fields)`)
+    }
+    errors = strictErrors
+  }
   if (manifest.finalStatus === 'DELIVERED' || manifest.finalStatus === 'DELIVERED_WITH_OPEN_ITEMS') {
     const gate = computeMultiAgentGate({ multiAgent: manifest.multiAgent, requireMultiAgent: true })
     if (!gate.ok) errors.push(`${dir}.multiAgent: ${gate.finalStatus} ${gate.reasonCode || ''}`.trim())
+    if (!(options.allowLegacy === true && legacyUnverified)) {
+      if (manifest.deliveryPersisted !== true) errors.push(`${dir}.deliveryPersisted: delivered manifests require deliveryPersisted=true`)
+      if (!manifest.persistVerification || manifest.persistVerification.ok !== true) errors.push(`${dir}.persistVerification.ok: delivered manifests require persistVerification.ok=true`)
+      if (!manifest.independentVerify || manifest.independentVerify.testsIntact !== true) errors.push(`${dir}.independentVerify.testsIntact: delivered manifests require testsIntact=true`)
+      if (Array.isArray(manifest.scopeViolations) && manifest.scopeViolations.length > 0) errors.push(`${dir}.scopeViolations: delivered manifests require no scope violations`)
+      if (Array.isArray(manifest.filesReconcileIssues) && manifest.filesReconcileIssues.length > 0) errors.push(`${dir}.filesReconcileIssues: delivered manifests require no file reconciliation issues`)
+    }
   }
-  const recomputed = computeDeliverStatus(deliverStatusInput(manifest))
+  const recomputed = computeDeliverStatus({ ...deliverStatusInput(manifest), allowLegacyUnverifiedDelivery: options.allowLegacy === true })
   if (recomputed.finalStatus !== manifest.finalStatus) {
     errors.push(`${dir}.finalStatus: recomputed ${recomputed.finalStatus}, manifest says ${manifest.finalStatus}`)
   }
@@ -84,20 +109,32 @@ export function validateDeliveryArtifacts(deliveryDir) {
   } else if (manifest.finalStatus === 'DELIVERED' || manifest.finalStatus === 'DELIVERED_WITH_OPEN_ITEMS') {
     errors.push(`${dir}/changes.diff: missing for delivered manifest`)
   }
-  return errors
+  return { errors, warnings, legacyUnverified }
+}
+
+export function validateDeliveryArtifacts(deliveryDir, options = {}) {
+  return validateDeliveryArtifactsDetailed(deliveryDir, options).errors
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const deliveryDir = process.argv[2]
+  const args = process.argv.slice(2)
+  const deliveryDir = args.find(arg => arg !== '--allow-legacy')
+  const allowLegacy = args.includes('--allow-legacy')
   if (!deliveryDir) {
-    console.error('usage: node scripts/validate-delivery-artifacts.mjs <delivery-dir>')
+    console.error('usage: node scripts/validate-delivery-artifacts.mjs <delivery-dir> [--allow-legacy]')
     process.exit(2)
   }
-  const errors = validateDeliveryArtifacts(deliveryDir)
+  const result = validateDeliveryArtifactsDetailed(deliveryDir, { allowLegacy })
+  const errors = result.errors
   if (errors.length) {
     console.error('DELIVERY ARTIFACT VALIDATION FAILED')
     for (const error of errors) console.error(`- ${error}`)
     process.exit(1)
   }
-  console.log('DELIVERY ARTIFACT VALIDATION PASSED')
+  if (result.legacyUnverified) {
+    console.log('DELIVERY ARTIFACT VALIDATION LEGACY_UNVERIFIED')
+    for (const warning of result.warnings) console.log(`WARN: ${warning}`)
+  } else {
+    console.log('DELIVERY ARTIFACT VALIDATION PASSED')
+  }
 }

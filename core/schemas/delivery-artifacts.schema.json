@@ -5,7 +5,8 @@
   "required": [
     "schemaVersion", "workflow", "finalStatus", "gate", "scope",
     "filesChanged", "scopeViolations", "reviewVerdicts", "reviewComplete",
-    "independentVerify", "diffApplyCheckPassed", "openItems", "multiAgent"
+    "independentVerify", "filesReconcileIssues", "diffApplyCheckPassed",
+    "deliveryPersisted", "persistVerification", "openItems", "multiAgent"
   ],
   "properties": {
     "schemaVersion": { "type": "string" },
@@ -48,6 +49,7 @@
     "implementPassed": { "type": "boolean" },
     "filesChanged": { "type": "array", "items": { "type": "string" } },
     "scopeViolations": { "type": "array", "items": { "type": "string" } },
+    "filesReconcileIssues": { "type": "array", "items": { "type": "string" } },
     "reviewVerdicts": {
       "type": "array",
       "items": {
@@ -64,13 +66,24 @@
     "reviewComplete": { "type": "boolean" },
     "independentVerify": {
       "type": "object",
-      "required": ["donePassedVerified", "scopeCleanVerified"],
+      "required": ["donePassedVerified", "scopeCleanVerified", "testsIntact"],
       "properties": {
         "donePassedVerified": { "type": "boolean" },
         "doneExitCodeVerified": { "type": "integer" },
         "redGreenVerified": { "type": "boolean" },
         "scopeCleanVerified": { "type": "boolean" },
         "testsIntact": { "type": "boolean" }
+      }
+    },
+    "deliveryPersisted": { "type": "boolean" },
+    "persistVerification": {
+      "type": "object",
+      "required": ["ok"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "readbackOk": { "type": "boolean" },
+        "diskFinalStatus": { "type": "string" },
+        "contentConsistent": { "type": "boolean" }
       }
     },
     "multiAgent": {

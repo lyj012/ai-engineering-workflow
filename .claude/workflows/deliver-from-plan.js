@@ -204,10 +204,10 @@ function computeDeliverStatus(input) {
   const codeQualityOpenItems = (codeQuality && Array.isArray(codeQuality.openItems)) ? codeQuality.openItems : []
   const codeQualityCompileFailed = !!(codeQuality && codeQuality.applicable === true && codeQuality.compileRan === true && codeQuality.compilePassed === false)
   const codeQualityP0 = !!(codeQuality && codeQuality.applicable === true && codeQuality.hasP0Failure === true)
-  // P1.4: these three also feed manifest.openItems in the engine, so they must downgrade here too —
-  // otherwise finalStatus=DELIVERED with a non-empty openItems list (self-contradictory).
   const testsTampered = !!(verify && verify.testsIntact === false)   // in-tree tests changed since materialize
+  const testsIntactMissing = !!(verify && verify.testsIntact !== true && verify.testsIntact !== false)
   const softStale = i.staleSeverity === 'soft'                       // target had uncommitted dirty diff vs plan
+  const scopeViolations = Array.isArray(i.scopeViolations) ? i.scopeViolations : []
   const filesReconcileIssues = Array.isArray(i.filesReconcileIssues) ? i.filesReconcileIssues : []   // Verify/diff/SCOPE 三方对账不一致
   const hasOpenItems = materializeOpenLoopItems.length > 0 ||
     reviews.some(r => r && r.verdict === 'needs-work') ||
@@ -215,7 +215,7 @@ function computeDeliverStatus(input) {
     gateOpenQuestions.length > 0 || gateRemainingGaps.length > 0 ||
     browserOpenItems.length > 0 || browserDeferred ||
     codeQualityOpenItems.length > 0 ||
-    testsTampered || softStale || filesReconcileIssues.length > 0
+    softStale
 
   if (!i.implementPassed) { reasons.push('实现未达全绿，不交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (!verify) { reasons.push('缺独立验证（Verify 失败），不乐观交付。'); return { finalStatus: 'BLOCKED', reasons } }
@@ -225,6 +225,10 @@ function computeDeliverStatus(input) {
   if (browser && browser.applicable === true && browser.status === 'failed') { reasons.push('真实浏览器验证失败（web 项目：页面/交互/控制台/接口未通过），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (codeQualityCompileFailed) { reasons.push('项目编译/构建失败（P0），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (codeQualityP0) { reasons.push('代码质量检查存在 P0 级静态问题（必阻断），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (testsIntactMissing && i.allowLegacyUnverifiedDelivery !== true) { reasons.push('新交付缺少 testsIntact=true 的测试基线完整性证据，不交付。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (testsTampered) { reasons.push('测试基线指纹与物化时不一致（testsIntact=false），疑似测试被实现/修复阶段改动，不交付。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (scopeViolations.length > 0) { reasons.push(`实现修改了 SCOPE 外文件：${scopeViolations.join(', ')}。`); return { finalStatus: 'BLOCKED', reasons } }
+  if (filesReconcileIssues.length > 0) { reasons.push(`变更文件对账不一致：${filesReconcileIssues.join('; ')}。`); return { finalStatus: 'BLOCKED', reasons } }
 
   const diff = i.diff || null
   if (!diff || diff.ok !== true) { reasons.push('交付 diff 生成/落盘失败，状态降级 BLOCKED（不以 DELIVERED 收尾）。'); return { finalStatus: 'BLOCKED', reasons } }
@@ -409,7 +413,7 @@ const VERIFY_SCHEMA = { type: 'object', additionalProperties: false, properties:
 const DIFF_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   ok: { type: 'boolean', description: '是否成功生成可用 diff（无任何变更文件时为 false）' },
   diffStat: { type: 'string' }, filesChanged: { type: 'array', items: { type: 'string' }, description: 'target-root-relative 路径' },
-  diffApplyCheckPassed: { type: 'boolean' }, note: { type: 'string' },
+  diffApplyCheckPassed: { type: 'boolean' }, applyCheckExitCode: { type: 'number' }, applyCheckOutputTail: { type: 'string' }, note: { type: 'string' },
 }, required: ['ok', 'diffStat', 'filesChanged', 'diffApplyCheckPassed', 'note'] }
 const DELIVER_SCHEMA = { type: 'object', additionalProperties: false, properties: {
   ok: { type: 'boolean' }, absOutDir: { type: 'string' }, written: { type: 'array', items: { type: 'string' } }, note: { type: 'string' },
@@ -656,7 +660,7 @@ try {
         if (verify) note(`独立验证：DONE真绿=${verify.donePassedVerified}(exit ${verify.doneExitCodeVerified})、先红后绿复现=${verify.redGreenVerified}、独立复测过=${verify.independentTestsPassed}、测试未篡改=${verify.testsIntact}、只动SCOPE=${verify.scopeCleanVerified}。`)
         // G4 测试/实现职责边界（硬闸门）：独立验证用自己从 test-plan 重物化的测试复测，不过=实现真错或被改测试迁就→BLOCKED（不信在树测试）
         if (verify && verify.independentTestsPassed === false) { finalStatus = 'BLOCKED'; note('⛔ 独立复测未过（Verify 从 test-plan.json 重物化、不复用在树 tests/）：实现未真正满足验收，或曾改测试迁就实现。拒绝交付。') }
-        else if (verify && verify.testsIntact === false) { note('⚠ 在树 tests/ 指纹与物化时不一致（疑似被改动）：已记为开环项；终态以独立复测为准。') }
+        else if (verify && verify.testsIntact === false) { note('⛔ 在树 tests/ 指纹与物化时不一致（疑似被改动）：按新交付契约阻断。') }
 
         // ---- BrowserVerify（仅 web 项目）：独立角色判类型→探浏览器能力→起项目→真实交互→四态（失败=阻断、无能力=如实跳过；喂入 computeDeliverStatus 的 browser 闸门）----
         if (finalStatus !== 'BLOCKED') {
@@ -746,9 +750,8 @@ if (scaffold && scaffold.runDir && finalStatus !== 'BLOCKED' && !halted) {
     `你负责生成交付 diff（只在 ${scaffold.runDir} 内写，绝不动原仓库、绝不 commit/push）。${SAFETY}\n` +
     `1) 生成 target-root-relative diff（用确定性脚本，避免 git diff --no-index 的兼容缺口；与 Codex 适配器同一机制）：\n` +
     `   a. 先备一份与沙箱【同套净化规则】的干净 base：在本工作流仓库根执行 \`node ${binDir}/sandbox-prepare.mjs --src ${targetRepoArg || (gate && gate.manifestTarget)} --dest <tmp>/diff-base\`（剥 .git/构建产物/密钥/symlink，使 base 与沙箱可比——不会把 node_modules 等误算成整体删除）。\n` +
-    `   b. 生成可移植补丁：\`node ${binDir}/diff-from-sandbox.mjs --base <tmp>/diff-base --sandbox ${scaffold.sandboxDir} --out "${scaffold.runDir}/changes.diff"\`，读其 JSON：filesChanged 即变更文件（已是 target-root-relative）；要求 ok=true 且 absoluteLeak=false（脚本已保证标准 a/ b/ 前缀、含 --binary、diff 头不含绝对路径/sandbox/base 前缀）。若 filesChanged 为空（无任何变更）则置 ok=false。diffStat 用变更文件数/行数概述。\n` +
-    `2) 检查 diff 可应用：把 <tmp>/diff-base 再复制一份到临时 apply-check 目录（它与生成补丁所用 base 同一内容），在该目录执行 git apply --check "${scaffold.runDir}/changes.diff"；通过则 diffApplyCheckPassed=true，否则 false。若 diff 为空（无任何变更文件）则 ok=false。\n` +
-    `只产出 changes.diff 并回报事实，不要写 manifest 或报告。回报 ok/diffStat/filesChanged(target-root-relative)/diffApplyCheckPassed/note。`,
+    `   b. 生成可移植补丁并由脚本内置执行 apply-check：\`node ${binDir}/diff-from-sandbox.mjs --base <tmp>/diff-base --sandbox ${scaffold.sandboxDir} --out "${scaffold.runDir}/changes.diff"\`，读其 JSON：filesChanged 即变更文件（已是 target-root-relative），diffApplyCheckPassed/applyCheckExitCode/applyCheckOutputTail 来自脚本真实 \`git apply --check\`。要求 ok=true、absoluteLeak=false、filesChanged 非空、diffApplyCheckPassed=true（脚本已保证标准 a/ b/ 前缀、含 --binary、diff 头不含绝对路径/sandbox/base 前缀）。diffStat 用变更文件数/行数概述。\n` +
+    `只产出 changes.diff 并回报脚本事实，不要自行重算 apply-check，不要写 manifest 或报告。回报 ok/diffStat/filesChanged(target-root-relative)/diffApplyCheckPassed/applyCheckExitCode/applyCheckOutputTail/note。`,
     { schema: DIFF_SCHEMA, label: 'generate-diff', phase: 'Deliver', agentType: AT, effort: 'medium' }, true)
   diffResult = gd.ok ? gd.value : { ok: false, diffStat: '', filesChanged: [], diffApplyCheckPassed: false, note: gd.error }
   note(`Diff：${diffResult.ok ? '已生成 changes.diff（' + diffResult.diffStat + '），apply-check=' + diffResult.diffApplyCheckPassed : '失败：' + diffResult.note}`)
@@ -804,6 +807,7 @@ if (!halted) {
     gateOpenQuestions: (gate && gate.openQuestions) || [],
     gateRemainingGaps: (gate && gate.remainingGaps) || [],
     staleSeverity: staleCmp ? staleCmp.severity : null,
+    scopeViolations: implement ? (implement.scopeViolations || []) : [],
     filesReconcileIssues: filesReconcile.issues,
     diff: (scaffold && scaffold.runDir) ? diffResult : null,
     browser: browserResult ? { applicable: browserResult.applicable, status: browserResult.status, openItems: browserResult.openItems } : null,
@@ -885,7 +889,7 @@ if (scaffold && scaffold.runDir) {
   let readbackOk = false, diskFinalStatus = '', contentConsistent = false
   if (deliver.ok) {
     const rb = await callAgent(
-      `你是独立校验者，只读不写。检查 ${scaffold.runDir}/delivery-manifest.json：(1) 真实存在且非空、能 JSON.parse；(2) 取顶层 finalStatus；(3) 内容深度一致——其 finalStatus 是否 === "${finalStatus}"、filesChanged 是否逐一等于 ${JSON.stringify(deliverManifest.filesChanged)}、diffApplyCheckPassed 是否 === ${JSON.stringify(deliverManifest.diffApplyCheckPassed)}（全部吻合才 contentConsistent=true）。回报 readbackOk/diskFinalStatus/contentConsistent/note。绝不创建或修改任何文件。`,
+      `你是独立校验者。调用确定性脚本检查 ${scaffold.runDir}/delivery-manifest.json：\`node ${binDir}/verify-delivery-persist.mjs --dir "${scaffold.runDir}" --final-status "${finalStatus}" --files-changed-json '${JSON.stringify(deliverManifest.filesChanged)}' --diff-apply-check-passed ${String(deliverManifest.diffApplyCheckPassed)}\`。只根据脚本 JSON 输出回报：readbackOk=report.readbackOk、diskFinalStatus=report.diskFinalStatus、contentConsistent=report.contentConsistent、note=report.note。绝不自行判断或修改文件。`,
       { schema: DELIVER_READBACK_SCHEMA, label: 'deliver-readback', phase: 'Deliver', agentType: AT, effort: 'low' }, true)
     if (rb.ok) { readbackOk = rb.value.readbackOk === true; diskFinalStatus = rb.value.diskFinalStatus || ''; contentConsistent = rb.value.contentConsistent === true }
     else note(`交付落盘回读校验失败：${rb.error}（按未通过校验处理）`)
@@ -906,7 +910,7 @@ if (scaffold && scaffold.runDir) {
     let confirmOk = false
     if (flip.ok) {
       const rb2 = await callAgent(
-        `你是独立校验者，只读不写。JSON.parse ${scaffold.runDir}/delivery-manifest.json 后：其 persistVerification.ok 是否 === true、顶层 finalStatus 是否 === "${finalStatus}"。readbackOk 填"persistVerification.ok 是否===true"、diskFinalStatus 填磁盘 finalStatus 值、contentConsistent 填 true 占位。绝不改文件。`,
+        `你是独立校验者。调用确定性脚本确认 persistVerification.ok 已落盘：\`node ${binDir}/verify-delivery-persist.mjs --dir "${scaffold.runDir}" --final-status "${finalStatus}" --files-changed-json '${JSON.stringify(deliverManifest.filesChanged)}' --diff-apply-check-passed ${String(deliverManifest.diffApplyCheckPassed)}\`。只根据脚本 JSON 输出回报：readbackOk=report.persistOkOnDisk、diskFinalStatus=report.diskFinalStatus、contentConsistent=report.contentConsistent、note=report.note。绝不自行判断或修改文件。`,
         { schema: DELIVER_READBACK_SCHEMA, label: 'deliver-persist-confirm-readback', phase: 'Deliver', agentType: AT, effort: 'low' }, true)
       confirmOk = rb2.ok && rb2.value.readbackOk === true && (rb2.value.diskFinalStatus || '') === finalStatus
     }

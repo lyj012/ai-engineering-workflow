@@ -26,7 +26,7 @@ export function runCoreCliInputTests() {
     fs.writeFileSync(projectFile, JSON.stringify({ files: ['app.sh', 'test.sh'], packageJson: null }))
     fs.writeFileSync(deliverFile, JSON.stringify({
       implementPassed: true,
-      verify: { donePassedVerified: true, scopeCleanVerified: true, redGreenVerified: true },
+      verify: { donePassedVerified: true, scopeCleanVerified: true, redGreenVerified: true, testsIntact: true },
       reviews: [{ verdict: 'ok', blocking: false }],
       reviewIncomplete: false,
       diff: { ok: true, diffApplyCheckPassed: true, filesChanged: ['app.sh'] },

@@ -11,6 +11,7 @@
 //   implement not green / no independent Verify / Verify not green /
 //   review incomplete / blocking review unresolved                        -> BLOCKED
 //   code-quality compile/build failed (applicable + ran + !passed)         -> BLOCKED   (P0)
+//   testsIntact missing/false, scope violations, or file reconcile issues  -> BLOCKED
 //   diff missing or not ok / git apply --check failed / no changed files   -> BLOCKED   (issues #1 / #2)
 //   else                                                                   -> DELIVERED_WITH_OPEN_ITEMS if any
 //                                                                             open item, else DELIVERED
@@ -18,14 +19,15 @@
 // input = {
 //   priorStatus,                       // current finalStatus before this gate ('BLOCKED' short-circuits)
 //   implementPassed,                   // bool: implementer reported DONE all-green
-//   verify,                            // { donePassedVerified, scopeCleanVerified, redGreenVerified, testsIntact? } | null
-//                                      //   testsIntact===false -> open item (in-tree tests changed since materialize)
+//   verify,                            // { donePassedVerified, scopeCleanVerified, redGreenVerified, testsIntact } | null
+//                                      //   testsIntact!==true -> BLOCKED for new manifests; legacy bypass is explicit
 //   reviews,                           // [{ verdict:'ok'|'needs-work', blocking:bool }]
 //   reviewIncomplete,                  // bool: a review lens was missing
 //   materializeOpenLoopItems,          // string[]
 //   gateOpenQuestions, gateRemainingGaps,   // string[]
 //   staleSeverity,                     // 'soft'|'none'|... : 'soft' (uncommitted dirty diff vs plan) -> open item
-//   filesReconcileIssues,              // string[]: Verify/diff/SCOPE three-way reconcile issues -> open item
+//   scopeViolations,                   // string[]: Implement changed files outside SCOPE -> BLOCKED
+//   filesReconcileIssues,              // string[]: Verify/diff/SCOPE three-way reconcile issues -> BLOCKED
 //   diff,                              // { ok, diffApplyCheckPassed, filesChanged } | null
 //   browser,                           // { applicable, status:'passed'|'failed'|'skipped'|'error', openItems[] } | null
 //                                      //   web only: applicable+failed -> BLOCKED; skipped/error or openItems
@@ -66,10 +68,10 @@ export function computeDeliverStatus(input) {
   const codeQualityOpenItems = (codeQuality && Array.isArray(codeQuality.openItems)) ? codeQuality.openItems : []
   const codeQualityCompileFailed = !!(codeQuality && codeQuality.applicable === true && codeQuality.compileRan === true && codeQuality.compilePassed === false)
   const codeQualityP0 = !!(codeQuality && codeQuality.applicable === true && codeQuality.hasP0Failure === true)
-  // P1.4: these three also feed manifest.openItems in the engine, so they must downgrade here too —
-  // otherwise finalStatus=DELIVERED with a non-empty openItems list (self-contradictory).
   const testsTampered = !!(verify && verify.testsIntact === false)   // in-tree tests changed since materialize
+  const testsIntactMissing = !!(verify && verify.testsIntact !== true && verify.testsIntact !== false)
   const softStale = i.staleSeverity === 'soft'                       // target had uncommitted dirty diff vs plan
+  const scopeViolations = Array.isArray(i.scopeViolations) ? i.scopeViolations : []
   const filesReconcileIssues = Array.isArray(i.filesReconcileIssues) ? i.filesReconcileIssues : []   // Verify/diff/SCOPE 三方对账不一致
   const hasOpenItems = materializeOpenLoopItems.length > 0 ||
     reviews.some(r => r && r.verdict === 'needs-work') ||
@@ -77,7 +79,7 @@ export function computeDeliverStatus(input) {
     gateOpenQuestions.length > 0 || gateRemainingGaps.length > 0 ||
     browserOpenItems.length > 0 || browserDeferred ||
     codeQualityOpenItems.length > 0 ||
-    testsTampered || softStale || filesReconcileIssues.length > 0
+    softStale
 
   if (!i.implementPassed) { reasons.push('实现未达全绿，不交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (!verify) { reasons.push('缺独立验证（Verify 失败），不乐观交付。'); return { finalStatus: 'BLOCKED', reasons } }
@@ -87,6 +89,10 @@ export function computeDeliverStatus(input) {
   if (browser && browser.applicable === true && browser.status === 'failed') { reasons.push('真实浏览器验证失败（web 项目：页面/交互/控制台/接口未通过），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (codeQualityCompileFailed) { reasons.push('项目编译/构建失败（P0），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
   if (codeQualityP0) { reasons.push('代码质量检查存在 P0 级静态问题（必阻断），不交付。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (testsIntactMissing && i.allowLegacyUnverifiedDelivery !== true) { reasons.push('新交付缺少 testsIntact=true 的测试基线完整性证据，不交付。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (testsTampered) { reasons.push('测试基线指纹与物化时不一致（testsIntact=false），疑似测试被实现/修复阶段改动，不交付。'); return { finalStatus: 'BLOCKED', reasons } }
+  if (scopeViolations.length > 0) { reasons.push(`实现修改了 SCOPE 外文件：${scopeViolations.join(', ')}。`); return { finalStatus: 'BLOCKED', reasons } }
+  if (filesReconcileIssues.length > 0) { reasons.push(`变更文件对账不一致：${filesReconcileIssues.join('; ')}。`); return { finalStatus: 'BLOCKED', reasons } }
 
   // #1/#2: the delivered, apply-checked diff is the final fact — never settle on DELIVERED without it.
   const diff = i.diff || null

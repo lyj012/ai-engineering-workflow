@@ -41,6 +41,19 @@ function copyFiltered(src, dest) {
   }
 }
 
+function applyCheck(base, diffPath, parentDir) {
+  const applyWork = path.join(parentDir, 'apply-check')
+  guardOrExit(applyWork, [base], 'diff apply-check work')
+  fs.rmSync(applyWork, { recursive: true, force: true })
+  copyFiltered(base, applyWork)
+  const r = spawnSync('git', ['apply', '--check', diffPath], { cwd: applyWork, encoding: 'utf8' })
+  return {
+    passed: r.status === 0,
+    exitCode: typeof r.status === 'number' ? r.status : 1,
+    outputTail: ((r.stdout || '') + (r.stderr || '')).slice(-4000),
+  }
+}
+
 function clearWorktree(dir) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
     if (ent.name === '.git') continue
@@ -82,9 +95,20 @@ function main() {
   const filesChanged = run('git', ['diff', '--cached', '--name-only'], work).stdout.split(/\r?\n/).filter(Boolean)
   const diffText = fs.readFileSync(out, 'utf8')
   const absoluteLeak = diffText.includes(base) || diffText.includes(sandbox) || diffText.includes(work)
-  const report = { ok: !absoluteLeak, out, filesChanged, absoluteLeak, work }
+  const check = applyCheck(base, out, work)
+  const nonEmpty = filesChanged.length > 0
+  const report = {
+    ok: !absoluteLeak && nonEmpty && check.passed,
+    out,
+    filesChanged,
+    absoluteLeak,
+    diffApplyCheckPassed: check.passed,
+    applyCheckExitCode: check.exitCode,
+    applyCheckOutputTail: check.outputTail,
+    work,
+  }
   process.stdout.write(JSON.stringify(report, null, 2) + '\n')
-  process.exit(absoluteLeak ? 1 : 0)
+  process.exit(report.ok ? 0 : 1)
 }
 
 try { main() } catch (e) {

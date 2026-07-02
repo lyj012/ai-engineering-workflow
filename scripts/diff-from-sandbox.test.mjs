@@ -33,6 +33,9 @@ export function runDiffFromSandboxTests() {
     const r = run('node', [script, '--base', base, '--sandbox', sandbox, '--out', out])
     if (r.status !== 0) { failures.push(`diff-from-sandbox exited ${r.status}: ${r.stderr || r.stdout}`); return failures }
     const report = JSON.parse(r.stdout)
+    if (report.diffApplyCheckPassed !== true) failures.push('diff report did not record diffApplyCheckPassed=true')
+    if (report.applyCheckExitCode !== 0) failures.push(`diff report applyCheckExitCode expected 0, got ${report.applyCheckExitCode}`)
+    if (report.ok !== true) failures.push('diff report ok should be true for applyable non-empty diff')
     for (const expected of ['app.sh', 'added.txt', 'bin.dat', 'delete.txt']) {
       if (!report.filesChanged.includes(expected)) failures.push(`diff report missing ${expected}`)
     }
@@ -49,6 +52,18 @@ export function runDiffFromSandboxTests() {
     if (!fs.existsSync(path.join(applyCopy, 'added.txt'))) failures.push('added file was not applied')
     if (fs.existsSync(path.join(applyCopy, 'delete.txt'))) failures.push('deleted file still exists after apply')
     if (!fs.existsSync(path.join(applyCopy, 'bin.dat'))) failures.push('binary file was not applied')
+
+    const emptyOut = path.join(work, 'empty.diff')
+    const emptySandbox = path.join(work, 'empty-sandbox')
+    fs.cpSync(base, emptySandbox, { recursive: true })
+    const empty = run('node', [script, '--base', base, '--sandbox', emptySandbox, '--out', emptyOut])
+    if (empty.status === 0) failures.push('diff-from-sandbox should exit non-zero for empty diff')
+    else {
+      const emptyReport = JSON.parse(empty.stdout)
+      if (emptyReport.ok !== false) failures.push('empty diff report ok should be false')
+      if (emptyReport.diffApplyCheckPassed !== false) failures.push('empty diff should not record apply-check success')
+      if (emptyReport.filesChanged.length !== 0) failures.push('empty diff filesChanged should be empty')
+    }
   } catch (e) {
     failures.push(`diff-from-sandbox test threw: ${e.message}`)
   } finally {

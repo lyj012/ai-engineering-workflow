@@ -18,7 +18,8 @@
   "doneTrustEvidence": {
     "newFeatureTestsFailOnCurrent": true,
     "regressionTestsPassOnCurrent": true,
-    "redExitCode": 1
+    "redExitCode": 1,
+    "testsFingerprint": "example-tests-fp"
   },
   "implementPassed": true,
   "filesChanged": [
@@ -46,7 +47,9 @@
     "donePassedVerified": true,
     "doneExitCodeVerified": 0,
     "redGreenVerified": true,
-    "scopeCleanVerified": true
+    "scopeCleanVerified": true,
+    "testsIntact": true,
+    "testsFingerprintRecomputed": "example-tests-fp"
   },
   "multiAgent": {
     "required": true,
@@ -122,6 +125,14 @@
       }
     ]
   },
+  "filesReconcileIssues": [],
   "diffApplyCheckPassed": true,
+  "deliveryPersisted": true,
+  "persistVerification": {
+    "ok": true,
+    "readbackOk": true,
+    "diskFinalStatus": "DELIVERED",
+    "contentConsistent": true
+  },
   "openItems": []
 }
