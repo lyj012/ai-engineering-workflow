@@ -44,6 +44,7 @@ import { runVerifyTestsTests } from './verify-tests.test.mjs'
 import { runSafeRmTests } from './safe-rm.test.mjs'
 import { runVerifyDeliveryPersistTests } from './verify-delivery-persist.test.mjs'
 import { runValidateDeliveryArtifactsTests } from './validate-delivery-artifacts.test.mjs'
+import { runValidatePublishRecordTests } from './validate-publish-record.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -455,6 +456,7 @@ for (const failure of runVerifyTestsTests()) errors.push(failure)
 for (const failure of runSafeRmTests()) errors.push(failure)
 for (const failure of runVerifyDeliveryPersistTests()) errors.push(failure)
 for (const failure of runValidateDeliveryArtifactsTests()) errors.push(failure)
+for (const failure of runValidatePublishRecordTests()) errors.push(failure)
 {
   const r = run(process.execPath, ['scripts/check-agent-parity.mjs'])
   if (!r.ok) errors.push(`agent parity check failed: ${(r.stderr || r.stdout).trim()}`)
@@ -664,6 +666,8 @@ errors.push(...validatePublishRecord(path.join(root, 'examples/artifacts/publish
     record.finalStatus = 'PUBLISHED'
     record.deliverableStatus = 'DELIVERED_WITH_OPEN_ITEMS'
     record.openItems = []
+    record.statusInput.deliverableStatus = 'DELIVERED_WITH_OPEN_ITEMS'
+    record.statusInput.deliverableOpenItems = []
     fs.writeFileSync(recordPath, JSON.stringify(record, null, 2), 'utf8')
     const negative = validatePublishRecord(tmp)
     if (!negative.some(error => error.includes('recomputed PUBLISH_BLOCKED'))) {
@@ -685,6 +689,8 @@ errors.push(...validatePublishRecord(path.join(root, 'examples/artifacts/publish
     record.deliveryPersistFieldPresent = false
     record.deliveryPersistVerified = true
     record.allowLegacyUnverifiedDelivery = false
+    delete record.statusInput.deliveryPersistVerified
+    record.statusInput.allowLegacyUnverifiedDelivery = false
     fs.writeFileSync(recordPath, JSON.stringify(record, null, 2), 'utf8')
     const negative = validatePublishRecord(tmp)
     if (!negative.some(error => error.includes('recomputed PUBLISH_BLOCKED'))) {

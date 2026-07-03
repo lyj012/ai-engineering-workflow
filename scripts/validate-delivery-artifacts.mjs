@@ -44,8 +44,35 @@ function comparableMultiAgent(value) {
     preflightPassed: value.preflightPassed,
     executed: value.executed,
     fallbackUsed: value.fallbackUsed,
-    parentAgent: value.parentAgent,
+    parentAgentImplemented: value.parentAgentImplemented,
+    parentAgentImplementedBeforeImplementerSpawn: value.parentAgentImplementedBeforeImplementerSpawn,
+    parentAgentRanTestsWithoutVerifier: value.parentAgentRanTestsWithoutVerifier,
+    spawnSupported: value.spawnSupported,
+    agentsDiscoverable: value.agentsDiscoverable,
     roles: value.roles || [],
+  }
+}
+
+function normalizedBrowser(value) {
+  if (!value) return value
+  return {
+    applicable: value.applicable,
+    status: value.finalBrowserStatus === 'skipped-no-capability'
+      ? 'skipped'
+      : (value.finalBrowserStatus || value.status),
+    openItems: value.openItems || [],
+  }
+}
+
+function normalizedCodeQuality(value) {
+  if (!value) return value
+  const staticChecks = Array.isArray(value.staticChecks) ? value.staticChecks : []
+  return {
+    applicable: value.applicable,
+    compileRan: value.compileRan,
+    compilePassed: value.compilePassed,
+    hasP0Failure: value.hasP0Failure === true || staticChecks.some(c => c && c.status === 'failed' && c.severity === 'P0'),
+    openItems: value.openItems || [],
   }
 }
 
@@ -69,31 +96,12 @@ function statusInputConsistencyErrors(manifest, dir) {
   mismatch('diffApplyCheckPassed', manifest.diffApplyCheckPassed, s.diff && s.diff.diffApplyCheckPassed)
   mismatch('filesChanged', manifest.filesChanged || [], s.diff ? (s.diff.filesChanged || []) : [])
   mismatch('deliveryPersisted', manifest.deliveryPersisted, s.deliveryPersisted)
+  mismatch('reviewComplete', manifest.reviewComplete, s.reviewIncomplete === false)
   const statusReviews = Array.isArray(s.reviews) ? s.reviews : []
   const topReviews = (manifest.reviewVerdicts || []).map(r => ({ verdict: r.verdict, blocking: r.blocking }))
   mismatch('reviewVerdicts', topReviews, statusReviews)
-  if (manifest.browserVerify) {
-    const browserStatus = manifest.browserVerify.finalBrowserStatus === 'skipped-no-capability'
-      ? 'skipped'
-      : manifest.browserVerify.finalBrowserStatus
-    const topBrowser = {
-      applicable: manifest.browserVerify.applicable,
-      status: browserStatus,
-      openItems: manifest.browserVerify.openItems || [],
-    }
-    mismatch('browserVerify', topBrowser, s.browser)
-  }
-  if (manifest.codeQuality) {
-    const staticChecks = Array.isArray(manifest.codeQuality.staticChecks) ? manifest.codeQuality.staticChecks : []
-    const topCodeQuality = {
-      applicable: manifest.codeQuality.applicable,
-      compileRan: manifest.codeQuality.compileRan,
-      compilePassed: manifest.codeQuality.compilePassed,
-      hasP0Failure: staticChecks.some(c => c && c.status === 'failed' && c.severity === 'P0'),
-      openItems: manifest.codeQuality.openItems || [],
-    }
-    mismatch('codeQuality', topCodeQuality, s.codeQuality)
-  }
+  mismatch('browserVerify', normalizedBrowser(manifest.browserVerify || manifest.browser || null), normalizedBrowser(s.browser || null))
+  mismatch('codeQuality', normalizedCodeQuality(manifest.codeQuality || null), normalizedCodeQuality(s.codeQuality || null))
   return errors
 }
 
@@ -143,6 +151,29 @@ function applyCheck(baseDir, diffPath) {
   }
 }
 
+export function validateDeliveryManifestSemantics(manifest, options = {}) {
+  const label = options.label || 'delivery-manifest.json'
+  const errors = []
+  errors.push(...statusInputConsistencyErrors(manifest, label))
+  const statusInput = deliverStatusInput(manifest)
+  const recomputeInput = options.assumeDeliveryPersisted === true
+    ? { ...statusInput, deliveryPersisted: true }
+    : statusInput
+  const recomputed = computeDeliverStatus({ ...recomputeInput, allowLegacyUnverifiedDelivery: options.allowLegacy === true })
+  if (recomputed.finalStatus !== manifest.finalStatus) {
+    const suffix = options.assumeDeliveryPersisted === true ? ' with deliveryPersisted=true' : ''
+    errors.push(`${label}.finalStatus: recomputed ${recomputed.finalStatus}${suffix}, manifest says ${manifest.finalStatus}`)
+  }
+  const openItems = Array.isArray(manifest.openItems) ? manifest.openItems : []
+  if (manifest.finalStatus === 'DELIVERED' && openItems.length > 0) {
+    errors.push(`${label}.openItems: DELIVERED requires openItems to be empty`)
+  }
+  if (manifest.finalStatus === 'DELIVERED_WITH_OPEN_ITEMS' && openItems.length === 0) {
+    errors.push(`${label}.openItems: DELIVERED_WITH_OPEN_ITEMS requires at least one open item`)
+  }
+  return errors
+}
+
 export function validateDeliveryArtifactsDetailed(deliveryDir, options = {}) {
   const dir = path.resolve(deliveryDir)
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'delivery-manifest.json'), 'utf8'))
@@ -157,7 +188,7 @@ export function validateDeliveryArtifactsDetailed(deliveryDir, options = {}) {
     }
     errors = strictErrors
   }
-  errors.push(...statusInputConsistencyErrors(manifest, dir))
+  errors.push(...validateDeliveryManifestSemantics(manifest, { label: dir, allowLegacy: options.allowLegacy === true }))
   if (manifest.finalStatus === 'DELIVERED' || manifest.finalStatus === 'DELIVERED_WITH_OPEN_ITEMS') {
     const gate = computeMultiAgentGate({ multiAgent: manifest.multiAgent, requireMultiAgent: true })
     if (!gate.ok) errors.push(`${dir}.multiAgent: ${gate.finalStatus} ${gate.reasonCode || ''}`.trim())
@@ -168,17 +199,6 @@ export function validateDeliveryArtifactsDetailed(deliveryDir, options = {}) {
       if (Array.isArray(manifest.scopeViolations) && manifest.scopeViolations.length > 0) errors.push(`${dir}.scopeViolations: delivered manifests require no scope violations`)
       if (Array.isArray(manifest.filesReconcileIssues) && manifest.filesReconcileIssues.length > 0) errors.push(`${dir}.filesReconcileIssues: delivered manifests require no file reconciliation issues`)
     }
-  }
-  const recomputed = computeDeliverStatus({ ...deliverStatusInput(manifest), allowLegacyUnverifiedDelivery: options.allowLegacy === true })
-  if (recomputed.finalStatus !== manifest.finalStatus) {
-    errors.push(`${dir}.finalStatus: recomputed ${recomputed.finalStatus}, manifest says ${manifest.finalStatus}`)
-  }
-  const openItems = Array.isArray(manifest.openItems) ? manifest.openItems : []
-  if (manifest.finalStatus === 'DELIVERED' && openItems.length > 0) {
-    errors.push(`${dir}.openItems: DELIVERED requires openItems to be empty`)
-  }
-  if (manifest.finalStatus === 'DELIVERED_WITH_OPEN_ITEMS' && openItems.length === 0) {
-    errors.push(`${dir}.openItems: DELIVERED_WITH_OPEN_ITEMS requires at least one open item`)
   }
   const diffPath = path.join(dir, 'changes.diff')
   if (fs.existsSync(diffPath)) {

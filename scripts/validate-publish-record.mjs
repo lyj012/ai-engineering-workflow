@@ -25,7 +25,14 @@ function isSha(value) {
   return typeof value === 'string' && /^[0-9a-f]{40}$/i.test(value)
 }
 
+function sameJson(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
 function publishStatusInput(record) {
+  if (record.statusInput && typeof record.statusInput === 'object' && !Array.isArray(record.statusInput)) {
+    return record.statusInput
+  }
   return {
     priorStatus: record.priorStatus || 'FAILED',
     awaitingUserConfirmation: record.awaitingUserConfirmation,
@@ -37,15 +44,48 @@ function publishStatusInput(record) {
     branchAllowed: record.branch && record.branch.allowed,
     dryRun: record.dryRun,
     pushPerformed: record.push && record.push.performed,
-    remoteVerified: record.remoteVerify || null,
+    remoteVerified: record.remoteVerifyRecomputed || null,
     deliverableOpenItems: record.openItems || [],
   }
+}
+
+function statusInputConsistencyErrors(record, dir) {
+  const errors = []
+  const s = record.statusInput && typeof record.statusInput === 'object' && !Array.isArray(record.statusInput)
+    ? record.statusInput
+    : null
+  if (!s) return errors
+  const mismatch = (name, a, b) => { if (!sameJson(a, b)) errors.push(`${dir}.${name}: statusInput mismatch`) }
+  mismatch('highRiskBlocked', record.highRiskBlocked, s.highRiskBlocked)
+  mismatch('deliverableStatus', record.deliverableStatus, s.deliverableStatus)
+  mismatch('deliveryPersistVerified', record.deliveryPersistFieldPresent === true ? record.deliveryPersistVerified : undefined, s.deliveryPersistVerified)
+  mismatch('allowLegacyUnverifiedDelivery', record.allowLegacyUnverifiedDelivery, s.allowLegacyUnverifiedDelivery)
+  mismatch('diffApplyCheckPassed', record.diffApplyCheckPassed, s.diffApplyCheckPassed)
+  mismatch('branchAllowed', record.branch && record.branch.allowed, s.branchAllowed)
+  mismatch('dryRun', record.dryRun, s.dryRun)
+  mismatch('pushPerformed', record.push && record.push.performed, s.pushPerformed)
+  mismatch('remoteVerifyRecomputed', record.remoteVerifyRecomputed || null, s.remoteVerified || null)
+  mismatch('openItems', record.openItems || [], s.deliverableOpenItems || [])
+  return errors
+}
+
+function remoteDisagreementErrors(record, dir) {
+  const errors = []
+  if (!record.remoteVerify || !record.remoteVerifyRecomputed) return errors
+  for (const key of ['branchShaMatches', 'committedFilesMatch', 'noForbiddenFiles', 'workTreeClean']) {
+    if (record.remoteVerify[key] !== record.remoteVerifyRecomputed[key]) {
+      errors.push(`${dir}.remoteVerify.${key}: disagrees with remoteVerifyRecomputed`)
+    }
+  }
+  return errors
 }
 
 export function validatePublishRecord(publishDir) {
   const dir = path.resolve(publishDir)
   const record = JSON.parse(fs.readFileSync(path.join(dir, 'final-delivery.json'), 'utf8'))
   const errors = validate(record, schema, dir)
+  errors.push(...statusInputConsistencyErrors(record, dir))
+  errors.push(...remoteDisagreementErrors(record, dir))
   const recomputed = computePublishStatus(publishStatusInput(record))
   if (recomputed.finalStatus !== record.finalStatus) {
     errors.push(`${dir}.finalStatus: recomputed ${recomputed.finalStatus}, record says ${record.finalStatus}`)
@@ -62,12 +102,16 @@ export function validatePublishRecord(publishDir) {
     const remoteSha = record.remoteVerify && record.remoteVerify.remoteSha
     if (!isSha(commitSha)) errors.push(`${dir}.commit.sha: published records require a 40-hex commit sha`)
     if (!record.push || record.push.performed !== true) errors.push(`${dir}.push.performed: published records require push.performed=true`)
+    if (!record.remoteVerifyRecomputed) {
+      errors.push(`${dir}.remoteVerifyRecomputed: published records require recomputed remote verification evidence`)
+    } else {
+      for (const key of ['branchShaMatches', 'committedFilesMatch', 'noForbiddenFiles', 'workTreeClean']) {
+        if (record.remoteVerifyRecomputed[key] !== true) errors.push(`${dir}.remoteVerifyRecomputed.${key}: published records require true`)
+      }
+    }
     if (!record.remoteVerify) {
       errors.push(`${dir}.remoteVerify: published records require remote verification evidence`)
     } else {
-      for (const key of ['branchShaMatches', 'committedFilesMatch', 'noForbiddenFiles', 'workTreeClean']) {
-        if (record.remoteVerify[key] !== true) errors.push(`${dir}.remoteVerify.${key}: published records require true`)
-      }
       if (!isSha(remoteSha)) errors.push(`${dir}.remoteVerify.remoteSha: published records require a 40-hex remote sha`)
       if (isSha(commitSha) && isSha(remoteSha) && commitSha !== remoteSha) errors.push(`${dir}.remoteVerify.remoteSha: must match commit.sha`)
     }

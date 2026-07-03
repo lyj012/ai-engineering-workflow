@@ -72,6 +72,28 @@ export function runValidateDeliveryArtifactsTests() {
     if (!driftResult.errors.some(error => error.includes('browserVerify: statusInput mismatch'))) {
       failures.push('validator should reject top-level browserVerify/statusInput drift')
     }
+
+    const reviewDrift = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    reviewDrift.browserVerify = null
+    reviewDrift.statusInput.browser = null
+    reviewDrift.reviewComplete = false
+    reviewDrift.statusInput.reviewIncomplete = false
+    fs.writeFileSync(manifestPath, JSON.stringify(reviewDrift, null, 2), 'utf8')
+    const reviewDriftResult = validateDeliveryArtifactsDetailed(work)
+    if (!reviewDriftResult.errors.some(error => error.includes('reviewComplete: statusInput mismatch'))) {
+      failures.push('validator should reject reviewComplete/statusInput.reviewIncomplete drift')
+    }
+
+    const multiAgentDrift = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    multiAgentDrift.reviewComplete = true
+    multiAgentDrift.statusInput.reviewIncomplete = false
+    multiAgentDrift.multiAgent = { ...multiAgentDrift.multiAgent, parentAgentImplemented: true }
+    multiAgentDrift.statusInput.multiAgent = { ...multiAgentDrift.statusInput.multiAgent, parentAgentImplemented: false }
+    fs.writeFileSync(manifestPath, JSON.stringify(multiAgentDrift, null, 2), 'utf8')
+    const multiAgentDriftResult = validateDeliveryArtifactsDetailed(work)
+    if (!multiAgentDriftResult.errors.some(error => error.includes('multiAgent: statusInput mismatch'))) {
+      failures.push('validator should reject parentAgentImplemented/statusInput.multiAgent drift')
+    }
   } catch (e) {
     failures.push(`validate-delivery-artifacts test threw: ${e.message}`)
   } finally {

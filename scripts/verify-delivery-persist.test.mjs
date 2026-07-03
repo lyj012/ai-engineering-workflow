@@ -103,6 +103,48 @@ export function runVerifyDeliveryPersistTests() {
       if (badReport.semanticOk !== false) failures.push('tampered manifest should report semanticOk=false')
     }
 
+    const browserDrift = {
+      ...marked,
+      deliveryPersisted: false,
+      persistVerification: { ok: false },
+      browserVerify: { applicable: true, finalBrowserStatus: 'failed', openItems: [] },
+      statusInput: {
+        ...marked.statusInput,
+        deliveryPersisted: false,
+        browser: { applicable: true, status: 'passed', openItems: [] },
+      },
+    }
+    fs.writeFileSync(manifestPath, JSON.stringify(browserDrift, null, 2), 'utf8')
+    const badBrowser = run([
+      '--dir', work,
+      '--final-status', 'DELIVERED',
+      '--files-changed-json', JSON.stringify(['app.sh']),
+      '--diff-apply-check-passed', 'true',
+      '--mark-ok',
+    ])
+    if (badBrowser.status === 0) failures.push('persist verification accepted manifest with browserVerify/statusInput drift')
+
+    const codeQualityDrift = {
+      ...marked,
+      deliveryPersisted: false,
+      persistVerification: { ok: false },
+      codeQuality: { applicable: true, compileRan: true, compilePassed: false, openItems: [] },
+      statusInput: {
+        ...marked.statusInput,
+        deliveryPersisted: false,
+        codeQuality: { applicable: true, compileRan: true, compilePassed: true, hasP0Failure: false, openItems: [] },
+      },
+    }
+    fs.writeFileSync(manifestPath, JSON.stringify(codeQualityDrift, null, 2), 'utf8')
+    const badCodeQuality = run([
+      '--dir', work,
+      '--final-status', 'DELIVERED',
+      '--files-changed-json', JSON.stringify(['app.sh']),
+      '--diff-apply-check-passed', 'true',
+      '--mark-ok',
+    ])
+    if (badCodeQuality.status === 0) failures.push('persist verification accepted manifest with codeQuality/statusInput drift')
+
     const mismatch = run([
       '--dir', work,
       '--final-status', 'BLOCKED',

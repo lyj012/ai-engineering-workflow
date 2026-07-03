@@ -493,6 +493,8 @@ const finalDelivery = {
   deliverableStatus: pre ? pre.deliverableStatus : null,
   deliveryPersistFieldPresent: pre ? pre.deliveryPersistFieldPresent === true : false,
   deliveryPersistVerified: pre ? (pre.deliveryPersistFieldPresent === true ? pre.deliveryPersistVerified : false) : false,
+  allowLegacyUnverifiedDelivery,
+  diffApplyCheckPassed: pre ? pre.diffApplyCheckPassed === true : false,
   highRiskDomains: pre ? pre.highRiskDomains : [],
   highRiskBlocked: !!highRiskBlocked,
   branch: branch ? { name: branch.branchName, originalBranch: branch.originalBranch, finalBranch: branch.branchName, isNewBranch: branch.isNewBranch, branchCreated: branch.branchCreated, branchSwitched: branch.branchSwitched, createdFrom: branch.createdFrom, allowed: branchAllowed } : null,
@@ -503,6 +505,7 @@ const finalDelivery = {
   remoteVerifyRecomputed: remoteRecomputed,   // 脚本侧确定性复算结果（终态判定依据）
   filesChanged: pre ? pre.manifestFilesChanged : [],
   openItems: (pre && pre.openItems) || [],
+  statusInput,
   failedStages,
   rollback: branch && push && push.pushPerformed
     ? `如需回滚，请人工在终端亲自执行（会话内 git-guard 硬禁删远程分支，自动化无法代为执行；在 Claude Code 中可用 ! 前缀）：git push ${pushRemote} --delete ${branch.branchName}（删远程分支）。${branch.isNewBranch ? '' : '直推已存在分支的回滚需人工评估历史影响，勿用删分支方式。'}`

@@ -18,6 +18,7 @@
   "deliverableStatus": "DELIVERED_WITH_OPEN_ITEMS",
   "deliveryPersistFieldPresent": true,
   "deliveryPersistVerified": true,
+  "allowLegacyUnverifiedDelivery": false,
   "diffApplyCheckPassed": true,
   "highRiskDomains": [],
   "highRiskBlocked": false,
@@ -52,8 +53,32 @@
     "remoteFiles": ["app.sh", "test.sh"],
     "note": "remote SHA matches the local commit; committed files match the delivery."
   },
+  "remoteVerifyRecomputed": {
+    "branchShaMatches": true,
+    "committedFilesMatch": true,
+    "noForbiddenFiles": true,
+    "workTreeClean": true
+  },
   "filesChanged": ["app.sh", "test.sh"],
   "openItems": ["manual: confirm `--greet` with a missing name argument behaves as intended"],
+  "statusInput": {
+    "priorStatus": null,
+    "highRiskBlocked": false,
+    "deliverableStatus": "DELIVERED_WITH_OPEN_ITEMS",
+    "deliveryPersistVerified": true,
+    "allowLegacyUnverifiedDelivery": false,
+    "diffApplyCheckPassed": true,
+    "branchAllowed": true,
+    "dryRun": false,
+    "pushPerformed": true,
+    "remoteVerified": {
+      "branchShaMatches": true,
+      "committedFilesMatch": true,
+      "noForbiddenFiles": true,
+      "workTreeClean": true
+    },
+    "deliverableOpenItems": ["manual: confirm `--greet` with a missing name argument behaves as intended"]
+  },
   "failedStages": [],
   "rollback": "If rollback is needed, a human must run it in a terminal: git push origin --delete ai/add-greet-20260626-000000"
 }
