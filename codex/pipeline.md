@@ -26,6 +26,7 @@ First choose the mode:
 | Command / Trigger | Mode | Contract |
 |---|---|---|
 | `/dev-fast` or ordinary coding request | Fast Development | direct minimal edit, no mandatory multi-agent review, light verification |
+| `/dev-feature` | Feature Development | concise plan, minimal ordinary feature path, light verification |
 | `/review-changes` | Review Changes | review current diff only; no feature coding |
 | `/delivery-summary` | Delivery Summary | handoff summary; no new implementation |
 | `/critical-check` or high-risk trigger | Critical Check | full deterministic artifact, sandbox, multi-agent review/verify contract below |
@@ -34,9 +35,13 @@ High-risk triggers include payment, permissions, authentication, amount calculat
 member entitlements, database migration, production data/config, security, destructive file/data operations,
 and multi-tenant isolation.
 
-For Fast Development, do not run the full stage map below unless the user explicitly escalates. The invariant
-is smaller: task-relevant context only, smallest direct change, practical verification, changed-file summary,
-and honest unverified scope.
+Ordinary database CRUD is not database migration. Normal query, mapper, DTO/VO, pagination, filter, and
+non-destructive table read/write changes stay in `/dev-fast` or `/dev-feature` unless they also change
+schema, migrate data, touch production data, change permissions, or hit another high-risk trigger.
+
+For Fast Development and Feature Development, do not run the full stage map below unless the user explicitly
+escalates. The invariant is smaller: task-relevant context only, smallest direct change, practical
+verification, changed-file summary, and honest unverified scope.
 
 - **Model work → `codex exec`**: requirement understanding, code-base analysis, implementation planning,
   risk identification, test planning, coding, independent review, fixing, independent verification.
@@ -236,9 +241,11 @@ commands run on Windows and macOS.
 3. Select `/skills -> ai-engineering-workflow`, or type `$ai-engineering-workflow`.
 4. For daily work, use `/dev-fast` or just enter the development requirement. The skill reads only relevant
    repository context, edits directly, and runs light verification.
-5. Use `/review-changes` when you want review only, `/delivery-summary` for handoff notes, and
+5. Use `/dev-feature` for a normal small module, API set, CRUD feature, or frontend-backend loop that needs a
+   concise plan but not full review machinery.
+6. Use `/review-changes` when you want review only, `/delivery-summary` for handoff notes, and
    `/critical-check` for the full analysis → plan → sandbox code → test → review → fix → verify loop.
-6. At any publish stage Codex stops at the **git-choice gate** and asks you to pick a valid strategy before
+7. At any publish stage Codex stops at the **git-choice gate** and asks you to pick a valid strategy before
    any commit/push.
 
 ## 7. Capability assumptions — verify per environment (req 14)

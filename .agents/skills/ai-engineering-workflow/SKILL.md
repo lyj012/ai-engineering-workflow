@@ -30,6 +30,7 @@ subagents.
 | Command / Trigger | Mode | Use For | Default Behavior |
 |---|---|---|---|
 | `/dev-fast` or no explicit heavy command | Fast Development | frontend pages, components, styles, forms, DTOs, CRUD, ordinary APIs, small bug fixes | inspect relevant files, edit directly, light verification, short summary |
+| `/dev-feature` | Feature Development | ordinary modules, a small set of APIs, frontend-backend loop, non-critical CRUD feature | concise plan, minimal closed path, light verification, changed-file summary |
 | `/review-changes` | Review Changes | review the current diff only | no feature coding; findings first; inspect changed files and relevant context |
 | `/delivery-summary` | Delivery Summary | prepare handoff, demo, merge notes, phase recap | summarize files, behavior, verification, unverified scope, risks |
 | `/critical-check` | Critical Check | payment, permissions, auth, money, callbacks, migrations, production config, deletion, security, multi-tenant logic | run the full critical workflow contract, including sandbox and independent review/verification where available |
@@ -41,6 +42,11 @@ destructive file/data operations, or multi-tenant isolation.
 Do not automatically enter the full engineering loop for ordinary frontend work, ordinary CRUD, DTO/VO
 changes, mapper/service additions, button states, layout tweaks, form interactions, or interface field
 alignment.
+
+Ordinary database CRUD is not a database migration. Adding or adjusting normal queries, mapper methods,
+DTO/VO fields, pagination, filters, or non-destructive table reads/writes must not trigger Critical Check
+unless the task also changes schema, migrates data, touches production data, changes permissions, or has
+another high-risk trigger.
 
 ## 1. Fast Development Mode
 
@@ -77,11 +83,29 @@ Backend defaults:
 - keep API shape and compatibility unless the request explicitly changes them;
 - avoid speculative abstractions and new dependencies for ordinary CRUD.
 
-Feature mode is a slightly broader fast path for a small complete module or frontend-backend loop. Read
-related docs, produce a concise plan, implement the minimal closed path, then verify build/start/core path and
-list changed files plus unverified areas. Do not run independent review by default.
+## 2. Feature Development Mode
 
-## 2. Review Changes Mode
+`/dev-feature` is a slightly broader fast path for a small complete module or frontend-backend loop.
+
+Use it for:
+
+- a normal new CRUD module;
+- a small set of ordinary backend APIs;
+- a frontend page wired to existing or ordinary new APIs;
+- DTO/VO/mapper/service/controller changes that form one business path.
+
+Process:
+
+1. Read related files and project docs that directly affect the feature.
+2. Write a concise plan focused on the minimal closed path.
+3. Implement directly in the target repository with scoped changes.
+4. Run compile/build/lint/focused tests/startup/core API or page checks as practical.
+5. Report changed files, verified path, unverified path, and follow-up risks.
+
+Do not run independent review, sandbox delivery, full artifact generation, or multi-agent verification by
+default. Escalate to Critical Check only when the feature includes a high-risk trigger.
+
+## 3. Review Changes Mode
 
 `/review-changes` is a review-only command. Do not add new product behavior unless the user separately asks
 for fixes after the review.
@@ -90,7 +114,7 @@ Review only the current diff and directly relevant surrounding code. Lead with c
 severity, with file and line references when possible. Focus on bugs, regressions, missing tests, permissions,
 state consistency, API mismatch, and unsafe edge cases. Keep summaries brief.
 
-## 3. Delivery Summary Mode
+## 4. Delivery Summary Mode
 
 `/delivery-summary` prepares a handoff record. It should not expand the implementation.
 
@@ -106,9 +130,9 @@ Include:
 Use deterministic helpers when useful, but do not force plan/delivery artifact generation unless the user asks
 for a formal package.
 
-## 4. Critical Check Mode
+## 5. Critical Check Mode
 
-Critical Check is the only default path that uses the heavy workflow contract.
+Critical Check is the only mode that uses the heavy workflow contract by default.
 
 Before planning or coding in Critical Check, resolve the toolkit root and read:
 
@@ -138,7 +162,7 @@ blocking statuses such as `BLOCKED_MULTI_AGENT_UNAVAILABLE`,
 `execution_context`, `execution-context.mjs` output, and `fallbackUsed=false` before claiming a critical
 delivery is fully verified.
 
-## 5. Toolkit Root For Heavy Commands
+## 6. Toolkit Root For Heavy Commands
 
 Resolve the toolkit root only when a mode needs deterministic workflow tooling. Priority:
 
@@ -167,7 +191,7 @@ Useful deterministic commands:
 
 On Windows PowerShell, prefer `--input <json-file>` or `--stdin` for object inputs.
 
-## 6. Git And Publish
+## 7. Git And Publish
 
 Do not commit or push unless the user explicitly asks for it, except where a separately invoked workflow or
 project rule grants that permission for the current task.
@@ -183,7 +207,7 @@ Before git writes:
 Never force-push, delete remote branches, stage with `git add .`, or publish protected-branch changes without
 explicit opt-in.
 
-## 7. Final Response
+## 8. Final Response
 
 Keep the final response short and factual:
 

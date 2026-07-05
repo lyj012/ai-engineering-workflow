@@ -37,10 +37,10 @@ the path resolved by the skill. Never hard-code a personal machine path.
 
 This template constrains daily AI development. It is not a default full delivery machine.
 
-Default work uses fast development:
+Default work uses fast development or feature development:
 
 ```text
-read relevant files -> minimal direct edit -> light verification -> changed files + unverified scope
+read relevant files -> minimal direct edit or concise feature plan -> light verification -> changed files + unverified scope
 ```
 
 The complete closed loop, identical in rules/artifacts/statuses to the Claude workflow, is reserved for
@@ -59,11 +59,14 @@ is the safe first target; `deliver-from-plan` (sandbox) and `publish-delivery` (
 
 ## Execution Rules
 
-- Choose the command mode first: `/dev-fast`, `/review-changes`, `/delivery-summary`, or `/critical-check`.
+- Choose the command mode first: `/dev-fast`, `/dev-feature`, `/review-changes`, `/delivery-summary`, or
+  `/critical-check`.
 - Invoking `$ai-engineering-workflow` enters Workflow Mode for the selected mode. The latest explicit user
   instruction and safety rules still override.
 - In `/dev-fast`, do not run multi-agent review, sandbox delivery, full artifact generation, or long delivery
   reports by default. Read only relevant files, edit directly, and run practical checks.
+- In `/dev-feature`, write a concise plan for the minimal ordinary feature path, implement directly, and run
+  light verification. Do not run full review machinery by default.
 - In `/review-changes`, inspect the current diff and relevant context only; do not add feature code.
 - In `/delivery-summary`, produce a handoff summary only; do not expand scope.
 - In `/critical-check`, use one Codex invocation per formal stage and pass JSON files between stages in a
@@ -96,6 +99,9 @@ is the safe first target; `deliver-from-plan` (sandbox) and `publish-delivery` (
 - Final output should state changed files, commands run, unverified scope, and remaining risk.
 - Escalate to `/critical-check` for payment, permissions, auth, amount calculation, callbacks, entitlement,
   database migration, production config/data, deletion, security, or multi-tenant isolation.
+- Ordinary database CRUD is not database migration. Normal mapper/query/DTO/VO/pagination/filter/table
+  read-write work stays in `/dev-fast` or `/dev-feature` unless it changes schema, migrates data, touches
+  production data, changes permissions, or hits another high-risk trigger.
 
 ## Customer Git-Choice Gate (publish stage — mandatory)
 

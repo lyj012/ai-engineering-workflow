@@ -83,6 +83,7 @@ generate `AGENTS.md`, or set a toolkit environment variable as normal usage.
 | Command | Default Scope |
 |---|---|
 | `/dev-fast` | daily frontend/backend/full-stack edits with light verification |
+| `/dev-feature` | ordinary small modules, API sets, CRUD features, or frontend-backend loops |
 | `/review-changes` | review current diff only |
 | `/delivery-summary` | handoff or merge summary |
 | `/critical-check` | formal plan/sandbox/review/verify workflow for high-risk work |

@@ -554,6 +554,7 @@ if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guar
     }
     for (const needle of [
       '/dev-fast',
+      '/dev-feature',
       '/review-changes',
       '/delivery-summary',
       '/critical-check',

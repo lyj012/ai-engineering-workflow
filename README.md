@@ -20,6 +20,7 @@ For Codex daily work, the primary commands are:
 | Command | Purpose | Output |
 |---|---|---|
 | `/dev-fast` | Default fast development for pages, components, CRUD, DTOs, ordinary APIs, small fixes | minimal direct edit, light verification, changed files, unverified scope |
+| `/dev-feature` | Ordinary feature path for small modules, API sets, CRUD features, or frontend-backend loops | concise plan, scoped implementation, light verification |
 | `/review-changes` | Review the current diff only | findings ordered by severity |
 | `/delivery-summary` | Prepare handoff/demo/merge notes | changed files, behavior, checks, risks |
 | `/critical-check` | Escalate high-risk work | full plan/sandbox/review/verify artifacts |
@@ -27,7 +28,52 @@ For Codex daily work, the primary commands are:
 Critical triggers include payment, permissions, authentication, amount calculation, callbacks, entitlements,
 database migration, production config/data, deletion, security, and multi-tenant isolation.
 
-The formal artifact pipeline is still available:
+Ordinary database CRUD is not database migration. Normal query, mapper, DTO/VO, pagination, filter, and
+non-destructive table read/write changes should use `/dev-fast` or `/dev-feature` unless they also change
+schema, migrate data, touch production data, change permissions, or hit another high-risk trigger.
+
+## Daily Examples
+
+### Frontend Button, Form, Or Page Change
+
+Use:
+
+```text
+/dev-fast
+Adjust the order form loading and empty states.
+```
+
+Expected behavior: read the related page/component files, make the smallest UI/state change, run build/lint
+or state the manual page checks, then report changed files and unverified interactions.
+
+### Ordinary Backend CRUD Or DTO/API Change
+
+Use `/dev-fast` for small field/DTO/query changes, or `/dev-feature` for a small closed CRUD path:
+
+```text
+/dev-feature
+Add a normal admin CRUD endpoint for coupon categories with pagination.
+```
+
+Expected behavior: concise plan, reuse existing controller/service/mapper patterns, compile or run focused
+tests, optionally smoke the core API. No independent review or sandbox delivery by default.
+
+### Payment, Permission, Callback, Or Migration
+
+Use:
+
+```text
+/critical-check
+Change the payment callback idempotency and member entitlement activation flow.
+```
+
+Expected behavior: full critical flow with plan artifacts, sandbox delivery, independent review and
+verification when available, and explicit remaining risk.
+
+## Formal Pipeline
+
+The formal artifact pipeline is retained for `/critical-check`, explicit formal delivery, and the Claude
+adapter:
 
 | Input | Workflow | Output |
 |---|---|---|
@@ -155,7 +201,8 @@ $ai-engineering-workflow
 The Skill resolves the toolkit from its own installed location, reads the current repository automatically,
 and treats `AGENTS.md` as optional project guidance when present. For daily work, use `/dev-fast` or enter an
 ordinary development request; the skill should read relevant files, edit directly, and run light verification.
-Use `/review-changes`, `/delivery-summary`, or `/critical-check` when you want those heavier behaviors.
+Use `/dev-feature` for a normal small module, API set, CRUD feature, or frontend-backend loop that needs a
+concise plan. Use `/review-changes`, `/delivery-summary`, or `/critical-check` when you want those behaviors.
 Users do not need to set `AIEW_HOME`, provide an absolute toolkit path, generate a project `AGENTS.md`, or
 manually run each formal stage. `AIEW_HOME` remains only as a backwards-compatible override for older setups.
 
@@ -272,7 +319,8 @@ Stable:
 - Requirement-to-plan workflow.
 - Plan-to-sandboxed-diff workflow.
 - Repository analysis workflow.
-- Codex mode routing for `/dev-fast`, `/review-changes`, `/delivery-summary`, and `/critical-check`.
+- Codex mode routing for `/dev-fast`, `/dev-feature`, `/review-changes`, `/delivery-summary`, and
+  `/critical-check`.
 - Codex Critical Check with stable execution context, mandatory real subagents, independent review/fix/verify,
   and Git delivery states (`DELIVERED`, `PUBLISH_READY`, `PUBLISHED`).
 - One Windows 10 + Codex end-to-end run covering demand analysis, implementation, independent review, fix,
