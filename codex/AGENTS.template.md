@@ -37,14 +37,14 @@ the path resolved by the skill. Never hard-code a personal machine path.
 
 This template constrains daily AI development. It is not a default full delivery machine.
 
-Default work uses fast development or feature development:
+Default work is routed by intent:
 
 ```text
-read relevant files -> minimal direct edit or concise feature plan -> light verification -> changed files + unverified scope
+analysis / development / bugfix / refactor / review / delivery summary / git publish
 ```
 
 The complete closed loop, identical in rules/artifacts/statuses to the Claude workflow, is reserved for
-`/critical-check`, explicit formal delivery, or high-risk work:
+explicit complete-flow requests, `/critical-check`, strict audit, or high-risk work:
 
 ```text
 requirement -> code-base analysis -> plan -> sandbox coding -> tests -> independent review -> fix ->
@@ -59,17 +59,27 @@ is the safe first target; `deliver-from-plan` (sandbox) and `publish-delivery` (
 
 ## Execution Rules
 
-- Choose the command mode first: `/dev-fast`, `/dev-feature`, `/review-changes`, `/delivery-summary`, or
-  `/critical-check`.
-- Invoking `$ai-engineering-workflow` enters Workflow Mode for the selected mode. The latest explicit user
+- Route first: explicit complete flow or strict audit -> Full Workflow; high-risk trigger -> Full Workflow;
+  formal handoff/submit/delivery -> Formal Delivery Flow; otherwise route by user intent.
+- Invoking `$ai-engineering-workflow` enters Workflow Mode for the selected flow. The latest explicit user
   instruction and safety rules still override.
+- Analysis Flow reads related files only, outputs conclusions/risks/suggestions, then stops.
 - In `/dev-fast`, do not run multi-agent review, sandbox delivery, full artifact generation, or long delivery
   reports by default. Read only relevant files, edit directly, and run practical checks.
 - In `/dev-feature`, write a concise plan for the minimal ordinary feature path, implement directly, and run
   light verification. Do not run full review machinery by default.
+- Bugfix Flow reads the symptom/log/error, identifies root cause, applies the minimal fix, and runs targeted
+  regression verification.
+- Refactor Flow confirms the boundary, protects external behavior, refactors in small steps, and runs
+  regression verification.
 - In `/review-changes`, inspect the current diff and relevant context only; do not add feature code.
 - In `/delivery-summary`, produce a handoff summary only; do not expand scope.
-- In `/critical-check`, use one Codex invocation per formal stage and pass JSON files between stages in a
+- Formal Delivery Flow gathers current changes, runs necessary verification, reviews current changes, fixes
+  blockers, generates a delivery summary, and routes to Git Publish only when requested.
+- Git Publish Flow checks git state, isolates this task's files, excludes unrelated files/`AGENTS.md`/secrets
+  /local config, shows the file list, waits for confirmation unless already explicit, commits, pushes, creates
+  a PR only when requested, and verifies remote status.
+- In Full Workflow, use one Codex invocation per formal stage and pass JSON files between stages in a
   timestamped run directory.
 - Use `codex exec` **only** for model work: requirement understanding, code analysis, implementation
   planning, risk identification, test planning, coding, independent review, fixing, independent verification.
@@ -86,7 +96,7 @@ is the safe first target; `deliver-from-plan` (sandbox) and `publish-delivery` (
   `projectRoot`, `workspaceRoot`, and `taskArtifactRoot`. Subagents must use those paths and must not infer
   or search for the workflow root.
 - Keep Codex-specific CLI flags and sandbox behavior out of `core/`.
-- `plan-from-requirement` and `deliver-from-plan` never modify the target repository in Critical Check
+- `plan-from-requirement` and `deliver-from-plan` never modify the target repository in Full Workflow
   (deliver works in a sandbox copy and stops at a verified `changes.diff`).
 
 ## Fast Development Defaults

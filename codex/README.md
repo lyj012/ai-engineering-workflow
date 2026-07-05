@@ -61,7 +61,7 @@ The skill is the mode router and workflow launcher, not just a guidance document
 from its own installed location by walking upward until `core/`, `bin/`, `scripts/`, and `codex/` are found
 when heavy tooling is needed. `AIEW_HOME` is retained only as an optional compatibility override. A target
 project's `AGENTS.md` is optional project guidance: read it when present, continue when absent. Fast
-Development does not require formal artifacts; Critical Check delegates every status / gate / git /
+Development does not require formal artifacts; Full Workflow delegates every status / gate / git /
 validation decision to `bin/` + `scripts/` (no logic copied into the prompt).
 
 To use it in a customer project, install this repository's `ai-engineering-workflow` skill once:
@@ -78,15 +78,20 @@ copies generated subagents to `%USERPROFILE%\.codex\agents\aiew_*.toml`; use `/a
 inspect runtime subagent activity for `/critical-check`. Do not require each project to copy the skill,
 generate `AGENTS.md`, or set a toolkit environment variable as normal usage.
 
-## Modes
+## Flows
 
-| Command | Default Scope |
+| Trigger / Command | Default Scope |
 |---|---|
-| `/dev-fast` | daily frontend/backend/full-stack edits with light verification |
-| `/dev-feature` | ordinary small modules, API sets, CRUD features, or frontend-backend loops |
-| `/review-changes` | review current diff only |
-| `/delivery-summary` | handoff or merge summary |
-| `/critical-check` | formal plan/sandbox/review/verify workflow for high-risk work |
+| only analyze / clarify / assess | read-only analysis, risks, suggestions |
+| `/dev-fast` or small development | daily frontend/backend/full-stack edits with light verification |
+| `/dev-feature` or ordinary feature loop | ordinary small modules, API sets, CRUD features, or frontend-backend loops |
+| bug / error / exception | root cause, minimal fix, targeted regression verification |
+| refactor / optimize structure | behavior-preserving small-step refactor |
+| `/review-changes` or diff/PR/code review | review current diff only, with P0/P1/P2 findings |
+| `/delivery-summary` or summary/acceptance notes | handoff or merge summary |
+| formal handoff / ready to submit | Formal Delivery Flow: verify, review current changes, fix blockers, summarize |
+| commit / push / open PR | Git Publish Flow: isolate files, confirm, commit, push, optional PR |
+| `/critical-check`, complete flow, strict audit, or high-risk trigger | Full Workflow: formal plan/sandbox/review/verify workflow |
 
 ## First Runnable Target
 
@@ -140,7 +145,7 @@ Verified in this repository (plain Node, runs here):
   `taskArtifactRoot` values and the starting git snapshot before subagents run;
 - the Codex skill `.agents/skills/ai-engineering-workflow/SKILL.md` exists as a real, well-formed entry
   point (valid `name` + `description` frontmatter, the format Codex documents), includes mode routing, and
-  every deterministic command it tells Critical Check to run is verified to work here.
+  every deterministic command it tells Full Workflow to run is verified to work here.
 - `scripts/install-codex-skill.ps1` installs the user-level Skill entry in link or copied mode.
 - `scripts/generate-codex-agents.mjs` generates Codex `aiew_*` subagents from `codex/agent-role-map.json`
   and existing Claude role sources; `scripts/check-agent-parity.mjs` blocks drift.

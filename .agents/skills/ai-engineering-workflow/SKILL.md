@@ -22,33 +22,66 @@ It is not a full engineering audit by default. The normal goal is:
 
 Default execution is fast. Heavy review and delivery machinery is opt-in or risk-triggered.
 
-## 0. Mode Routing
+## 0. Top-Level Routing
 
-Choose the mode from the user's command and task risk before reading large workflow contracts or spawning
-subagents.
+Route every request before reading large workflow contracts or spawning subagents.
 
-| Command / Trigger | Mode | Use For | Default Behavior |
-|---|---|---|---|
-| `/dev-fast` or no explicit heavy command | Fast Development | frontend pages, components, styles, forms, DTOs, CRUD, ordinary APIs, small bug fixes | inspect relevant files, edit directly, light verification, short summary |
-| `/dev-feature` | Feature Development | ordinary modules, a small set of APIs, frontend-backend loop, non-critical CRUD feature | concise plan, minimal closed path, light verification, changed-file summary |
-| `/review-changes` | Review Changes | review the current diff only | no feature coding; findings first; inspect changed files and relevant context |
-| `/delivery-summary` | Delivery Summary | prepare handoff, demo, merge notes, phase recap | summarize files, behavior, verification, unverified scope, risks |
-| `/critical-check` | Critical Check | payment, permissions, auth, money, callbacks, migrations, production config, deletion, security, multi-tenant logic | run the full critical workflow contract, including sandbox and independent review/verification where available |
+1. If the customer explicitly asks for a complete flow, formal full delivery, strict audit, or full review,
+   use Full Workflow.
+2. Otherwise, if the task hits a high-risk trigger, use Full Workflow.
+3. Otherwise, if the customer is preparing a formal handoff, formal submission, merge, release, or customer
+   delivery, use Formal Delivery Flow.
+4. Otherwise, route by intent: Analysis, Development, Bugfix, Refactor, Review, Delivery Summary, or Git
+   Publish.
 
-Also escalate to Critical Check when the task touches payment, authorization, authentication, amount
-calculation, third-party callbacks, member entitlements, database migration, production data/config, security,
-destructive file/data operations, or multi-tenant isolation.
+High-risk triggers:
+
+- payment;
+- permissions or authorization;
+- authentication or login;
+- amount calculation;
+- third-party callback;
+- data migration;
+- production config or production data;
+- security;
+- data deletion or destructive operation;
+- multi-tenant isolation.
+
+Ordinary database CRUD is not data migration. Adding or adjusting normal queries, mapper methods, DTO/VO
+fields, pagination, filters, or non-destructive table reads/writes must not trigger Full Workflow unless the
+task also changes schema, migrates data, touches production data, changes permissions, or has another
+high-risk trigger.
 
 Do not automatically enter the full engineering loop for ordinary frontend work, ordinary CRUD, DTO/VO
 changes, mapper/service additions, button states, layout tweaks, form interactions, or interface field
 alignment.
 
-Ordinary database CRUD is not a database migration. Adding or adjusting normal queries, mapper methods,
-DTO/VO fields, pagination, filters, or non-destructive table reads/writes must not trigger Critical Check
-unless the task also changes schema, migrates data, touches production data, changes permissions, or has
-another high-risk trigger.
+| Intent / Command | Flow | Default Behavior |
+|---|---|---|
+| only analyze / clarify / assess | Analysis Flow | read-only related files, output conclusions/risks/suggestions, stop |
+| `/dev-fast` or small development | Fast Dev | read related files, minimal edit, light verification, changed files + unverified scope |
+| `/dev-feature` or ordinary feature loop | Feature Dev | short plan, minimal feature loop, core path verification, changed files + unverified scope |
+| fix bug / error / exception | Bugfix Flow | read symptom/logs, identify root cause, minimal fix, targeted regression verification |
+| refactor / optimize structure | Refactor Flow | confirm boundary, protect external behavior, small-step refactor, regression verification |
+| `/review-changes`, diff/PR/code review | Review Flow | read diff/PR/files and necessary context, output P0/P1/P2 findings, stop |
+| `/delivery-summary`, summary/retro/acceptance notes | Delivery Summary Flow | read current changes, summarize completed work, verification, unverified scope, risks |
+| commit / push / open PR | Git Publish Flow | inspect git state, isolate task files, exclude unsafe files, confirm, commit, push, optional PR |
+| formal handoff / formal delivery / ready to submit | Formal Delivery Flow | summarize changes, run needed verification, review current changes, fix blockers, delivery summary |
+| complete flow / strict audit / `/critical-check` / high-risk trigger | Full Workflow | full analysis, risk analysis, plan, sandbox implementation, independent review, independent verification, artifacts |
 
-## 1. Fast Development Mode
+## 1. Analysis Flow
+
+Use Analysis Flow when the customer only wants analysis, clarification, evaluation, design thinking, or risk
+assessment.
+
+Process:
+
+1. Read only related files and relevant project guidance.
+2. Do not edit files.
+3. Output analysis conclusions, risks, suggestions, and concrete next-step options.
+4. Stop and wait for the customer's next instruction.
+
+## 2. Fast Development Mode
 
 Fast Development is the default unless the user explicitly asks for review, delivery, critical, audit, or the
 task matches the high-risk triggers above.
@@ -83,7 +116,7 @@ Backend defaults:
 - keep API shape and compatibility unless the request explicitly changes them;
 - avoid speculative abstractions and new dependencies for ordinary CRUD.
 
-## 2. Feature Development Mode
+## 3. Feature Development Mode
 
 `/dev-feature` is a slightly broader fast path for a small complete module or frontend-backend loop.
 
@@ -103,9 +136,36 @@ Process:
 5. Report changed files, verified path, unverified path, and follow-up risks.
 
 Do not run independent review, sandbox delivery, full artifact generation, or multi-agent verification by
-default. Escalate to Critical Check only when the feature includes a high-risk trigger.
+default. Escalate to Full Workflow only when the feature includes a high-risk trigger.
 
-## 3. Review Changes Mode
+## 4. Bugfix Flow
+
+Use Bugfix Flow when the customer reports a bug, error, exception, failed command, broken behavior, or
+regression.
+
+Process:
+
+1. Read the error, logs, failing behavior, and directly related code.
+2. Identify the root cause before editing when practical.
+3. Apply the smallest fix that addresses the root cause.
+4. Run targeted regression verification such as the failing command, focused test, build, lint, compile, or
+   a narrow manual check.
+5. Report root cause, fix point, commands run, and remaining unverified scope.
+
+## 5. Refactor Flow
+
+Use Refactor Flow when the customer asks to restructure, simplify, optimize organization, rename, or improve
+maintainability without changing behavior.
+
+Process:
+
+1. Confirm the refactor boundary.
+2. Identify external behavior that must stay unchanged.
+3. Refactor in small steps and avoid unrelated cleanup.
+4. Run regression verification that protects the unchanged behavior.
+5. Report what changed and whether external behavior was kept unchanged based on the checks run.
+
+## 6. Review Changes Mode
 
 `/review-changes` is a review-only command. Do not add new product behavior unless the user separately asks
 for fixes after the review.
@@ -114,7 +174,13 @@ Review only the current diff and directly relevant surrounding code. Lead with c
 severity, with file and line references when possible. Focus on bugs, regressions, missing tests, permissions,
 state consistency, API mismatch, and unsafe edge cases. Keep summaries brief.
 
-## 4. Delivery Summary Mode
+Use P0/P1/P2 severity:
+
+- P0: must fix before merge/release/customer delivery.
+- P1: should fix before normal delivery unless explicitly accepted.
+- P2: improvement, cleanup, or lower-risk follow-up.
+
+## 7. Delivery Summary Mode
 
 `/delivery-summary` prepares a handoff record. It should not expand the implementation.
 
@@ -130,39 +196,72 @@ Include:
 Use deterministic helpers when useful, but do not force plan/delivery artifact generation unless the user asks
 for a formal package.
 
-## 5. Critical Check Mode
+## 8. Formal Delivery Flow
 
-Critical Check is the only mode that uses the heavy workflow contract by default.
+Use Formal Delivery Flow when the customer is preparing a formal handoff, formal submission, merge, release,
+or customer delivery, but has not asked for the complete high-risk workflow.
 
-Before planning or coding in Critical Check, resolve the toolkit root and read:
+Process:
+
+1. Read the current changes and identify this task's files.
+2. Run necessary verification for the changed surface.
+3. Review the current changes for blockers.
+4. If must-fix issues exist, fix them and rerun the needed verification.
+5. Generate a delivery summary with completed work, verification results, unverified scope, and risks.
+6. If the customer asks to push, route to Git Publish Flow. Otherwise stop.
+
+This flow reviews the current changes; it does not require sandbox delivery, formal plan artifacts, or
+multi-agent independent verification by default.
+
+## 9. Full Workflow
+
+Use Full Workflow when the customer explicitly asks for a complete flow, formal full delivery, strict audit,
+or when the high-risk trigger list is matched.
+
+Full Workflow is the only mode that uses the heavy workflow contract by default.
+
+Before planning or coding in Full Workflow, resolve the toolkit root and read:
 
 1. `<toolkit-root>/codex/pipeline.md`
 2. `<toolkit-root>/codex/plan-from-requirement.md`
 3. `<toolkit-root>/codex/agent-role-map.json`
 
-Treat those files as the critical execution contract. The critical shape remains:
+Treat those files as the full execution contract. The shape remains:
 
 `plan-from-requirement (read-only) -> validated plan artifacts -> deliver-from-plan (sandbox only) -> independent review/fix/verify -> validated delivery artifacts + changes.diff -> optional publish`.
 
-Critical Check uses plan artifacts such as `requirement.json`, `plan.json`, `risks.json`, `test-plan.json`,
+Full Workflow steps:
+
+1. Full requirement analysis.
+2. Full risk analysis.
+3. Plan creation.
+4. Sandbox implementation.
+5. Independent review stage.
+6. Fix any discovered issue.
+7. Independent verification stage.
+8. Generate delivery artifacts.
+9. Generate delivery summary.
+10. If the customer asks to push, route to Git Publish Flow. Otherwise stop.
+
+Full Workflow uses plan artifacts such as `requirement.json`, `plan.json`, `risks.json`, `test-plan.json`,
 and `final-plan.md`, validates them with `validate-plan-artifacts.mjs`, performs implementation in a sandbox
 copy, never by directly editing the target repository during the sandbox delivery stage, emits
 `changes.diff`, `delivery-report.md`, and `delivery-manifest.json`, and validates delivery with
 `validate-delivery-artifacts.mjs`.
 
-Critical Check requires real Codex subagent threads when the environment supports them. The parent thread
+Full Workflow requires real Codex subagent threads when the environment supports them. The parent thread
 must Spawn the mapped Codex custom agent, Wait for that agent to complete, validate the result, and record
 `agent-execution.json`. It must not simulate independent roles in the parent thread.
 
-The independent review stage and independent verification stage must be separate real executions in Critical
-Check. If required subagents are unavailable or execution evidence is incomplete, report one of the existing
+The independent review stage and independent verification stage must be separate real executions in Full
+Workflow. If required subagents are unavailable or execution evidence is incomplete, report one of the existing
 blocking statuses such as `BLOCKED_MULTI_AGENT_UNAVAILABLE`,
 `BLOCKED_MULTI_AGENT_CONTRACT_VIOLATION`, `BLOCKED_INCOMPLETE_MULTI_AGENT_EXECUTION`, or
 `BLOCKED_MISSING_INDEPENDENT_VERIFIER`. Do not fabricate success evidence. Records must include
-`execution_context`, `execution-context.mjs` output, and `fallbackUsed=false` before claiming a critical
-delivery is fully verified.
+`execution_context`, `execution-context.mjs` output, and `fallbackUsed=false` before claiming a full delivery
+is fully verified.
 
-## 6. Toolkit Root For Heavy Commands
+## 10. Toolkit Root For Heavy Commands
 
 Resolve the toolkit root only when a mode needs deterministic workflow tooling. Priority:
 
@@ -170,8 +269,8 @@ Resolve the toolkit root only when a mode needs deterministic workflow tooling. 
    `SKILL.md` first, then walk upward until `core/`, `bin/`, `scripts/`, and `codex/` exist.
 2. If the user explicitly provides a toolkit path for this run, use it.
 3. If `AIEW_HOME` is set, use it as a backwards-compatible override.
-4. If none of the above locates the toolkit root, continue Fast Development without heavy tooling, or stop
-   Critical Check with a clear installation error.
+4. If none of the above locates the toolkit root, continue lightweight flows without heavy tooling, or stop
+   Full Workflow with a clear installation error.
 
 Useful deterministic commands:
 
@@ -191,23 +290,29 @@ Useful deterministic commands:
 
 On Windows PowerShell, prefer `--input <json-file>` or `--stdin` for object inputs.
 
-## 7. Git And Publish
+## 11. Git Publish Flow
 
 Do not commit or push unless the user explicitly asks for it, except where a separately invoked workflow or
 project rule grants that permission for the current task.
 
-Before git writes:
+Process:
 
 1. inspect the working tree;
 2. identify exactly which files belong to this task;
 3. exclude unrelated or pre-existing changes;
 4. reject `AGENTS.md`, secrets, personal config, generated local output, and out-of-scope files;
-5. show the file list and key change summary to the user unless the active mode explicitly authorizes publish.
+5. show the prepared file list and key change summary to the customer;
+6. stop unless the customer has already clearly confirmed commit/push in the current task;
+7. commit using exact pathspecs only;
+8. push normally;
+9. create a PR only when requested;
+10. verify the remote commit or PR state;
+11. output branch, commit, PR link when any, and remote status.
 
 Never force-push, delete remote branches, stage with `git add .`, or publish protected-branch changes without
 explicit opt-in.
 
-## 8. Final Response
+## 12. Final Response
 
 Keep the final response short and factual:
 

@@ -13,6 +13,116 @@ methodology, schemas, or status definitions. Codex has completed one real Window
 end-to-end validation, including analysis, implementation, independent review, fix, independent verification,
 tests, commit, and remote push.
 
+## Codex Flow
+
+```mermaid
+flowchart TD
+  A["Customer invokes workflow"] --> B{"Complete flow requested?"}
+
+  B -->|"Explicit: complete flow / formal full delivery / strict audit"| FULL["Full Workflow"]
+  B -->|"Not explicit"| C{"High-risk trigger?"}
+
+  C -->|"payment / permission / auth / amount / callback / data migration / production config / security / delete data"| FULL
+  C -->|"No"| D{"Preparing formal submit / push / customer delivery?"}
+
+  D -->|"Yes"| FDELIVERY["Formal Delivery Flow"]
+  D -->|"No"| E{"What does the customer want?"}
+
+  E -->|"Analyze / clarify / assess"| ANALYZE["Analysis Flow"]
+  E -->|"New feature / page / API"| DEV["Development Flow"]
+  E -->|"Bug / error / exception"| BUG["Bugfix Flow"]
+  E -->|"Refactor / structural optimization"| REFACTOR["Refactor Flow"]
+  E -->|"Review diff / PR / code"| REVIEW["Review Flow"]
+  E -->|"Summary / retro / acceptance notes"| SUMMARY["Delivery Summary Flow"]
+  E -->|"Commit / push / PR"| PUBLISH["Git Publish Flow"]
+
+  ANALYZE --> A1["Read related files only"]
+  A1 --> A2["Output analysis / risks / suggestions"]
+  A2 --> STOP["Stop and wait for next customer step"]
+
+  DEV --> D1{"Task size?"}
+  D1 -->|"Small change"| FAST["Fast Dev"]
+  D1 -->|"Ordinary feature loop"| FEATURE["Feature Dev"]
+
+  FAST --> F1["Read related files"]
+  F1 --> F2["Minimal code change"]
+  F2 --> F3["Light verification"]
+  F3 --> F4["Output changed files / verification / unverified scope"]
+  F4 --> STOP
+
+  FEATURE --> FE1["Read related code and necessary docs"]
+  FE1 --> FE2["Short plan"]
+  FE2 --> FE3["Implement minimal feature loop"]
+  FE3 --> FE4["Core path verification"]
+  FE4 --> FE5["Output changed files / verification / unverified scope"]
+  FE5 --> STOP
+
+  BUG --> B1["Read error / logs / symptom"]
+  B1 --> B2["Identify root cause"]
+  B2 --> B3["Minimal fix"]
+  B3 --> B4["Targeted regression verification"]
+  B4 --> B5["Output root cause / fix point / verification"]
+  B5 --> STOP
+
+  REFACTOR --> R1["Confirm refactor boundary"]
+  R1 --> R2["Identify external behavior protection points"]
+  R2 --> R3["Small-step refactor"]
+  R3 --> R4["Regression verification"]
+  R4 --> R5["Output refactor content / behavior preservation"]
+  R5 --> STOP
+
+  REVIEW --> RV1["Read diff / PR / specified files"]
+  RV1 --> RV2["Read necessary context"]
+  RV2 --> RV3["Output P0 / P1 / P2 findings"]
+  RV3 --> STOP
+
+  SUMMARY --> S1["Read current changes"]
+  S1 --> S2["Summarize completed work / verification / unverified scope / risks"]
+  S2 --> S3["Output delivery summary"]
+  S3 --> STOP
+
+  FDELIVERY --> FD1["Gather current changes"]
+  FD1 --> FD2["Run necessary verification"]
+  FD2 --> FD3["Review current changes"]
+  FD3 --> FD4{"Must-fix issues?"}
+  FD4 -->|"Yes"| FD5["Fix issues"]
+  FD5 --> FD2
+  FD4 -->|"No"| FD6["Generate delivery summary"]
+  FD6 --> FD7{"Customer asks to push?"}
+  FD7 -->|"No"| STOP
+  FD7 -->|"Yes"| PUBLISH
+
+  FULL --> FULL1["Full requirement analysis"]
+  FULL1 --> FULL2["Full risk analysis"]
+  FULL2 --> FULL3["Create plan"]
+  FULL3 --> FULL4["Sandbox implementation"]
+  FULL4 --> FULL5["Independent review"]
+  FULL5 --> FULL6{"Issues found?"}
+  FULL6 -->|"Yes"| FULL7["Fix issues"]
+  FULL7 --> FULL8["Independent verification"]
+  FULL6 -->|"No"| FULL8
+  FULL8 --> FULL9["Generate delivery artifacts"]
+  FULL9 --> FULL10["Generate delivery summary"]
+  FULL10 --> FULL11{"Customer asks to push?"}
+  FULL11 -->|"No"| STOP
+  FULL11 -->|"Yes"| PUBLISH
+
+  PUBLISH --> P1["Check git state"]
+  P1 --> P2["Identify this task's changed files"]
+  P2 --> P3["Exclude unrelated files / AGENTS.md / secrets / local config"]
+  P3 --> P4["Show prepared file list"]
+  P4 --> P5{"Customer confirms?"}
+  P5 -->|"No"| STOP
+  P5 -->|"Yes"| P6["Commit"]
+  P6 --> P7["Push"]
+  P7 --> P8{"PR needed?"}
+  P8 -->|"Yes"| P9["Create PR"]
+  P8 -->|"No"| P10["Verify remote commit"]
+  P9 --> P10
+  P10 --> P11["Output branch / commit / PR / remote status"]
+  P11 --> STOP
+```
+
 ## What This Does
 
 For Codex daily work, the primary commands are:

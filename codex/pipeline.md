@@ -3,10 +3,10 @@
 How OpenAI Codex (Desktop and CLI) runs AI Engineering Workflow after the repositioning from a default
 full-pipeline executor to a daily development constraint and delivery-record tool.
 
-The default Codex path is now fast development: inspect relevant files, make minimal edits, run practical
-verification, and report changed files plus unverified scope. The complete workflow — requirement → analysis
-→ plan → coding → tests → independent review → fix → independent verify → diff → customer git-choice →
-commit → push — is retained as the Critical Check path for high-risk work or explicit user commands.
+The default Codex path is now routed by intent: analysis, development, bugfix, refactor, review, delivery
+summary, or git publish. The complete workflow — requirement → analysis → plan → coding → tests →
+independent review → fix → independent verify → diff → customer git-choice → commit → push — is retained
+for explicit full-flow requests and high-risk work.
 
 When the Codex skill is invoked, the run is in Workflow Mode: this pipeline owns orchestration, subagent
 sequencing, validation gates, git-delivery gates, and final status meanings only for the selected mode. The
@@ -21,15 +21,20 @@ constraints, and global safety rules remain active.
 
 ## 1. The one rule that prevents drift
 
-First choose the mode:
+First choose the flow:
 
-| Command / Trigger | Mode | Contract |
+| Trigger / Intent | Flow | Contract |
 |---|---|---|
-| `/dev-fast` or ordinary coding request | Fast Development | direct minimal edit, no mandatory multi-agent review, light verification |
-| `/dev-feature` | Feature Development | concise plan, minimal ordinary feature path, light verification |
-| `/review-changes` | Review Changes | review current diff only; no feature coding |
-| `/delivery-summary` | Delivery Summary | handoff summary; no new implementation |
-| `/critical-check` or high-risk trigger | Critical Check | full deterministic artifact, sandbox, multi-agent review/verify contract below |
+| explicit full flow / formal full delivery / strict audit / `/critical-check` | Full Workflow | full deterministic artifacts, sandbox, multi-agent review/verify contract below |
+| high-risk trigger | Full Workflow | full deterministic artifacts, sandbox, multi-agent review/verify contract below |
+| formal handoff / formal submit / ready to deliver | Formal Delivery Flow | summarize current changes, verify, review, fix blockers, delivery summary |
+| only analyze / clarify / assess | Analysis Flow | read-only related context, conclusions/risks/suggestions, stop |
+| write new feature/page/API | Development Flow | choose Fast Dev for small changes, Feature Dev for ordinary closed loops |
+| bug / error / exception | Bugfix Flow | root cause, minimal fix, targeted regression verification |
+| refactor / optimize structure | Refactor Flow | boundary, behavior protection, small-step refactor, regression verification |
+| diff / PR / code review | Review Flow | current diff/PR/files, necessary context, P0/P1/P2 findings, stop |
+| summary / retro / acceptance notes | Delivery Summary Flow | completed work, verification, unverified scope, risks |
+| commit / push / open PR | Git Publish Flow | git state, task file isolation, unsafe-file exclusion, confirmation, commit/push/optional PR |
 
 High-risk triggers include payment, permissions, authentication, amount calculation, third-party callbacks,
 member entitlements, database migration, production data/config, security, destructive file/data operations,
@@ -39,8 +44,9 @@ Ordinary database CRUD is not database migration. Normal query, mapper, DTO/VO, 
 non-destructive table read/write changes stay in `/dev-fast` or `/dev-feature` unless they also change
 schema, migrate data, touch production data, change permissions, or hit another high-risk trigger.
 
-For Fast Development and Feature Development, do not run the full stage map below unless the user explicitly
-escalates. The invariant is smaller: task-relevant context only, smallest direct change, practical
+For Analysis, Development, Bugfix, Refactor, Review, Delivery Summary, and Git Publish flows, do not run the
+full stage map below unless the user explicitly escalates or the task hits a high-risk trigger. The invariant
+is smaller: task-relevant context only, smallest direct change where edits are requested, practical
 verification, changed-file summary, and honest unverified scope.
 
 - **Model work → `codex exec`**: requirement understanding, code-base analysis, implementation planning,
@@ -48,12 +54,59 @@ verification, changed-file summary, and honest unverified scope.
 - **Deterministic work → plain Node calling `core/`** (never the model): status/readiness/deliver/publish
   decisions, git-state + branch-choice, JSON validation, diff `git apply --check`, artifact writing.
 
-The full model/deterministic split above is required for Critical Check and formal delivery runs. In Fast
-Development, use normal Codex editing plus the target project's own build, lint, test, and smoke commands.
+The full model/deterministic split above is required for Full Workflow. Lightweight flows use normal Codex
+editing plus the target project's own build, lint, test, and smoke commands. Formal Delivery reviews current
+changes and reruns necessary verification, but does not require sandbox artifacts unless explicitly escalated.
 
 The deterministic decisions are **identical bytes of logic** to what the Claude workflow inlines, because
 both call `core/`. Claude inlines `core/` with `// >>> X` parity blocks locked by `scripts/self-check.mjs`;
 Codex calls `core/` through the CLIs below. One source of truth.
+
+### 1a. Lightweight Flow Steps
+
+- Analysis Flow: read related files only -> output analysis conclusions, risks, suggestions -> stop.
+- Fast Dev: read related files -> minimal code change -> light verification -> output changed files,
+  verification result, and unverified scope -> stop.
+- Feature Dev: read related code and necessary docs -> short plan -> implement minimal feature loop -> core
+  path verification -> output changed files, verification result, and unverified scope -> stop.
+- Bugfix Flow: read error/logs/symptom -> identify root cause -> minimal fix -> targeted regression
+  verification -> output root cause, fix point, and verification result -> stop.
+- Refactor Flow: confirm refactor boundary -> identify external behavior protection points -> small-step
+  refactor -> regression verification -> output refactor content and behavior preservation evidence -> stop.
+- Review Flow: read diff/PR/specified files -> read necessary context -> output P0/P1/P2 findings -> stop.
+- Delivery Summary Flow: read current changes -> summarize completed work, verification, unverified scope,
+  and risks -> stop.
+
+### 1b. Formal Delivery Flow
+
+Formal Delivery Flow is for formal handoff, formal submit, merge, release, or customer delivery when the task
+does not require Full Workflow.
+
+Steps:
+
+1. Gather current changes.
+2. Run necessary verification for the changed surface.
+3. Review current changes.
+4. If must-fix issues exist, fix them and rerun necessary verification.
+5. Generate a delivery summary.
+6. If the customer asks to push, route to Git Publish Flow; otherwise stop.
+
+### 1c. Git Publish Flow
+
+Git Publish Flow is the only lightweight flow that writes git history.
+
+Steps:
+
+1. Check git state.
+2. Identify this task's changed files.
+3. Exclude unrelated files, `AGENTS.md`, secrets, and local config.
+4. Show the prepared file list.
+5. Stop unless the customer has confirmed commit/push in the current task.
+6. Commit exact files only.
+7. Push normally.
+8. Create a PR only when requested.
+9. Verify remote commit or PR state.
+10. Output branch, commit, PR link when any, and remote status.
 
 ## 2. Deterministic surface (runnable today, cross-platform)
 
@@ -82,12 +135,12 @@ Codex calls `core/` through the CLIs below. One source of truth.
 
 All read JSON in / print JSON out, run on bare `node` (Windows / macOS / Linux), and contain no author paths.
 
-## 3. Critical Stage Map (same artifacts/statuses as Claude)
+## 3. Full Workflow Stage Map (same artifacts/statuses as Claude)
 
-This section applies only to `/critical-check`, explicit formal delivery, or high-risk tasks. Each model
-stage is one `codex exec` run reading the previous stage's JSON and writing the next stage's JSON into a
-timestamped run directory; each deterministic step is a CLI above. The artifact filenames and the schemas
-they satisfy are exactly the Claude ones (`core/schemas/plan-artifacts.schema.json`).
+This section applies only to explicit full-flow requests, formal full delivery, `/critical-check`, or
+high-risk tasks. Each model stage is one `codex exec` run reading the previous stage's JSON and writing the
+next stage's JSON into a timestamped run directory; each deterministic step is a CLI above. The artifact
+filenames and the schemas they satisfy are exactly the Claude ones (`core/schemas/plan-artifacts.schema.json`).
 
 At workflow start, the parent must build one stable `execution_context` with `bin/execution-context.mjs`:
 
@@ -239,12 +292,12 @@ commands run on Windows and macOS.
    `powershell -ExecutionPolicy Bypass -File <toolkit-root>\scripts\install-codex-skill.ps1`, then restart
    Codex or open a new thread.
 3. Select `/skills -> ai-engineering-workflow`, or type `$ai-engineering-workflow`.
-4. For daily work, use `/dev-fast` or just enter the development requirement. The skill reads only relevant
-   repository context, edits directly, and runs light verification.
-5. Use `/dev-feature` for a normal small module, API set, CRUD feature, or frontend-backend loop that needs a
-   concise plan but not full review machinery.
-6. Use `/review-changes` when you want review only, `/delivery-summary` for handoff notes, and
-   `/critical-check` for the full analysis → plan → sandbox code → test → review → fix → verify loop.
+4. For normal work, state the intent naturally or use a command such as `/dev-fast`, `/dev-feature`,
+   `/review-changes`, `/delivery-summary`, or `/critical-check`.
+5. The router first checks explicit full-flow requests, high-risk triggers, and formal delivery intent, then
+   routes to Analysis, Development, Bugfix, Refactor, Review, Delivery Summary, or Git Publish.
+6. Use `/critical-check` or explicit "complete flow / strict audit" wording for the full analysis → plan →
+   sandbox code → test → review → fix → verify loop.
 7. At any publish stage Codex stops at the **git-choice gate** and asks you to pick a valid strategy before
    any commit/push.
 
