@@ -2,15 +2,32 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-AI engineering workflow contracts and adapters for turning a user requirement into a reviewed engineering plan, then into a sandboxed code diff with explicit verification evidence.
+AI development workflow contracts and adapters for keeping Codex changes scoped, practical, verifiable, and
+easy to hand off. The default Codex positioning is now a lightweight development constraint and delivery
+record tool; the full audited pipeline remains available for critical work.
 
-The Claude Code Dynamic Workflows adapter is the mature implementation. The Codex adapter exposes the same
-workflow through a selectable Skill named `ai-engineering-workflow`; it shares the platform-neutral artifact
-contracts in `core/` instead of duplicating methodology, schemas, or status definitions. Codex has completed
-one real Windows 10 + Codex multi-subagent end-to-end validation, including analysis, implementation,
-independent review, fix, independent verification, tests, commit, and remote push.
+The Claude Code Dynamic Workflows adapter is the mature full-pipeline implementation. The Codex adapter
+exposes a selectable Skill named `ai-engineering-workflow`; it uses mode routing for daily work and shares the
+platform-neutral artifact contracts in `core/` for formal delivery and critical checks instead of duplicating
+methodology, schemas, or status definitions. Codex has completed one real Windows 10 + Codex multi-subagent
+end-to-end validation, including analysis, implementation, independent review, fix, independent verification,
+tests, commit, and remote push.
 
 ## What This Does
+
+For Codex daily work, the primary commands are:
+
+| Command | Purpose | Output |
+|---|---|---|
+| `/dev-fast` | Default fast development for pages, components, CRUD, DTOs, ordinary APIs, small fixes | minimal direct edit, light verification, changed files, unverified scope |
+| `/review-changes` | Review the current diff only | findings ordered by severity |
+| `/delivery-summary` | Prepare handoff/demo/merge notes | changed files, behavior, checks, risks |
+| `/critical-check` | Escalate high-risk work | full plan/sandbox/review/verify artifacts |
+
+Critical triggers include payment, permissions, authentication, amount calculation, callbacks, entitlements,
+database migration, production config/data, deletion, security, and multi-tenant isolation.
+
+The formal artifact pipeline is still available:
 
 | Input | Workflow | Output |
 |---|---|---|
@@ -136,9 +153,11 @@ $ai-engineering-workflow
 ```
 
 The Skill resolves the toolkit from its own installed location, reads the current repository automatically,
-and treats `AGENTS.md` as optional project guidance when present. Users do not need to set `AIEW_HOME`,
-provide an absolute toolkit path, generate a project `AGENTS.md`, or manually run each stage. `AIEW_HOME`
-remains only as a backwards-compatible override for older setups.
+and treats `AGENTS.md` as optional project guidance when present. For daily work, use `/dev-fast` or enter an
+ordinary development request; the skill should read relevant files, edit directly, and run light verification.
+Use `/review-changes`, `/delivery-summary`, or `/critical-check` when you want those heavier behaviors.
+Users do not need to set `AIEW_HOME`, provide an absolute toolkit path, generate a project `AGENTS.md`, or
+manually run each formal stage. `AIEW_HOME` remains only as a backwards-compatible override for older setups.
 
 The installer also installs generated Codex subagents under:
 
@@ -253,7 +272,8 @@ Stable:
 - Requirement-to-plan workflow.
 - Plan-to-sandboxed-diff workflow.
 - Repository analysis workflow.
-- Codex Workflow Mode with stable execution context, mandatory real subagents, independent review/fix/verify,
+- Codex mode routing for `/dev-fast`, `/review-changes`, `/delivery-summary`, and `/critical-check`.
+- Codex Critical Check with stable execution context, mandatory real subagents, independent review/fix/verify,
   and Git delivery states (`DELIVERED`, `PUBLISH_READY`, `PUBLISHED`).
 - One Windows 10 + Codex end-to-end run covering demand analysis, implementation, independent review, fix,
   independent verification, tests, commit, and remote push.

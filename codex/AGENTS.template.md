@@ -35,9 +35,21 @@ the path resolved by the skill. Never hard-code a personal machine path.
 
 ## Scope
 
-The complete closed loop, identical in rules/artifacts/statuses to the Claude workflow:
-requirement → code-base analysis → plan → coding → tests → independent review → fix → independent verify →
-diff → **customer git-choice** → commit → push.
+This template constrains daily AI development. It is not a default full delivery machine.
+
+Default work uses fast development:
+
+```text
+read relevant files -> minimal direct edit -> light verification -> changed files + unverified scope
+```
+
+The complete closed loop, identical in rules/artifacts/statuses to the Claude workflow, is reserved for
+`/critical-check`, explicit formal delivery, or high-risk work:
+
+```text
+requirement -> code-base analysis -> plan -> sandbox coding -> tests -> independent review -> fix ->
+independent verify -> diff -> customer git-choice -> commit -> push
+```
 
 Build it up in verified order: do not claim a stage runnable in Codex until a real Codex run has
 produced its artifacts and the stage's validator passes — `validate-plan-artifacts.mjs` (plan) /
@@ -47,10 +59,15 @@ is the safe first target; `deliver-from-plan` (sandbox) and `publish-delivery` (
 
 ## Execution Rules
 
-- One Codex invocation per stage; pass JSON files between stages in a timestamped run directory.
-- Invoking `$ai-engineering-workflow` enters Workflow Mode: this workflow owns orchestration, validation
-  gates, git-delivery gates, and final status meanings. The latest explicit user instruction and safety
-  rules still override.
+- Choose the command mode first: `/dev-fast`, `/review-changes`, `/delivery-summary`, or `/critical-check`.
+- Invoking `$ai-engineering-workflow` enters Workflow Mode for the selected mode. The latest explicit user
+  instruction and safety rules still override.
+- In `/dev-fast`, do not run multi-agent review, sandbox delivery, full artifact generation, or long delivery
+  reports by default. Read only relevant files, edit directly, and run practical checks.
+- In `/review-changes`, inspect the current diff and relevant context only; do not add feature code.
+- In `/delivery-summary`, produce a handoff summary only; do not expand scope.
+- In `/critical-check`, use one Codex invocation per formal stage and pass JSON files between stages in a
+  timestamped run directory.
 - Use `codex exec` **only** for model work: requirement understanding, code analysis, implementation
   planning, risk identification, test planning, coding, independent review, fixing, independent verification.
 - Use plain Node for **all** deterministic work — never ask the model to do bookkeeping (all paths via `<toolkit-root>`):
@@ -66,8 +83,19 @@ is the safe first target; `deliver-from-plan` (sandbox) and `publish-delivery` (
   `projectRoot`, `workspaceRoot`, and `taskArtifactRoot`. Subagents must use those paths and must not infer
   or search for the workflow root.
 - Keep Codex-specific CLI flags and sandbox behavior out of `core/`.
-- `plan-from-requirement` and `deliver-from-plan` never modify the target repository (deliver works in a
-  sandbox copy and stops at a verified `changes.diff`).
+- `plan-from-requirement` and `deliver-from-plan` never modify the target repository in Critical Check
+  (deliver works in a sandbox copy and stops at a verified `changes.diff`).
+
+## Fast Development Defaults
+
+- Frontend: only modify related components, styles, hooks, API calls, or local state. Do not rewrite routing,
+  global state, request wrappers, or design foundations unless explicitly requested.
+- Backend: reuse existing controller/service/mapper/DTO patterns and keep ordinary CRUD changes local.
+- Verification should normally be one or more of build, lint, type check, focused tests, compile, startup
+  check, focused API call, or manual page acceptance notes.
+- Final output should state changed files, commands run, unverified scope, and remaining risk.
+- Escalate to `/critical-check` for payment, permissions, auth, amount calculation, callbacks, entitlement,
+  database migration, production config/data, deletion, security, or multi-tenant isolation.
 
 ## Customer Git-Choice Gate (publish stage — mandatory)
 

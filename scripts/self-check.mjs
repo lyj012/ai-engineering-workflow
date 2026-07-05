@@ -550,9 +550,13 @@ if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guar
     else if (!/(^|\n)name:\s*\S/.test(fm[1]) || !/(^|\n)description:\s*\S/.test(fm[1])) errors.push(`${skillFile} frontmatter must include name and description`)
     else {
       if (!/(^|\n)name:\s*ai-engineering-workflow\s*(\n|$)/.test(fm[1])) errors.push(`${skillFile} frontmatter name must be ai-engineering-workflow`)
-      if (!/autonomous software engineering workflow/i.test(fm[1])) errors.push(`${skillFile} description must identify the skill as an autonomous engineering workflow`)
+      if (!/lightweight AI development constraint workflow/i.test(fm[1])) errors.push(`${skillFile} description must identify the skill as a lightweight development constraint workflow`)
     }
     for (const needle of [
+      '/dev-fast',
+      '/review-changes',
+      '/delivery-summary',
+      '/critical-check',
       '<toolkit-root>/codex/pipeline.md',
       '<toolkit-root>/codex/plan-from-requirement.md',
       'validate-plan-artifacts.mjs',

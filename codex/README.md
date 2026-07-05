@@ -2,15 +2,17 @@
 
 This directory defines the OpenAI Codex adapter for AI Engineering Workflow.
 
-Goal: let Codex (Desktop or CLI) run the **complete** workflow — requirement → analysis → plan → coding →
+Goal: let Codex (Desktop or CLI) run a mode-based AI Engineering Workflow. Daily tasks use the lightweight
+constraint path: relevant context, minimal direct edit, light verification, and concise delivery notes.
+Critical tasks can still run the **complete** workflow — requirement → analysis → plan → sandbox coding →
 tests → independent review → fix → independent verify → diff → customer git-choice → commit → push — using
 the **same** `core/` rules, schemas, statuses, risk gates and report shapes as the Claude adapter, without
 changing the Claude implementation and without cloning the methodology into a second tree.
 
-Build it up in verified order, not all at once: a stage is "runnable in Codex" only after a real `codex exec`
-run produces its artifacts and validation passes. `plan-from-requirement` (read-only) is the safe first
-target; the deterministic surface that the whole pipeline rests on is already verified here. Full stage
-contracts and the git-choice gate live in `pipeline.md`.
+Build formal stages up in verified order, not all at once: a stage is "runnable in Codex" only after a real
+`codex exec` run produces its artifacts and validation passes. `plan-from-requirement` (read-only) is the
+safe first formal target; the deterministic surface that the critical pipeline rests on is already verified
+here. Mode routing, full stage contracts, and the git-choice gate live in `pipeline.md`.
 
 ## Architecture
 
@@ -55,10 +57,11 @@ scans installed/user skills and workspace `.agents/skills`, so a user starts the
 and choosing `ai-engineering-workflow`, by typing `$ai-engineering-workflow`, or by implicit selection from
 the skill's `description`.
 
-The skill is the workflow launcher, not just a guidance document. It resolves this toolkit from its own
-installed location by walking upward until `core/`, `bin/`, `scripts/`, and `codex/` are found. `AIEW_HOME`
-is retained only as an optional compatibility override. A target project's `AGENTS.md` is optional project
-guidance: read it when present, continue when absent. The skill delegates every status / gate / git /
+The skill is the mode router and workflow launcher, not just a guidance document. It resolves this toolkit
+from its own installed location by walking upward until `core/`, `bin/`, `scripts/`, and `codex/` are found
+when heavy tooling is needed. `AIEW_HOME` is retained only as an optional compatibility override. A target
+project's `AGENTS.md` is optional project guidance: read it when present, continue when absent. Fast
+Development does not require formal artifacts; Critical Check delegates every status / gate / git /
 validation decision to `bin/` + `scripts/` (no logic copied into the prompt).
 
 To use it in a customer project, install this repository's `ai-engineering-workflow` skill once:
@@ -72,8 +75,17 @@ The Skill resolves the link's real target before walking upward, so it can locat
 without `AIEW_HOME`. For a self-contained copied install, use `-Mode Copy -Force`. After installing, restart
 Codex or open a new thread, then open the customer project and invoke the skill. The same installer also
 copies generated subagents to `%USERPROFILE%\.codex\agents\aiew_*.toml`; use `/agent` when available to
-inspect runtime subagent activity. Do not require each project to copy the skill, generate `AGENTS.md`, or
-set a toolkit environment variable as normal usage.
+inspect runtime subagent activity for `/critical-check`. Do not require each project to copy the skill,
+generate `AGENTS.md`, or set a toolkit environment variable as normal usage.
+
+## Modes
+
+| Command | Default Scope |
+|---|---|
+| `/dev-fast` | daily frontend/backend/full-stack edits with light verification |
+| `/review-changes` | review current diff only |
+| `/delivery-summary` | handoff or merge summary |
+| `/critical-check` | formal plan/sandbox/review/verify workflow for high-risk work |
 
 ## First Runnable Target
 
@@ -126,8 +138,8 @@ Verified in this repository (plain Node, runs here):
 - `bin/execution-context.mjs` records stable `workflowRoot` / `projectRoot` / `workspaceRoot` /
   `taskArtifactRoot` values and the starting git snapshot before subagents run;
 - the Codex skill `.agents/skills/ai-engineering-workflow/SKILL.md` exists as a real, well-formed entry
-  point (valid `name` + `description` frontmatter, the format Codex documents), and every deterministic
-  command it tells Codex to run is verified to work here.
+  point (valid `name` + `description` frontmatter, the format Codex documents), includes mode routing, and
+  every deterministic command it tells Critical Check to run is verified to work here.
 - `scripts/install-codex-skill.ps1` installs the user-level Skill entry in link or copied mode.
 - `scripts/generate-codex-agents.mjs` generates Codex `aiew_*` subagents from `codex/agent-role-map.json`
   and existing Claude role sources; `scripts/check-agent-parity.mjs` blocks drift.

@@ -1,14 +1,17 @@
-# Codex Full-Pipeline Adapter
+# Codex Mode-Based Adapter
 
-How OpenAI Codex (Desktop and CLI) runs the **complete** workflow — requirement → analysis → plan →
-coding → tests → independent review → fix → independent verify → diff → customer git-choice → commit →
-push — using the **same** `core/` rules, schemas, statuses, risk gates and report shapes as the Claude
-Dynamic Workflow adapter. No second methodology, no Claude-specific runtime.
+How OpenAI Codex (Desktop and CLI) runs AI Engineering Workflow after the repositioning from a default
+full-pipeline executor to a daily development constraint and delivery-record tool.
+
+The default Codex path is now fast development: inspect relevant files, make minimal edits, run practical
+verification, and report changed files plus unverified scope. The complete workflow — requirement → analysis
+→ plan → coding → tests → independent review → fix → independent verify → diff → customer git-choice →
+commit → push — is retained as the Critical Check path for high-risk work or explicit user commands.
 
 When the Codex skill is invoked, the run is in Workflow Mode: this pipeline owns orchestration, subagent
-sequencing, validation gates, git-delivery gates, and final status meanings. The latest explicit user
-instruction still wins, target project rules supply project facts/style/build/test constraints, and global
-safety rules remain active.
+sequencing, validation gates, git-delivery gates, and final status meanings only for the selected mode. The
+latest explicit user instruction still wins, target project rules supply project facts/style/build/test
+constraints, and global safety rules remain active.
 
 > Current status discipline: the Codex Skill has completed one real Windows 10 + Codex multi-subagent
 > end-to-end validation, including analysis, implementation, independent review/fix/verify, tests, commit,
@@ -18,10 +21,30 @@ safety rules remain active.
 
 ## 1. The one rule that prevents drift
 
+First choose the mode:
+
+| Command / Trigger | Mode | Contract |
+|---|---|---|
+| `/dev-fast` or ordinary coding request | Fast Development | direct minimal edit, no mandatory multi-agent review, light verification |
+| `/review-changes` | Review Changes | review current diff only; no feature coding |
+| `/delivery-summary` | Delivery Summary | handoff summary; no new implementation |
+| `/critical-check` or high-risk trigger | Critical Check | full deterministic artifact, sandbox, multi-agent review/verify contract below |
+
+High-risk triggers include payment, permissions, authentication, amount calculation, third-party callbacks,
+member entitlements, database migration, production data/config, security, destructive file/data operations,
+and multi-tenant isolation.
+
+For Fast Development, do not run the full stage map below unless the user explicitly escalates. The invariant
+is smaller: task-relevant context only, smallest direct change, practical verification, changed-file summary,
+and honest unverified scope.
+
 - **Model work → `codex exec`**: requirement understanding, code-base analysis, implementation planning,
   risk identification, test planning, coding, independent review, fixing, independent verification.
 - **Deterministic work → plain Node calling `core/`** (never the model): status/readiness/deliver/publish
   decisions, git-state + branch-choice, JSON validation, diff `git apply --check`, artifact writing.
+
+The full model/deterministic split above is required for Critical Check and formal delivery runs. In Fast
+Development, use normal Codex editing plus the target project's own build, lint, test, and smoke commands.
 
 The deterministic decisions are **identical bytes of logic** to what the Claude workflow inlines, because
 both call `core/`. Claude inlines `core/` with `// >>> X` parity blocks locked by `scripts/self-check.mjs`;
@@ -54,11 +77,12 @@ Codex calls `core/` through the CLIs below. One source of truth.
 
 All read JSON in / print JSON out, run on bare `node` (Windows / macOS / Linux), and contain no author paths.
 
-## 3. Stage map (same artifacts/statuses as Claude)
+## 3. Critical Stage Map (same artifacts/statuses as Claude)
 
-Each model stage is one `codex exec` run reading the previous stage's JSON and writing the next stage's
-JSON into a timestamped run directory; each deterministic step is a CLI above. The artifact filenames and
-the schemas they satisfy are exactly the Claude ones (`core/schemas/plan-artifacts.schema.json`).
+This section applies only to `/critical-check`, explicit formal delivery, or high-risk tasks. Each model
+stage is one `codex exec` run reading the previous stage's JSON and writing the next stage's JSON into a
+timestamped run directory; each deterministic step is a CLI above. The artifact filenames and the schemas
+they satisfy are exactly the Claude ones (`core/schemas/plan-artifacts.schema.json`).
 
 At workflow start, the parent must build one stable `execution_context` with `bin/execution-context.mjs`:
 
@@ -210,9 +234,11 @@ commands run on Windows and macOS.
    `powershell -ExecutionPolicy Bypass -File <toolkit-root>\scripts\install-codex-skill.ps1`, then restart
    Codex or open a new thread.
 3. Select `/skills -> ai-engineering-workflow`, or type `$ai-engineering-workflow`.
-4. Enter the development requirement. The skill reads the current repository, optional project guidance such
-   as `AGENTS.md` when present, and runs the analysis → plan → code → test → review → fix → verify loop.
-5. At the publish stage Codex stops at the **git-choice gate** and asks you to pick a valid strategy before
+4. For daily work, use `/dev-fast` or just enter the development requirement. The skill reads only relevant
+   repository context, edits directly, and runs light verification.
+5. Use `/review-changes` when you want review only, `/delivery-summary` for handoff notes, and
+   `/critical-check` for the full analysis → plan → sandbox code → test → review → fix → verify loop.
+6. At any publish stage Codex stops at the **git-choice gate** and asks you to pick a valid strategy before
    any commit/push.
 
 ## 7. Capability assumptions — verify per environment (req 14)
