@@ -9,10 +9,10 @@ tests → independent review → fix → independent verify → diff → custome
 the **same** `core/` rules, schemas, statuses, risk gates and report shapes as the Claude adapter, without
 changing the Claude implementation and without cloning the methodology into a second tree.
 
-Build formal stages up in verified order, not all at once: a stage is "runnable in Codex" only after a real
-`codex exec` run produces its artifacts and validation passes. `plan-from-requirement` (read-only) is the
-safe first formal target; the deterministic surface that the critical pipeline rests on is already verified
-here. Mode routing, full stage contracts, and the git-choice gate live in `pipeline.md`.
+Codex Full Workflow is not a one-time experiment. It is the complete feature/project delivery path and is
+suitable for full project development; the current adapter work optimizes daily-development routing,
+verification cost, and handoff ergonomics while preserving the complete critical path. Mode routing, full
+stage contracts, and the git-choice gate live in `pipeline.md`.
 
 ## Architecture
 
@@ -149,14 +149,15 @@ Verified in this repository (plain Node, runs here):
 - `scripts/install-codex-skill.ps1` installs the user-level Skill entry in link or copied mode.
 - `scripts/generate-codex-agents.mjs` generates Codex `aiew_*` subagents from `codex/agent-role-map.json`
   and existing Claude role sources; `scripts/check-agent-parity.mjs` blocks drift.
-- Windows 10 + Codex completed one real multi-subagent end-to-end validation against AgentProof, covering
-  requirement analysis, repository/risk/test planning, implementation, independent review, fixer repair,
-  independent verification, local tests, exact-file commit, remote push, and remote verification.
+- Codex Full Workflow is the complete feature/project development path; recorded Windows 10 + Codex evidence
+  includes a real multi-subagent end-to-end validation against AgentProof, covering requirement analysis,
+  repository/risk/test planning, implementation, independent review, fixer repair, independent verification,
+  local tests, exact-file commit, remote push, and remote verification.
 
-Still pending broader Codex verification:
+Still pending broader public Codex evidence:
 
 - macOS / Linux Codex environments;
-- more real projects and technology stacks beyond the AgentProof validation run;
+- additional technology stacks and environment combinations beyond the recorded validation evidence;
 - compatibility across different Codex versions;
 - exact `codex exec` command shape, `--output-schema` sufficiency, and sandbox flags where CLI behavior
   changes by Codex version;

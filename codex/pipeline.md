@@ -13,11 +13,14 @@ sequencing, validation gates, git-delivery gates, and final status meanings only
 latest explicit user instruction still wins, target project rules supply project facts/style/build/test
 constraints, and global safety rules remain active.
 
-> Current status discipline: the Codex Skill has completed one real Windows 10 + Codex multi-subagent
-> end-to-end validation, including analysis, implementation, independent review/fix/verify, tests, commit,
-> push, and remote verification. Exact `codex exec` flags, output-schema behavior, sandbox flags, and
-> cross-platform compatibility still remain version/environment-sensitive and must be verified per install.
-> The deterministic surface below (`bin/`, `scripts/`, `core/`) is plain Node and is verified by self-check.
+> Current status discipline: Codex Full Workflow is not a single experimental pass. It is the complete
+> feature/project delivery path; real project development can use it end to end. The current optimization is
+> about daily-development routing, cost, and ergonomics, not about making Full Workflow newly viable. Recorded
+> Windows 10 + Codex evidence includes a multi-subagent end-to-end run with analysis, implementation,
+> independent review/fix/verify, tests, commit, push, and remote verification. Exact `codex exec` flags,
+> output-schema behavior, sandbox flags, and cross-platform compatibility still remain
+> version/environment-sensitive and must be verified per install. The deterministic surface below (`bin/`,
+> `scripts/`, `core/`) is plain Node and is verified by self-check.
 
 ## 1. The one rule that prevents drift
 
@@ -303,9 +306,10 @@ commands run on Windows and macOS.
 
 ## 7. Capability assumptions — verify per environment (req 14)
 
-Verified: one Windows 10 + Codex run has exercised the full multi-subagent loop through commit, push, and
-remote verification. Still pending broader evidence: macOS / Linux Codex environments, more real projects
-and technology stacks, different Codex versions, and long-running install/upgrade smoke runs that confirm
+Verified position: Full Workflow is the complete Codex delivery path for real feature/project development,
+with recorded Windows 10 + Codex evidence exercising the full multi-subagent loop through commit, push, and
+remote verification. Still pending broader public evidence: macOS / Linux Codex environments, additional
+technology stacks, different Codex versions, and long-running install/upgrade smoke runs that confirm
 generated `aiew_*` agents remain discoverable.
 
 Per the repo discipline: a new environment should not be called validated until a real Codex run has

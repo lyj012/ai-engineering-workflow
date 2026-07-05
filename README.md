@@ -9,9 +9,12 @@ record tool; the full audited pipeline remains available for critical work.
 The Claude Code Dynamic Workflows adapter is the mature full-pipeline implementation. The Codex adapter
 exposes a selectable Skill named `ai-engineering-workflow`; it uses mode routing for daily work and shares the
 platform-neutral artifact contracts in `core/` for formal delivery and critical checks instead of duplicating
-methodology, schemas, or status definitions. Codex has completed one real Windows 10 + Codex multi-subagent
-end-to-end validation, including analysis, implementation, independent review, fix, independent verification,
-tests, commit, and remote push.
+methodology, schemas, or status definitions. Codex Full Workflow is not positioned as a one-off experiment:
+it is the complete feature/project delivery path and is suitable for full project development. The current
+Codex optimization is about making everyday development smoother, cheaper, and less ceremonial while keeping
+the complete workflow available when the task asks for it or risk requires it. Recorded validation includes
+a real Windows 10 + Codex multi-subagent end-to-end run with analysis, implementation, independent review,
+fix, independent verification, tests, commit, and remote push.
 
 ## Codex Flow
 
@@ -433,14 +436,15 @@ Stable:
   `/critical-check`.
 - Codex Critical Check with stable execution context, mandatory real subagents, independent review/fix/verify,
   and Git delivery states (`DELIVERED`, `PUBLISH_READY`, `PUBLISHED`).
-- One Windows 10 + Codex end-to-end run covering demand analysis, implementation, independent review, fix,
-  independent verification, tests, commit, and remote push.
+- Full Workflow as the complete feature/project development path; recorded Windows 10 + Codex end-to-end
+  evidence covers demand analysis, implementation, independent review, fix, independent verification, tests,
+  commit, and remote push.
 - Public examples and deterministic repository self-check.
 
 Still validating:
 
 - macOS / Linux Codex environments.
-- More real projects and technology stacks.
+- Broader public evidence across more operating systems, Codex versions, and technology stacks.
 - Compatibility across different Codex versions.
 - Methodology research and docs-generation workflows.
 - Deep verification of environment-specific shell or PowerShell behavior.

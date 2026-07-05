@@ -22,6 +22,10 @@ It is not a full engineering audit by default. The normal goal is:
 
 Default execution is fast. Heavy review and delivery machinery is opt-in or risk-triggered.
 
+This is a daily-use optimization, not a downgrade of the complete workflow. Full Workflow is already the
+complete feature/project delivery path and can be used for full project development; daily modes exist to
+avoid forcing every ordinary edit through the most expensive contract.
+
 ## 0. Top-Level Routing
 
 Route every request before reading large workflow contracts or spawning subagents.
@@ -218,7 +222,9 @@ multi-agent independent verification by default.
 Use Full Workflow when the customer explicitly asks for a complete flow, formal full delivery, strict audit,
 or when the high-risk trigger list is matched.
 
-Full Workflow is the only mode that uses the heavy workflow contract by default.
+Full Workflow is the complete feature/project development path. It is not experimental fallback behavior; it
+is the mode for complete delivery, strict audit, high-risk changes, and any task where the customer wants the
+full analysis -> plan -> sandbox implementation -> independent review -> independent verification loop.
 
 Before planning or coding in Full Workflow, resolve the toolkit root and read:
 
