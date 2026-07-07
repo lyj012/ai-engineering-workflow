@@ -3,8 +3,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 AI development workflow contracts and adapters for keeping Codex changes scoped, practical, verifiable, and
-easy to hand off. The default Codex positioning is now a lightweight development constraint and delivery
-record tool; the full audited pipeline remains available for critical work.
+easy to hand off. The default Codex path is direct scoped development with guardrails: read only relevant
+context, make the smallest useful change, run practical verification, and report what remains unverified.
+The full audited pipeline remains available for high-risk or explicitly requested full-flow work.
 
 The Claude Code Dynamic Workflows adapter is the mature full-pipeline implementation. The Codex adapter
 exposes a selectable Skill named `ai-engineering-workflow`; it uses mode routing for daily work and shares the
@@ -12,20 +13,21 @@ platform-neutral artifact contracts in `core/` for formal delivery and critical 
 methodology, schemas, or status definitions. Codex Full Workflow is not positioned as a one-off experiment:
 it is the complete feature/project delivery path and is suitable for full project development. The current
 Codex optimization is about making everyday development smoother, cheaper, and less ceremonial while keeping
-the complete workflow available when the task asks for it or risk requires it. Recorded validation includes
-a real Windows 10 + Codex multi-subagent end-to-end run with analysis, implementation, independent review,
-fix, independent verification, tests, commit, and remote push.
+the complete workflow available when the task asks for it or risk requires it. In practice, the workflow is
+a daily router, not a default full pipeline. Recorded validation includes a real Windows 10 + Codex
+multi-subagent end-to-end run with analysis, implementation, independent review, fix, independent
+verification, tests, commit, and remote push.
 
-## Codex Flow
+## Codex Daily Router
 
 ```mermaid
 flowchart TD
-  A["Customer invokes workflow"] --> B{"Complete flow requested?"}
+  A["Customer invokes workflow"] --> B{"Explicit full flow requested?"}
 
-  B -->|"Explicit: complete flow / formal full delivery / strict audit"| FULL["Full Workflow"]
+  B -->|"complete flow / formal full delivery / strict audit / independent review+verify"| FULL["Full Workflow"]
   B -->|"Not explicit"| C{"High-risk trigger?"}
 
-  C -->|"payment / permission / auth / amount / callback / data migration / production config / security / delete data"| FULL
+  C -->|"payment / permission / auth / amount / callback / entitlement / migration / production config / security / delete data / multi-tenant"| FULL
   C -->|"No"| D{"Preparing formal submit / push / customer delivery?"}
 
   D -->|"Yes"| FDELIVERY["Formal Delivery Flow"]
@@ -37,6 +39,7 @@ flowchart TD
   E -->|"Refactor / structural optimization"| REFACTOR["Refactor Flow"]
   E -->|"Review diff / PR / code"| REVIEW["Review Flow"]
   E -->|"Summary / retro / acceptance notes"| SUMMARY["Delivery Summary Flow"]
+  E -->|"Pre-push check"| PREPUSH["Pre-Push Check"]
   E -->|"Commit / push / PR"| PUBLISH["Git Publish Flow"]
 
   ANALYZE --> A1["Read related files only"]
@@ -84,6 +87,12 @@ flowchart TD
   S2 --> S3["Output delivery summary"]
   S3 --> STOP
 
+  PREPUSH --> PP1["Check branch / remote / status"]
+  PP1 --> PP2["Identify this task's files"]
+  PP2 --> PP3["Check unrelated files / AGENTS.md / secrets / local config / debug output"]
+  PP3 --> PP4["Output readiness / blockers / required confirmation"]
+  PP4 --> STOP
+
   FDELIVERY --> FD1["Gather current changes"]
   FD1 --> FD2["Run necessary verification"]
   FD2 --> FD3["Review current changes"]
@@ -128,7 +137,8 @@ flowchart TD
 
 ## What This Does
 
-For Codex daily work, the primary commands are:
+For Codex daily work, ordinary development requests implicitly use the `/dev-fast` behavior. The primary
+commands are:
 
 | Command | Purpose | Output |
 |---|---|---|
@@ -136,6 +146,7 @@ For Codex daily work, the primary commands are:
 | `/dev-feature` | Ordinary feature path for small modules, API sets, CRUD features, or frontend-backend loops | concise plan, scoped implementation, light verification |
 | `/review-changes` | Review the current diff only | findings ordered by severity |
 | `/delivery-summary` | Prepare handoff/demo/merge notes | changed files, behavior, checks, risks |
+| `/pre-push-check` | Check whether current changes are safe to commit or push | branch/remote, task files, unsafe files, verification gaps, required confirmation |
 | `/critical-check` | Escalate high-risk work | full plan/sandbox/review/verify artifacts |
 
 Critical triggers include payment, permissions, authentication, amount calculation, callbacks, entitlements,
@@ -144,6 +155,54 @@ database migration, production config/data, deletion, security, and multi-tenant
 Ordinary database CRUD is not database migration. Normal query, mapper, DTO/VO, pagination, filter, and
 non-destructive table read/write changes should use `/dev-fast` or `/dev-feature` unless they also change
 schema, migrate data, touch production data, change permissions, or hit another high-risk trigger.
+
+Phrases such as "complete page", "complete CRUD", or "complete feature" do not trigger Full Workflow by
+themselves. They stay in `/dev-feature` unless the user explicitly asks for the full audited loop or the
+task hits a high-risk trigger.
+
+## Verification Levels
+
+| Scenario | Recommended verification |
+|---|---|
+| Text, style, small component, small field | `git diff --check`, then the smallest relevant build/lint/test item |
+| Ordinary frontend change | build/lint or focused page smoke check covering the core loading, interaction, or error state |
+| Ordinary backend change | compile or focused test; smoke one core API when practical |
+| Ordinary frontend-backend loop | request parameters, response fields, loading state, error message, and duplicate-submit behavior |
+| Before submit, handoff, commit, or push | git status, task-file scope, unsafe files, actual verification commands, delivery summary |
+| High-risk logic | Full Workflow with analysis, plan, sandbox implementation, independent review, and independent verification |
+
+Daily final responses should stay short:
+
+```text
+Changed:
+Verified:
+Unverified:
+Risk:
+Files:
+```
+
+## Daily Closed-Loop Delivery
+
+When the `ai-engineering-workflow` Skill is explicitly invoked for a modification task, the default result is
+not just edited files. The daily closed-loop path is:
+
+```text
+implement -> verify -> pre-push check -> commit exact task files -> push normally -> verify remote HEAD
+```
+
+This is still the lightweight daily path, not Full Workflow. It does not create formal plan artifacts, use a
+sandbox implementation, or require independent review/verification unless the task hits a Full Workflow
+trigger.
+
+The loop stops before git writes when:
+
+- the user says not to commit or not to push;
+- unrelated or unsafe changes cannot be separated confidently;
+- required verification fails;
+- branch, remote, or publish strategy is ambiguous;
+- `AGENTS.md`, `.env`, token/key files, personal config, generated local output, debug logs, or other unsafe
+  files would be included;
+- the publish target is protected or high risk and needs explicit opt-in.
 
 ## Daily Examples
 

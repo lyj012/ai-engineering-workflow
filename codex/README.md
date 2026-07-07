@@ -2,17 +2,20 @@
 
 This directory defines the OpenAI Codex adapter for AI Engineering Workflow.
 
-Goal: let Codex (Desktop or CLI) run a mode-based AI Engineering Workflow. Daily tasks use the lightweight
-constraint path: relevant context, minimal direct edit, light verification, and concise delivery notes.
+Goal: let Codex (Desktop or CLI) run direct scoped development with workflow guardrails. Daily tasks use the
+lightweight path by default: relevant context, minimal direct edit, practical verification, concise delivery
+notes, explicit unverified scope, safe commit/push, and remote HEAD confirmation when the skill is explicitly
+invoked for a modification task.
 Critical tasks can still run the **complete** workflow — requirement → analysis → plan → sandbox coding →
 tests → independent review → fix → independent verify → diff → customer git-choice → commit → push — using
 the **same** `core/` rules, schemas, statuses, risk gates and report shapes as the Claude adapter, without
 changing the Claude implementation and without cloning the methodology into a second tree.
 
-Codex Full Workflow is not a one-time experiment. It is the complete feature/project delivery path and is
-suitable for full project development; the current adapter work optimizes daily-development routing,
-verification cost, and handoff ergonomics while preserving the complete critical path. Mode routing, full
-stage contracts, and the git-choice gate live in `pipeline.md`.
+Codex Full Workflow is not a one-time experiment, but it is also not the default daily entry point. It is the
+insurance mechanism for high-risk, strongly audited, or formally delivered work; ordinary feature development
+uses the lighter Development Flow. The current adapter work optimizes daily-development routing, verification
+cost, and handoff ergonomics while preserving the complete critical path. Mode routing, full stage contracts,
+and the git-choice gate live in `pipeline.md`.
 
 ## Architecture
 
@@ -89,9 +92,24 @@ generate `AGENTS.md`, or set a toolkit environment variable as normal usage.
 | refactor / optimize structure | behavior-preserving small-step refactor |
 | `/review-changes` or diff/PR/code review | review current diff only, with P0/P1/P2 findings |
 | `/delivery-summary` or summary/acceptance notes | handoff or merge summary |
+| `/pre-push-check` | branch/remote/status, task file scope, unsafe files, verification gaps |
 | formal handoff / ready to submit | Formal Delivery Flow: verify, review current changes, fix blockers, summarize |
 | commit / push / open PR | Git Publish Flow: isolate files, confirm, commit, push, optional PR |
-| `/critical-check`, complete flow, strict audit, or high-risk trigger | Full Workflow: formal plan/sandbox/review/verify workflow |
+| `/critical-check`, complete flow, strict audit, independent review+verify, sandbox delivery, or high-risk trigger | Full Workflow: formal plan/sandbox/review/verify workflow |
+
+Ordinary requests such as "complete a page", "build a normal CRUD module", or "implement a complete
+feature" stay in Development Flow unless the user explicitly asks for the full audited loop or the task hits
+a high-risk trigger.
+
+For explicitly invoked modification tasks, the daily path completes a lightweight delivery loop by default:
+
+```text
+implement -> verify -> pre-push check -> commit exact task files -> push normally -> verify remote HEAD
+```
+
+This is not Full Workflow. It stops before git writes if the user says not to publish, unrelated or unsafe
+files cannot be separated, required verification fails, branch/remote choice is ambiguous, or the publish
+target is protected/high risk.
 
 ## First Runnable Target
 

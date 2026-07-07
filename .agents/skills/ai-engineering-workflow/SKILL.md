@@ -1,16 +1,18 @@
 ---
 name: ai-engineering-workflow
 description: >-
-  A lightweight AI development constraint workflow and delivery record tool. Use for day-to-day coding with
-  minimal scope control and practical verification, then escalate to review, delivery summary, or critical
-  audit only when the user explicitly asks or the task is high risk.
+  A lightweight AI development constraint workflow for direct scoped coding with guardrails. Use for
+  day-to-day coding by default: read relevant files, make minimal changes, run practical verification, and
+  report unverified scope. Escalate to full workflow only when the user explicitly asks or the task is high
+  risk.
 ---
 
 # AI Engineering Workflow (Codex)
 
-This skill is the Codex entry point for a daily AI development workflow. Its product position is:
+This skill is the Codex entry point for direct scoped development with workflow guardrails. Its product
+position is:
 
-`AI development process constraint + delivery record tool`
+`direct development router + process guardrails + delivery record tool`
 
 It is not a full engineering audit by default. The normal goal is:
 
@@ -20,7 +22,8 @@ It is not a full engineering audit by default. The normal goal is:
 - run practical verification;
 - leave enough notes to review or resume later.
 
-Default execution is fast. Heavy review and delivery machinery is opt-in or risk-triggered.
+Default execution is fast and should feel like direct development. Heavy review and delivery machinery is
+opt-in or risk-triggered.
 
 This is a daily-use optimization, not a downgrade of the complete workflow. Full Workflow is already the
 complete feature/project delivery path and can be used for full project development; daily modes exist to
@@ -30,13 +33,30 @@ avoid forcing every ordinary edit through the most expensive contract.
 
 Route every request before reading large workflow contracts or spawning subagents.
 
-1. If the customer explicitly asks for a complete flow, formal full delivery, strict audit, or full review,
-   use Full Workflow.
+1. If the customer explicitly asks for a complete flow, formal full delivery, strict audit,
+   `/critical-check`, independent review plus independent verification, sandbox delivery, or formal audit
+   artifacts, use Full Workflow.
 2. Otherwise, if the task hits a high-risk trigger, use Full Workflow.
 3. Otherwise, if the customer is preparing a formal handoff, formal submission, merge, release, or customer
    delivery, use Formal Delivery Flow.
 4. Otherwise, route by intent: Analysis, Development, Bugfix, Refactor, Review, Delivery Summary, or Git
    Publish.
+
+When this skill is explicitly invoked for a modification task, complete the daily delivery loop by default:
+implement, verify, run Pre-Push Check, commit exact task files, push normally, and verify the remote HEAD.
+This daily loop is not Full Workflow. It uses the selected lightweight flow's verification level and skips
+formal plan artifacts, sandbox delivery, independent review, and independent verification unless a Full
+Workflow trigger is present.
+
+Stop before git writes when:
+
+- the customer says not to commit or not to push;
+- the working tree contains unrelated or unsafe changes that cannot be separated confidently;
+- required verification for the selected verification level fails;
+- the branch, remote, or publish strategy is ambiguous;
+- `AGENTS.md`, `.env`, token/key files, personal config, generated local output, debug logs, or other unsafe
+  files would be included;
+- the publish target is protected or high risk and needs explicit opt-in.
 
 High-risk triggers:
 
@@ -57,8 +77,10 @@ task also changes schema, migrates data, touches production data, changes permis
 high-risk trigger.
 
 Do not automatically enter the full engineering loop for ordinary frontend work, ordinary CRUD, DTO/VO
-changes, mapper/service additions, button states, layout tweaks, form interactions, or interface field
-alignment.
+changes, mapper/service additions, button states, layout tweaks, form interactions, interface field
+alignment, or phrases such as "complete page", "complete CRUD", or "complete feature". Those are normal
+Development Flow tasks unless the user explicitly asks for the full audited loop or a high-risk trigger is
+present.
 
 | Intent / Command | Flow | Default Behavior |
 |---|---|---|
@@ -69,9 +91,21 @@ alignment.
 | refactor / optimize structure | Refactor Flow | confirm boundary, protect external behavior, small-step refactor, regression verification |
 | `/review-changes`, diff/PR/code review | Review Flow | read diff/PR/files and necessary context, output P0/P1/P2 findings, stop |
 | `/delivery-summary`, summary/retro/acceptance notes | Delivery Summary Flow | read current changes, summarize completed work, verification, unverified scope, risks |
+| `/pre-push-check` | Pre-Push Check | inspect branch/remote/status, isolate task files, check unsafe files and verification gaps, stop |
 | commit / push / open PR | Git Publish Flow | inspect git state, isolate task files, exclude unsafe files, confirm, commit, push, optional PR |
 | formal handoff / formal delivery / ready to submit | Formal Delivery Flow | summarize changes, run needed verification, review current changes, fix blockers, delivery summary |
 | complete flow / strict audit / `/critical-check` / high-risk trigger | Full Workflow | full analysis, risk analysis, plan, sandbox implementation, independent review, independent verification, artifacts |
+
+Verification levels:
+
+| Scenario | Recommended verification |
+|---|---|
+| text, style, small component, small field | `git diff --check`, then the smallest relevant build/lint/test item |
+| ordinary frontend change | build/lint or focused page smoke check for the core loading, interaction, or error state |
+| ordinary backend change | compile or focused test; smoke one core API when practical |
+| ordinary frontend-backend loop | request parameters, response fields, loading state, error message, and duplicate-submit behavior |
+| before submit, handoff, commit, or push | git status, task-file scope, unsafe files, actual verification commands, delivery summary |
+| high-risk logic | Full Workflow with analysis, plan, sandbox implementation, independent review, and independent verification |
 
 ## 1. Analysis Flow
 
@@ -200,6 +234,21 @@ Include:
 Use deterministic helpers when useful, but do not force plan/delivery artifact generation unless the user asks
 for a formal package.
 
+## 7a. Pre-Push Check Mode
+
+`/pre-push-check` is a lightweight safety check before commit or push. It must not commit, push, create a PR,
+or expand the implementation.
+
+Process:
+
+1. Inspect current branch, remote, and working tree status.
+2. Identify files that appear to belong to the current task.
+3. Flag unrelated or pre-existing changes instead of staging them.
+4. Check for `AGENTS.md`, `.env`, token/key files, personal config, generated local output, debug logs, and
+   obvious temporary files.
+5. Summarize actual verification already run and any verification gap.
+6. Output whether the change looks ready for a later Git Publish Flow, or what blocks it.
+
 ## 8. Formal Delivery Flow
 
 Use Formal Delivery Flow when the customer is preparing a formal handoff, formal submission, merge, release,
@@ -220,11 +269,13 @@ multi-agent independent verification by default.
 ## 9. Full Workflow
 
 Use Full Workflow when the customer explicitly asks for a complete flow, formal full delivery, strict audit,
+`/critical-check`, independent review plus independent verification, sandbox delivery, formal audit artifacts,
 or when the high-risk trigger list is matched.
 
-Full Workflow is the complete feature/project development path. It is not experimental fallback behavior; it
-is the mode for complete delivery, strict audit, high-risk changes, and any task where the customer wants the
-full analysis -> plan -> sandbox implementation -> independent review -> independent verification loop.
+Full Workflow is the insurance mechanism for high-risk, strongly audited, or formally delivered work. It is
+not the default daily entry point. Ordinary complete pages, complete CRUD, and normal feature loops stay in
+Development Flow unless the user explicitly asks for the full analysis -> plan -> sandbox implementation ->
+independent review -> independent verification loop.
 
 Before planning or coding in Full Workflow, resolve the toolkit root and read:
 
@@ -298,8 +349,10 @@ On Windows PowerShell, prefer `--input <json-file>` or `--stdin` for object inpu
 
 ## 11. Git Publish Flow
 
-Do not commit or push unless the user explicitly asks for it, except where a separately invoked workflow or
-project rule grants that permission for the current task.
+When this skill is explicitly invoked for a modification task, Git Publish Flow is part of the default daily
+delivery loop after implementation, verification, and Pre-Push Check. Do not require a second confirmation
+unless a stop condition from Top-Level Routing applies. Outside an explicitly invoked workflow run, do not
+commit or push unless the user explicitly asks for it.
 
 Process:
 
@@ -307,13 +360,11 @@ Process:
 2. identify exactly which files belong to this task;
 3. exclude unrelated or pre-existing changes;
 4. reject `AGENTS.md`, secrets, personal config, generated local output, and out-of-scope files;
-5. show the prepared file list and key change summary to the customer;
-6. stop unless the customer has already clearly confirmed commit/push in the current task;
-7. commit using exact pathspecs only;
-8. push normally;
-9. create a PR only when requested;
-10. verify the remote commit or PR state;
-11. output branch, commit, PR link when any, and remote status.
+5. create a commit using exact pathspecs only;
+6. push normally;
+7. create a PR only when requested;
+8. verify the remote commit or PR state;
+9. output branch, commit, PR link when any, and remote status.
 
 Never force-push, delete remote branches, stage with `git add .`, or publish protected-branch changes without
 explicit opt-in.
@@ -322,11 +373,11 @@ explicit opt-in.
 
 Keep the final response short and factual:
 
-1. what changed;
-2. files changed;
-3. commands run and results;
-4. unverified scope;
-5. risks or manual checks that still matter.
+1. changed;
+2. verified;
+3. unverified;
+4. risk;
+5. files.
 
 Do not call work "verified", "delivered", or "published" unless that exact verification or remote action
 actually ran and succeeded.

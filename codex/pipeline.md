@@ -1,10 +1,10 @@
 # Codex Mode-Based Adapter
 
 How OpenAI Codex (Desktop and CLI) runs AI Engineering Workflow after the repositioning from a default
-full-pipeline executor to a daily development constraint and delivery-record tool.
+full-pipeline executor to direct scoped development with guardrails.
 
 The default Codex path is now routed by intent: analysis, development, bugfix, refactor, review, delivery
-summary, or git publish. The complete workflow — requirement → analysis → plan → coding → tests →
+summary, pre-push check, or git publish. The complete workflow — requirement → analysis → plan → coding → tests →
 independent review → fix → independent verify → diff → customer git-choice → commit → push — is retained
 for explicit full-flow requests and high-risk work.
 
@@ -28,7 +28,7 @@ First choose the flow:
 
 | Trigger / Intent | Flow | Contract |
 |---|---|---|
-| explicit full flow / formal full delivery / strict audit / `/critical-check` | Full Workflow | full deterministic artifacts, sandbox, multi-agent review/verify contract below |
+| explicit full flow / formal full delivery / strict audit / `/critical-check` / independent review+verify / sandbox delivery | Full Workflow | full deterministic artifacts, sandbox, multi-agent review/verify contract below |
 | high-risk trigger | Full Workflow | full deterministic artifacts, sandbox, multi-agent review/verify contract below |
 | formal handoff / formal submit / ready to deliver | Formal Delivery Flow | summarize current changes, verify, review, fix blockers, delivery summary |
 | only analyze / clarify / assess | Analysis Flow | read-only related context, conclusions/risks/suggestions, stop |
@@ -37,6 +37,7 @@ First choose the flow:
 | refactor / optimize structure | Refactor Flow | boundary, behavior protection, small-step refactor, regression verification |
 | diff / PR / code review | Review Flow | current diff/PR/files, necessary context, P0/P1/P2 findings, stop |
 | summary / retro / acceptance notes | Delivery Summary Flow | completed work, verification, unverified scope, risks |
+| pre-push check / `/pre-push-check` | Pre-Push Check | branch/remote/status, task files, unsafe files, verification gaps, stop |
 | commit / push / open PR | Git Publish Flow | git state, task file isolation, unsafe-file exclusion, confirmation, commit/push/optional PR |
 
 High-risk triggers include payment, permissions, authentication, amount calculation, third-party callbacks,
@@ -47,10 +48,25 @@ Ordinary database CRUD is not database migration. Normal query, mapper, DTO/VO, 
 non-destructive table read/write changes stay in `/dev-fast` or `/dev-feature` unless they also change
 schema, migrate data, touch production data, change permissions, or hit another high-risk trigger.
 
+Phrases such as "complete page", "complete CRUD", or "complete feature" are not Full Workflow triggers by
+themselves. Treat them as Development Flow unless the user explicitly asks for the full audited loop or the
+task hits a high-risk trigger.
+
 For Analysis, Development, Bugfix, Refactor, Review, Delivery Summary, and Git Publish flows, do not run the
 full stage map below unless the user explicitly escalates or the task hits a high-risk trigger. The invariant
 is smaller: task-relevant context only, smallest direct change where edits are requested, practical
 verification, changed-file summary, and honest unverified scope.
+
+When the skill is explicitly invoked for a modification task, the default lightweight path is a daily
+closed-loop delivery:
+
+`implement -> verify -> pre-push check -> commit exact task files -> push normally -> verify remote HEAD`
+
+This daily loop does not imply Full Workflow. It must not create formal plan artifacts, sandbox the
+implementation, or require independent review/verification unless a Full Workflow trigger is present.
+Stop before git writes when the user says not to publish, unrelated or unsafe changes cannot be separated,
+required verification fails, branch/remote choice is ambiguous, unsafe files would be included, or the
+publish target is protected/high risk and needs explicit opt-in.
 
 - **Model work → `codex exec`**: requirement understanding, code-base analysis, implementation planning,
   risk identification, test planning, coding, independent review, fixing, independent verification.
@@ -79,8 +95,21 @@ Codex calls `core/` through the CLIs below. One source of truth.
 - Review Flow: read diff/PR/specified files -> read necessary context -> output P0/P1/P2 findings -> stop.
 - Delivery Summary Flow: read current changes -> summarize completed work, verification, unverified scope,
   and risks -> stop.
+- Pre-Push Check: inspect branch/remote/status -> identify task files -> flag unrelated or unsafe files ->
+  summarize verification gaps and readiness -> stop.
 
-### 1b. Formal Delivery Flow
+### 1b. Verification Levels
+
+| Scenario | Required discipline |
+|---|---|
+| Text, style, small component, small field | `git diff --check`, then the smallest relevant build/lint/test item |
+| Ordinary frontend change | build/lint or focused page smoke check for the core loading, interaction, or error state |
+| Ordinary backend change | compile or focused test; smoke one core API when practical |
+| Ordinary frontend-backend loop | request parameters, response fields, loading state, error message, duplicate-submit behavior |
+| Before submit, handoff, commit, or push | git status, task-file scope, unsafe files, actual verification commands, delivery summary |
+| High-risk logic | Full Workflow with analysis, plan, sandbox implementation, independent review, independent verification |
+
+### 1c. Formal Delivery Flow
 
 Formal Delivery Flow is for formal handoff, formal submit, merge, release, or customer delivery when the task
 does not require Full Workflow.
@@ -94,7 +123,7 @@ Steps:
 5. Generate a delivery summary.
 6. If the customer asks to push, route to Git Publish Flow; otherwise stop.
 
-### 1c. Git Publish Flow
+### 1d. Git Publish Flow
 
 Git Publish Flow is the only lightweight flow that writes git history.
 
@@ -103,13 +132,12 @@ Steps:
 1. Check git state.
 2. Identify this task's changed files.
 3. Exclude unrelated files, `AGENTS.md`, secrets, and local config.
-4. Show the prepared file list.
-5. Stop unless the customer has confirmed commit/push in the current task.
-6. Commit exact files only.
-7. Push normally.
-8. Create a PR only when requested.
-9. Verify remote commit or PR state.
-10. Output branch, commit, PR link when any, and remote status.
+4. Stop before git writes if a daily-loop stop condition applies.
+5. Commit exact files only.
+6. Push normally.
+7. Create a PR only when requested.
+8. Verify remote commit or PR state.
+9. Output branch, commit, PR link when any, and remote status.
 
 ## 2. Deterministic surface (runnable today, cross-platform)
 
@@ -140,10 +168,13 @@ All read JSON in / print JSON out, run on bare `node` (Windows / macOS / Linux),
 
 ## 3. Full Workflow Stage Map (same artifacts/statuses as Claude)
 
-This section applies only to explicit full-flow requests, formal full delivery, `/critical-check`, or
-high-risk tasks. Each model stage is one `codex exec` run reading the previous stage's JSON and writing the
-next stage's JSON into a timestamped run directory; each deterministic step is a CLI above. The artifact
-filenames and the schemas they satisfy are exactly the Claude ones (`core/schemas/plan-artifacts.schema.json`).
+This section applies only to explicit full-flow requests, formal full delivery, strict audit,
+`/critical-check`, independent review plus independent verification, sandbox delivery, formal audit
+artifacts, or high-risk tasks. Ordinary complete pages, complete CRUD, and normal feature loops do not use
+this section unless one of those triggers is present. Each model stage is one `codex exec` run reading the
+previous stage's JSON and writing the next stage's JSON into a timestamped run directory; each deterministic
+step is a CLI above. The artifact filenames and the schemas they satisfy are exactly the Claude ones
+(`core/schemas/plan-artifacts.schema.json`).
 
 At workflow start, the parent must build one stable `execution_context` with `bin/execution-context.mjs`:
 
@@ -295,8 +326,9 @@ commands run on Windows and macOS.
    `powershell -ExecutionPolicy Bypass -File <toolkit-root>\scripts\install-codex-skill.ps1`, then restart
    Codex or open a new thread.
 3. Select `/skills -> ai-engineering-workflow`, or type `$ai-engineering-workflow`.
-4. For normal work, state the intent naturally or use a command such as `/dev-fast`, `/dev-feature`,
-   `/review-changes`, `/delivery-summary`, or `/critical-check`.
+4. For normal work, state the intent naturally; this implicitly uses Fast Dev unless another route is clear.
+   You may also use commands such as `/dev-fast`, `/dev-feature`, `/review-changes`, `/delivery-summary`,
+   `/pre-push-check`, or `/critical-check`.
 5. The router first checks explicit full-flow requests, high-risk triggers, and formal delivery intent, then
    routes to Analysis, Development, Bugfix, Refactor, Review, Delivery Summary, or Git Publish.
 6. Use `/critical-check` or explicit "complete flow / strict audit" wording for the full analysis → plan →
