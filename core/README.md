@@ -17,7 +17,7 @@ Claude Workflow scripts still keep some schemas inline because the Workflow JS s
 
 - `node bin/core.mjs daily-route --stdin` classifies a request with the shared daily router.
 - `node bin/core.mjs pre-push-status --input <json-file>` evaluates a structured pre-push snapshot.
-- `node bin/pre-push-check.mjs --cwd <repo>` gathers a read-only git snapshot and applies the shared pre-push gate.
+- `node bin/pre-push-check.mjs --cwd <repo>` gathers a read-only git snapshot and applies the shared pre-push gate with publish intent enabled by default; pass `--snapshot-only` only when you want a non-publish safety snapshot.
 
 ## What Belongs Here
 

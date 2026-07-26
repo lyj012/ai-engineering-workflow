@@ -7,9 +7,14 @@ import { fileURLToPath } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const script = path.join(here, '..', 'bin', 'core.mjs')
+const prePushCheckScript = path.join(here, '..', 'bin', 'pre-push-check.mjs')
 
 function run(args, opts = {}) {
   return spawnSync('node', [script, ...args], { encoding: 'utf8', input: opts.input || undefined })
+}
+
+function runPrePushCheck(args, opts = {}) {
+  return spawnSync('node', [prePushCheckScript, ...args], { encoding: 'utf8', input: opts.input || undefined })
 }
 
 export function runCoreCliInputTests() {
@@ -43,6 +48,11 @@ export function runCoreCliInputTests() {
       branchChoice: { resolvedMode: 'current-branch' },
       publishIntent: true,
     }))
+    const prePushRepo = path.join(work, 'pre-push-repo')
+    fs.mkdirSync(prePushRepo)
+    spawnSync('git', ['init', '-b', 'feature/a'], { cwd: prePushRepo, encoding: 'utf8' })
+    fs.writeFileSync(path.join(prePushRepo, 'app.sh'), 'echo ok\n')
+    spawnSync('git', ['remote', 'add', 'origin', 'https://github.com/acme/repo.git'], { cwd: prePushRepo, encoding: 'utf8' })
 
     const readiness = run(['readiness', 'PASS'])
     if (readiness.status !== 0 || !readiness.stdout.includes('"ready"')) failures.push(`readiness PASS failed: ${readiness.stderr || readiness.stdout}`)
@@ -67,6 +77,12 @@ export function runCoreCliInputTests() {
 
     const prePush = run(['pre-push-status', '--input', prePushFile])
     if (prePush.status !== 0 || !prePush.stdout.includes('"finalStatus": "PREPUSH_READY"')) failures.push(`pre-push-status --input failed: ${prePush.stderr || prePush.stdout}`)
+
+    const defaultCheck = runPrePushCheck(['--cwd', prePushRepo, '--task-files', 'app.sh', '--verification', 'sh app.sh', '--verification-passed', '--target-branch', 'feature/a'])
+    if (defaultCheck.status !== 0 || !defaultCheck.stdout.includes('"finalStatus": "PREPUSH_READY"') || !defaultCheck.stdout.includes('"readOk": true')) failures.push(`pre-push-check default should perform publish gate: ${defaultCheck.stderr || defaultCheck.stdout}`)
+
+    const snapshotCheck = runPrePushCheck(['--cwd', prePushRepo, '--snapshot-only', '--task-files', 'app.sh', '--verification', 'sh app.sh', '--verification-passed', '--remote', 'missing'])
+    if (snapshotCheck.status !== 0 || !snapshotCheck.stdout.includes('"finalStatus": "PREPUSH_READY"') || !snapshotCheck.stdout.includes('"readOk": false')) failures.push(`pre-push-check --snapshot-only should allow missing remote: ${snapshotCheck.stderr || snapshotCheck.stdout}`)
 
     const invalid = run(['scope-check', '{bad-json'])
     if (invalid.status === 0 || !invalid.stderr.includes('invalid JSON input')) failures.push('invalid JSON did not fail with a clear error')

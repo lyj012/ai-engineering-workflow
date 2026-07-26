@@ -65,9 +65,9 @@ const EXPLICIT_ROUTE_RULES = [
 
 const INTENT_ROUTE_RULES = [
   ['analysis', 'ROUTE_ANALYSIS', [/only\s+(analyze|analyse|clarify|assess)/i, /分析|澄清|评估/]],
+  ['review', 'ROUTE_REVIEW', [/\breview\b.*\b(diff|changes?|pr|pull request|code|bug\s*fix|fix|error\s+handling|refactor|patch)\b/i, /independent\s+review/i, /代码审查|评审.*(diff|改动|PR|代码|修复|重构|异常|错误)/i]],
   ['bugfix', 'ROUTE_BUGFIX', [/bug|error|exception|crash|failed|failure|regression/i, /修复|报错|异常|失败|回归/]],
   ['refactor', 'ROUTE_REFACTOR', [/refactor|restructure|simplify|optimi[sz]e\s+structure/i, /重构|优化结构|整理结构/]],
-  ['review', 'ROUTE_REVIEW', [/\breview\b.*\b(diff|changes|pr|pull request|code)\b/i, /independent\s+review/i, /代码审查|评审.*(diff|改动|PR)/i]],
   ['delivery-summary', 'ROUTE_DELIVERY_SUMMARY', [/delivery\s+summary|handoff\s+notes|acceptance\s+notes/i, /交付摘要|验收说明|交接说明/]],
   ['pre-push-check', 'ROUTE_PRE_PUSH_CHECK', [/pre[-\s]?push\s+check/i, /提交前检查|推送前检查/]],
   ['git-publish', 'ROUTE_GIT_PUBLISH', [/\b(commit|push|open\s+pr|create\s+pr)\b/i, /提交|推送|创建PR|打开PR/i]],

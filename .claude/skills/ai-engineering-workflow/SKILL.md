@@ -65,7 +65,7 @@ Use these shared helpers when useful; they are pure/read-only unless explicitly 
 
 - `node bin/core.mjs daily-route --stdin`
 - `node bin/core.mjs pre-push-status --input <json-file>`
-- `node bin/pre-push-check.mjs --cwd <repo>`
+- `node bin/pre-push-check.mjs --cwd <repo>` (publish-intent gate by default; use `--snapshot-only` only for read-only git safety snapshots)
 - `node bin/git-state.mjs --cwd <repo>`
 - `node bin/core.mjs git-guard --stdin`
 - `node bin/core.mjs branch-choice --stdin`

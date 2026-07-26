@@ -25,6 +25,8 @@ export const CASES = [
   ['remote read failure blocks publish', { ...clean, remote: { name: 'origin', url: '', readOk: false } }, 'PREPUSH_BLOCKED'],
   ['invalid remote URL blocks publish', { ...clean, remote: { name: 'origin', url: 'not a url' } }, 'PREPUSH_BLOCKED'],
   ['branch strategy not required without publish intent', { ...clean, publishIntent: false, branchChoice: {} }, 'PREPUSH_READY'],
+  ['branch strategy required with publish intent', { ...clean, branchChoice: {} }, 'PREPUSH_BLOCKED'],
+  ['remote not required for snapshot-only pre-push status', { ...clean, publishIntent: false, remote: { name: 'origin', url: '', readOk: false } }, 'PREPUSH_READY'],
   ['partial task-file mismatch blocks unsafe env change', { ...clean, changedFiles: ['src/app.js', '.env'], taskFiles: ['src/app.js', '.env'] }, 'PREPUSH_BLOCKED'],
   ['task file not in changed files blocks', { ...clean, changedFiles: ['src/app.js'], taskFiles: ['src/app.js', 'test/app.test.js'] }, 'PREPUSH_BLOCKED'],
 ]

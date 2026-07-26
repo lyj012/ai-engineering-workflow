@@ -39,7 +39,7 @@ function listFromArg(v) {
 
 function main() {
   const cwd = arg('--cwd') || process.cwd()
-  const publishIntent = has('--publish-intent')
+  const publishIntent = !has('--snapshot-only')
   const allowProtectedBranchPublish = has('--allow-protected-branch-publish')
   const allowHighRiskPublish = has('--allow-high-risk-publish')
   const highRisk = has('--high-risk')
@@ -59,6 +59,7 @@ function main() {
   const remoteUrlRaw = git(cwd, ['remote', 'get-url', remoteName])
   const remoteInfo = inspectRemoteUrl(remoteUrlRaw.ok ? remoteUrlRaw.out : '')
 
+  const changedFiles = changedFilesFromPorcelain(porcelain.out)
   const rawGit = {
     isRepo: isRepo.ok && isRepo.out === 'true',
     currentBranch: branch.ok && branch.out ? branch.out : (head.ok ? 'HEAD' : null),
@@ -66,11 +67,11 @@ function main() {
     gitDir: gitDir.out,
     gitCommonDir: commonDir.out,
     statusShort: porcelain.out,
-    headShort: head.out,
+    dirty: changedFiles.length > 0,
+    headSha: head.out,
   }
 
   const gitState = classifyGitState(rawGit)
-  const changedFiles = changedFilesFromPorcelain(porcelain.out)
   const result = computePrePushStatus({
     gitState,
     changedFiles,
@@ -91,7 +92,7 @@ function main() {
     },
     remoteName,
     targetBranch: arg('--target-branch') || gitState.currentBranch,
-    branchChoice: { resolvedMode: arg('--branch-mode') || '' },
+    branchChoice: { resolvedMode: arg('--branch-mode') || 'current-branch' },
   })
 
   process.stdout.write(JSON.stringify({ cwd, ...result }, null, 2) + '\n')
