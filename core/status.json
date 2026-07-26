@@ -34,6 +34,24 @@
     "FAILED": "A sub-workflow (plan/deliver/publish) returned no result, or an unexpected error halted orchestration.",
     "<publishStatus>": "On reaching the publish stage, the overall finalStatus passes through publish-delivery's status (PUBLISH_READY / PUBLISH_NEEDS_CHOICE / PUBLISH_BLOCKED / PUBLISH_DRYRUN / PUBLISH_UNVERIFIED / PUBLISHED / PUBLISHED_WITH_OPEN_ITEMS)."
   },
+  "routeStatuses": {
+    "ROUTE_FAST_DEV": "Daily default: scoped direct development with light verification and concise handoff.",
+    "ROUTE_FEATURE_DEV": "Ordinary feature, page, API, CRUD, or frontend-backend loop with core-path verification.",
+    "ROUTE_BUGFIX": "Bugfix route: root cause, minimal fix, targeted regression verification.",
+    "ROUTE_REFACTOR": "Behavior-preserving scoped refactor with regression verification.",
+    "ROUTE_REVIEW": "Review-only route for current diff, PR, or specified code; no product edits by default.",
+    "ROUTE_DELIVERY_SUMMARY": "Handoff summary route: changed files, behavior, verification, unverified scope, and risks.",
+    "ROUTE_PRE_PUSH_CHECK": "Read-only pre-push readiness check; never commits or pushes.",
+    "ROUTE_GIT_PUBLISH": "Git publish route: exact-file commit/push only after safety gates and branch strategy are clear.",
+    "ROUTE_ANALYSIS": "Read-only analysis, clarification, assessment, risks, and suggestions.",
+    "ROUTE_FORMAL_DELIVERY": "Formal delivery flow for handoff/submit/release without requiring the full audited workflow by default.",
+    "ROUTE_FULL_WORKFLOW": "Escalated full workflow for explicit audit/full-flow requests or high-risk triggers.",
+    "ROUTE_NEEDS_CLARIFICATION": "Routing could not safely decide without more request detail."
+  },
+  "prePushStatuses": {
+    "PREPUSH_READY": "Current task files look safe to commit/push after exact-file confirmation; this does not mean PUBLISHED.",
+    "PREPUSH_BLOCKED": "Stopped before git writes because branch, scope, unsafe files, verification, remote, or risk gates are not satisfied."
+  },
   "readinessForDev": {
     "ready": "A delivery workflow may consume the plan.",
     "needs-clarification": "The requirement is too ambiguous; it must be clarified before any delivery.",

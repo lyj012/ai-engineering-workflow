@@ -2,23 +2,23 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-AI development workflow contracts and adapters for keeping Codex changes scoped, practical, verifiable, and
-easy to hand off. The default Codex path is direct scoped development with guardrails: read only relevant
-context, make the smallest useful change, run practical verification, and report what remains unverified.
-The full audited pipeline remains available for high-risk or explicitly requested full-flow work.
+AI development workflow contracts and adapters for keeping Claude Code and Codex changes scoped, practical,
+verifiable, and easy to hand off. The default daily path is direct scoped development with guardrails: read only
+relevant context, make the smallest useful change, run practical verification, and report what remains
+unverified. The full audited pipeline remains available for high-risk or explicitly requested full-flow work.
 
-The Claude Code Dynamic Workflows adapter is the mature full-pipeline implementation. The Codex adapter
-exposes a selectable Skill named `ai-engineering-workflow`; it uses mode routing for daily work and shares the
-platform-neutral artifact contracts in `core/` for formal delivery and critical checks instead of duplicating
-methodology, schemas, or status definitions. Codex Full Workflow is not positioned as a one-off experiment:
-it is the complete feature/project delivery path and is suitable for full project development. The current
-Codex optimization is about making everyday development smoother, cheaper, and less ceremonial while keeping
-the complete workflow available when the task asks for it or risk requires it. In practice, the workflow is
-a daily router, not a default full pipeline. Recorded validation includes a real Windows 10 + Codex
-multi-subagent end-to-end run with analysis, implementation, independent review, fix, independent
-verification, tests, commit, and remote push.
+Claude Code Dynamic Workflows and Codex now share the same daily product shape: a lightweight `ai-engineering-workflow` entry,
+deterministic daily routing, pre-push safety checks, and escalation to the existing full Claude Workflow chain
+when risk or explicit user intent requires it. `core/` owns the shared route/status/safety decisions; `bin/`
+exposes cross-platform CLIs; `.claude/` and `.agents/` are adapter layers, not separate methodologies. Codex
+Full Workflow is not positioned as a one-off experiment: it remains the complete feature/project delivery path
+and is suitable for full project development. The current optimization is about making everyday development
+smoother, cheaper, and less ceremonial while keeping the complete workflow available when the task asks for it
+or risk requires it. In practice, the workflow is a daily router, not a default full pipeline. Recorded
+validation includes a real Windows 10 + Codex multi-subagent end-to-end run with analysis, implementation,
+independent review, fix, independent verification, tests, commit, and remote push.
 
-## Codex Daily Router
+## Daily Router
 
 ```mermaid
 flowchart TD
@@ -141,7 +141,7 @@ For Codex daily work, ordinary development requests implicitly use the `/dev-fas
 commands are:
 
 | Command | Purpose | Output |
-|---|---|---|
+| --- | --- | --- |
 | `/dev-fast` | Default fast development for pages, components, CRUD, DTOs, ordinary APIs, small fixes | minimal direct edit, light verification, changed files, unverified scope |
 | `/dev-feature` | Ordinary feature path for small modules, API sets, CRUD features, or frontend-backend loops | concise plan, scoped implementation, light verification |
 | `/review-changes` | Review the current diff only | findings ordered by severity |
@@ -248,7 +248,7 @@ The formal artifact pipeline is retained for `/critical-check`, explicit formal 
 adapter:
 
 | Input | Workflow | Output |
-|---|---|---|
+| --- | --- | --- |
 | A user requirement plus a target repository | `plan-from-requirement` | `final-plan.md`, `plan.json`, risks, tests, and `readinessForDev` |
 | A ready plan plus the same target repository | `deliver-from-plan` | sandboxed implementation, `changes.diff`, delivery report, verification notes |
 | A verified delivery (diff + `DELIVERED` manifest) plus a git remote | `publish-delivery` | automatic branch/commit/push (no PR) with independent post-push remote verification |
@@ -270,7 +270,7 @@ core with `self-check` parity locks; the Codex adapter calls the same core throu
 business logic, status, schema, or report shape is maintained twice.
 
 | Capability | Claude adapter (`.claude/workflows`) | Codex adapter (`.agents/skills` + `bin/`) | Deterministic source | Verified here |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | Requirement → plan (read-only) | `plan-from-requirement.js` | skill stage 1 + `codex exec` | `core/readiness` + schemas | ✅ Claude run |
 | Plan → sandbox diff | `deliver-from-plan.js` | skill stage 2 | `core/deliver-status` | ✅ Claude run |
 | Publish (branch/commit/push) | `publish-delivery.js` | skill stage 3 | `core/publish-status` | ✅ logic; ⚠️ no real-remote e2e |

@@ -35,6 +35,8 @@ import { checkScope } from '../core/scope-check.mjs'
 import { maskRemoteUrl, hasEmbeddedCredentials, inspectRemoteUrl } from '../core/mask-remote-url.mjs'
 import { verifyRemotePublish } from '../core/verify-remote-publish.mjs'
 import { computeMultiAgentGate } from '../core/multi-agent-status.mjs'
+import { classifyDailyRoute } from '../core/daily-route.mjs'
+import { computePrePushStatus } from '../core/pre-push-status.mjs'
 
 const HANDLERS = {
   'scope-check': (i) => checkScope(i),
@@ -54,6 +56,8 @@ const HANDLERS = {
   'mask-remote-url': (i) => ({ masked: maskRemoteUrl(i.url), hasCredentials: hasEmbeddedCredentials(i.url) }),
   'inspect-url': (i) => inspectRemoteUrl(i.url),
   'verify-remote-publish': (i) => verifyRemotePublish(i),
+  'daily-route': (i) => classifyDailyRoute(i),
+  'pre-push-status': (i) => computePrePushStatus(i),
 }
 
 function main() {

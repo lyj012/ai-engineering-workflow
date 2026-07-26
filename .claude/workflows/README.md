@@ -6,6 +6,7 @@
 
 | 脚本 | 定位 | 何时用 |
 |---|---|---|
+| **`daily-router.js`** ⚡日常 | **Claude Code 日常开发路由薄适配层**：Fast/Feature/Bugfix/Refactor/Review/Delivery/Pre-Push/Git Publish；显式完整流程或高风险任务升级既有 Full Workflow | 想让 Claude Code 走与 Codex daily router 同代的轻量日常产品形态，而不是默认完整审计流水线 |
 | **`plan-from-requirement.js`** ⭐主 | **客户需求 → 现有代码分析 → 可执行实现方案**（只读，不写客户代码） | 客户提出开发/改造需求，要产出开发可直接实施的方案报告 |
 | **`deliver-from-plan.js`** 🔗桥接 | **方案 → 沙箱内写码到测试全绿 → 出 diff**（不改原仓库/不提交） | 已有 `readinessForDev=ready` 的方案，想真正实现并跑到测试全绿、产出可审查的 diff |
 | **`publish-delivery.js`** 🚀发布 | **已验证交付 diff → clone 远程→应用 diff→建分支→commit→push→远程确定性核验**（不建 PR；默认禁直推 main、高风险域人工闸门、绝不 force/不提交密钥） | 已有 `DELIVERED` / `DELIVERED_WITH_OPEN_ITEMS` 的交付，想自动落地到远程一个分支且要求发布结果可被独立核验 |

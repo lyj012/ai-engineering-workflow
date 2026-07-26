@@ -45,6 +45,8 @@ import { runSafeRmTests } from './safe-rm.test.mjs'
 import { runVerifyDeliveryPersistTests } from './verify-delivery-persist.test.mjs'
 import { runValidateDeliveryArtifactsTests } from './validate-delivery-artifacts.test.mjs'
 import { runValidatePublishRecordTests } from './validate-publish-record.test.mjs'
+import { runDailyRouteTests } from './daily-route.test.mjs'
+import { runPrePushStatusTests } from './pre-push-status.test.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -441,6 +443,8 @@ for (const failure of runProjectTypeTests()) errors.push(failure)
 // CLI and the Codex adapter consume core/ directly (single copy), so there is nothing to drift against.
 for (const failure of runGitStateTests()) errors.push(failure)
 for (const failure of runBranchChoiceTests()) errors.push(failure)
+for (const failure of runDailyRouteTests()) errors.push(failure)
+for (const failure of runPrePushStatusTests()) errors.push(failure)
 // scriptified mechanical ops (shared deterministic bin/ scripts): SCOPE check + sandbox cleanup + persist
 for (const failure of runScopeCheckTests()) errors.push(failure)
 for (const failure of runSandboxPrepareTests()) errors.push(failure)
@@ -582,6 +586,33 @@ if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guar
     'core/schemas/plan-artifacts.schema.json', 'core/schemas/delivery-artifacts.schema.json', 'core/schemas/publish-record.schema.json',
     'codex/pipeline.md', 'codex/plan-from-requirement.md', 'codex/AGENTS.template.md',
   ]) if (!exists(ref)) errors.push(`Codex skill/AGENTS references a missing file: ${ref}`)
+  // Claude Code daily skill/router: same daily product layer as Codex, escalating to existing full workflows.
+  const claudeSkillFile = '.claude/skills/ai-engineering-workflow/SKILL.md'
+  const claudeRouterFile = '.claude/workflows/daily-router.js'
+  if (!exists(claudeSkillFile)) errors.push(`missing Claude daily skill entry ${claudeSkillFile}`)
+  else {
+    const skillText = read(claudeSkillFile)
+    const fm = /^---\n([\s\S]*?)\n---/.exec(skillText)
+    if (!fm) errors.push(`${claudeSkillFile} is missing YAML frontmatter`)
+    else if (!/(^|\n)name:\s*ai-engineering-workflow\s*(\n|$)/.test(fm[1])) errors.push(`${claudeSkillFile} frontmatter name must be ai-engineering-workflow`)
+    for (const needle of [
+      '/dev-fast', '/dev-feature', '/review-changes', '/delivery-summary', '/pre-push-check', '/critical-check',
+      'plan-from-requirement.js', 'deliver-from-plan.js', 'publish-delivery.js', 'auto-deliver.js',
+      'node bin/core.mjs daily-route', 'node bin/core.mjs pre-push-status', 'node bin/pre-push-check.mjs',
+      'No `git add .`', 'No force-push', 'Remote URLs must be masked', 'PREPUSH_READY', 'does not mean `PUBLISHED`',
+    ]) if (!skillText.includes(needle)) errors.push(`${claudeSkillFile} must enforce daily router contract detail: ${needle}`)
+  }
+  if (!exists(claudeRouterFile)) errors.push(`missing Claude daily router workflow ${claudeRouterFile}`)
+  else {
+    const routerText = read(claudeRouterFile)
+    for (const needle of ['export const meta', 'core/daily-route.mjs', 'core/pre-push-status.mjs', 'PREPUSH_READY must not mean PUBLISHED']) {
+      if (!routerText.includes(needle)) errors.push(`${claudeRouterFile} missing expected contract detail: ${needle}`)
+    }
+  }
+  for (const ref of [
+    'core/daily-route.mjs', 'core/pre-push-status.mjs', 'core/schemas/daily-route.schema.json', 'bin/pre-push-check.mjs',
+    'scripts/daily-route.test.mjs', 'scripts/pre-push-status.test.mjs',
+  ]) if (!exists(ref)) errors.push(`daily Claude/Codex router references a missing file: ${ref}`)
 }
 if (exists('.claude/settings.json')) {
   let settingsText = ''

@@ -21,6 +21,7 @@ export function runCoreCliInputTests() {
     const branchFile = path.join(work, 'branch-choice.json')
     const projectFile = path.join(work, 'project-type.json')
     const deliverFile = path.join(work, 'deliver-status.json')
+    const prePushFile = path.join(work, 'pre-push-status.json')
     fs.writeFileSync(scopeFile, JSON.stringify({ changedFiles: ['app.sh'], scopeFiles: ['app.sh'] }))
     fs.writeFileSync(branchFile, JSON.stringify({ requestedMode: 'new-branch', detachedHead: false, targetBranchExists: false }))
     fs.writeFileSync(projectFile, JSON.stringify({ files: ['app.sh', 'test.sh'], packageJson: null }))
@@ -31,6 +32,16 @@ export function runCoreCliInputTests() {
       reviewIncomplete: false,
       diff: { ok: true, diffApplyCheckPassed: true, filesChanged: ['app.sh'] },
       codeQuality: { applicable: false },
+    }))
+    fs.writeFileSync(prePushFile, JSON.stringify({
+      gitState: { isRepo: true, detachedHead: false, currentBranch: 'feature/a', dirty: true },
+      changedFiles: ['app.sh'],
+      taskFiles: ['app.sh'],
+      verificationCommands: ['bash test.sh'],
+      verificationPassed: true,
+      remote: { name: 'origin', url: 'https://github.com/acme/repo.git' },
+      branchChoice: { resolvedMode: 'current-branch' },
+      publishIntent: true,
     }))
 
     const readiness = run(['readiness', 'PASS'])
@@ -50,6 +61,12 @@ export function runCoreCliInputTests() {
 
     const deliver = run(['deliver-status', '--input', deliverFile])
     if (deliver.status !== 0 || !deliver.stdout.includes('"finalStatus": "DELIVERED"')) failures.push(`deliver-status --input failed: ${deliver.stderr || deliver.stdout}`)
+
+    const route = run(['daily-route', JSON.stringify('complete page for dashboard')])
+    if (route.status !== 0 || !route.stdout.includes('"finalStatus": "ROUTE_FEATURE_DEV"')) failures.push(`daily-route argv failed: ${route.stderr || route.stdout}`)
+
+    const prePush = run(['pre-push-status', '--input', prePushFile])
+    if (prePush.status !== 0 || !prePush.stdout.includes('"finalStatus": "PREPUSH_READY"')) failures.push(`pre-push-status --input failed: ${prePush.stderr || prePush.stdout}`)
 
     const invalid = run(['scope-check', '{bad-json'])
     if (invalid.status === 0 || !invalid.stderr.includes('invalid JSON input')) failures.push('invalid JSON did not fail with a clear error')
