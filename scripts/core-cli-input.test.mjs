@@ -78,8 +78,11 @@ export function runCoreCliInputTests() {
     const prePush = run(['pre-push-status', '--input', prePushFile])
     if (prePush.status !== 0 || !prePush.stdout.includes('"finalStatus": "PREPUSH_READY"')) failures.push(`pre-push-status --input failed: ${prePush.stderr || prePush.stdout}`)
 
-    const defaultCheck = runPrePushCheck(['--cwd', prePushRepo, '--task-files', 'app.sh', '--verification', 'sh app.sh', '--verification-passed', '--target-branch', 'feature/a'])
-    if (defaultCheck.status !== 0 || !defaultCheck.stdout.includes('"finalStatus": "PREPUSH_READY"') || !defaultCheck.stdout.includes('"readOk": true')) failures.push(`pre-push-check default should perform publish gate: ${defaultCheck.stderr || defaultCheck.stdout}`)
+    const missingBranchModeCheck = runPrePushCheck(['--cwd', prePushRepo, '--task-files', 'app.sh', '--verification', 'sh app.sh', '--verification-passed', '--target-branch', 'feature/a'])
+    if (missingBranchModeCheck.status !== 0 || !missingBranchModeCheck.stdout.includes('"finalStatus": "PREPUSH_BLOCKED"') || !missingBranchModeCheck.stdout.includes('explicit branch strategy')) failures.push(`pre-push-check default should require explicit branch strategy: ${missingBranchModeCheck.stderr || missingBranchModeCheck.stdout}`)
+
+    const defaultCheck = runPrePushCheck(['--cwd', prePushRepo, '--branch-mode', 'current-branch', '--task-files', 'app.sh', '--verification', 'sh app.sh', '--verification-passed', '--target-branch', 'feature/a'])
+    if (defaultCheck.status !== 0 || !defaultCheck.stdout.includes('"finalStatus": "PREPUSH_READY"') || !defaultCheck.stdout.includes('"readOk": true')) failures.push(`pre-push-check with explicit branch strategy should perform publish gate: ${defaultCheck.stderr || defaultCheck.stdout}`)
 
     const snapshotCheck = runPrePushCheck(['--cwd', prePushRepo, '--snapshot-only', '--task-files', 'app.sh', '--verification', 'sh app.sh', '--verification-passed', '--remote', 'missing'])
     if (snapshotCheck.status !== 0 || !snapshotCheck.stdout.includes('"finalStatus": "PREPUSH_READY"') || !snapshotCheck.stdout.includes('"readOk": false')) failures.push(`pre-push-check --snapshot-only should allow missing remote: ${snapshotCheck.stderr || snapshotCheck.stdout}`)

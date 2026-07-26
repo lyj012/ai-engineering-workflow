@@ -3,8 +3,8 @@ name: ai-engineering-workflow
 description: >-
   A lightweight AI development constraint workflow for direct scoped coding with guardrails. Use for
   day-to-day coding by default: read relevant files, make minimal changes, run practical verification, and
-  report unverified scope. Escalate to full workflow only when the user explicitly asks or the task is high
-  risk.
+  report unverified scope. Escalate to full workflow only when the user explicitly asks or a modification task
+  is high risk.
 ---
 
 # AI Engineering Workflow (Codex)
@@ -31,16 +31,22 @@ avoid forcing every ordinary edit through the most expensive contract.
 
 ## 0. Top-Level Routing
 
-Route every request before reading large workflow contracts or spawning subagents.
+Route every request through the shared Daily Router before reading large workflow contracts or spawning subagents:
 
-1. If the customer explicitly asks for a complete flow, formal full delivery, strict audit,
-   `/critical-check`, independent review plus independent verification, sandbox delivery, or formal audit
-   artifacts, use Full Workflow.
-2. Otherwise, if the task hits a high-risk trigger, use Full Workflow.
-3. Otherwise, if the customer is preparing a formal handoff, formal submission, merge, release, or customer
-   delivery, use Formal Delivery Flow.
-4. Otherwise, route by intent: Analysis, Development, Bugfix, Refactor, Review, Delivery Summary, or Git
-   Publish.
+```text
+node "<toolkit-root>/bin/core.mjs" daily-route --stdin
+```
+
+Use the router result as the truth source for `finalStatus`, `route`, `verificationLevel`, `warnings`, and
+`stopBeforeGitWrites`.
+
+1. If the shared router returns `ROUTE_FULL_WORKFLOW`, use Full Workflow.
+2. If it returns `ROUTE_FORMAL_DELIVERY`, use Formal Delivery Flow.
+3. If it returns a read-only route (`ROUTE_ANALYSIS`, `ROUTE_REVIEW`, `ROUTE_DELIVERY_SUMMARY`, or
+   `ROUTE_PRE_PUSH_CHECK`), do not edit, commit, push, or create PRs even when high-risk terms appear; report
+   the router warnings.
+4. Otherwise, route by the selected daily intent: Analysis, Development, Bugfix, Refactor, Review, Delivery
+   Summary, Pre-Push Check, or Git Publish.
 
 When this skill is explicitly invoked for a modification task, complete the daily delivery loop by default:
 implement, verify, run Pre-Push Check, commit exact task files, push normally, and verify the remote HEAD.
@@ -50,7 +56,8 @@ Workflow trigger is present.
 
 Stop before git writes when:
 
-- the customer says not to commit or not to push;
+- the customer says not to commit, not to push, not to publish, not to open/create a PR, or asks to only
+  check/review/analyze;
 - the working tree contains unrelated or unsafe changes that cannot be separated confidently;
 - required verification for the selected verification level fails;
 - the branch, remote, or publish strategy is ambiguous;
@@ -58,13 +65,14 @@ Stop before git writes when:
   files would be included;
 - the publish target is protected or high risk and needs explicit opt-in.
 
-High-risk triggers:
+High-risk triggers escalate modification tasks, not pure read-only requests:
 
 - payment;
 - permissions or authorization;
 - authentication or login;
 - amount calculation;
 - third-party callback;
+- entitlements;
 - data migration;
 - production config or production data;
 - security;
@@ -78,13 +86,13 @@ high-risk trigger.
 
 Do not automatically enter the full engineering loop for ordinary frontend work, ordinary CRUD, DTO/VO
 changes, mapper/service additions, button states, layout tweaks, form interactions, interface field
-alignment, or phrases such as "complete page", "complete CRUD", or "complete feature". Those are normal
-Development Flow tasks unless the user explicitly asks for the full audited loop or a high-risk trigger is
-present.
+alignment, price labels, design tokens, JavaScript callbacks, token counts, pricing-page styling, or phrases
+such as "complete page", "complete CRUD", or "complete feature". Those are normal Development Flow tasks
+unless the user explicitly asks for the full audited loop or a high-risk trigger is present.
 
 | Intent / Command | Flow | Default Behavior |
 |---|---|---|
-| only analyze / clarify / assess | Analysis Flow | read-only related files, output conclusions/risks/suggestions, stop |
+| only analyze / clarify / assess / explain | Analysis Flow | read-only related files, output conclusions/risks/suggestions, stop |
 | `/dev-fast` or small development | Fast Dev | read related files, minimal edit, light verification, changed files + unverified scope |
 | `/dev-feature` or ordinary feature loop | Feature Dev | short plan, minimal feature loop, core path verification, changed files + unverified scope |
 | fix bug / error / exception | Bugfix Flow | read symptom/logs, identify root cause, minimal fix, targeted regression verification |
@@ -94,7 +102,7 @@ present.
 | `/pre-push-check` | Pre-Push Check | inspect branch/remote/status, isolate task files, check unsafe files and verification gaps, stop |
 | commit / push / open PR | Git Publish Flow | inspect git state, isolate task files, exclude unsafe files, confirm, commit, push, optional PR |
 | formal handoff / formal delivery / ready to submit | Formal Delivery Flow | summarize changes, run needed verification, review current changes, fix blockers, delivery summary |
-| complete flow / strict audit / `/critical-check` / high-risk trigger | Full Workflow | full analysis, risk analysis, plan, sandbox implementation, independent review, independent verification, artifacts |
+| complete flow / strict audit / `/critical-check` / high-risk modification trigger | Full Workflow | full analysis, risk analysis, plan, sandbox implementation, independent review, independent verification, artifacts |
 
 Verification levels:
 
@@ -105,12 +113,12 @@ Verification levels:
 | ordinary backend change | compile or focused test; smoke one core API when practical |
 | ordinary frontend-backend loop | request parameters, response fields, loading state, error message, and duplicate-submit behavior |
 | before submit, handoff, commit, or push | git status, task-file scope, unsafe files, actual verification commands, delivery summary |
-| high-risk logic | Full Workflow with analysis, plan, sandbox implementation, independent review, and independent verification |
+| high-risk modification logic | Full Workflow with analysis, plan, sandbox implementation, independent review, and independent verification |
 
 ## 1. Analysis Flow
 
-Use Analysis Flow when the customer only wants analysis, clarification, evaluation, design thinking, or risk
-assessment.
+Use Analysis Flow when the customer only wants analysis, clarification, evaluation, explanation, design thinking,
+or risk assessment.
 
 Process:
 
@@ -121,8 +129,8 @@ Process:
 
 ## 2. Fast Development Mode
 
-Fast Development is the default unless the user explicitly asks for review, delivery, critical, audit, or the
-task matches the high-risk triggers above.
+Fast Development is the default unless the shared Daily Router selects review, delivery, critical, audit, or a
+high-risk modification trigger.
 
 Process:
 
@@ -174,7 +182,7 @@ Process:
 5. Report changed files, verified path, unverified path, and follow-up risks.
 
 Do not run independent review, sandbox delivery, full artifact generation, or multi-agent verification by
-default. Escalate to Full Workflow only when the feature includes a high-risk trigger.
+default. Escalate to Full Workflow only when the feature includes a high-risk modification trigger.
 
 ## 4. Bugfix Flow
 
@@ -249,6 +257,15 @@ Process:
 5. Summarize actual verification already run and any verification gap.
 6. Output whether the change looks ready for a later Git Publish Flow, or what blocks it.
 
+When using the deterministic publish-intent gate, call:
+
+```text
+node "<toolkit-root>/bin/pre-push-check.mjs" --cwd <repo> --branch-mode <current-branch|new-branch|switch-existing>
+```
+
+Omitting `--branch-mode` blocks publish readiness because the branch strategy is ambiguous. Use
+`--snapshot-only` only for non-publish safety snapshots.
+
 ## 8. Formal Delivery Flow
 
 Use Formal Delivery Flow when the customer is preparing a formal handoff, formal submission, merge, release,
@@ -268,9 +285,9 @@ multi-agent independent verification by default.
 
 ## 9. Full Workflow
 
-Use Full Workflow when the customer explicitly asks for a complete flow, formal full delivery, strict audit,
-`/critical-check`, independent review plus independent verification, sandbox delivery, formal audit artifacts,
-or when the high-risk trigger list is matched.
+Use Full Workflow when the shared Daily Router returns `ROUTE_FULL_WORKFLOW`: explicit complete flow, explicit
+Full Workflow, formal full delivery, strict audit, `/critical-check`, independent review plus independent
+verification, sandbox delivery, formal audit artifacts, or a high-risk modification trigger.
 
 Full Workflow is the insurance mechanism for high-risk, strongly audited, or formally delivered work. It is
 not the default daily entry point. Ordinary complete pages, complete CRUD, and normal feature loops stay in
@@ -320,22 +337,28 @@ is fully verified.
 
 ## 10. Toolkit Root For Heavy Commands
 
-Resolve the toolkit root only when a mode needs deterministic workflow tooling. Priority:
+Before deterministic routing or git safety checks, resolve the toolkit root. Priority:
 
 1. If this skill is installed inside the `ai-engineering-workflow` repository, resolve the real path of this
    `SKILL.md` first, then walk upward until `core/`, `bin/`, `scripts/`, and `codex/` exist.
 2. If the user explicitly provides a toolkit path for this run, use it.
 3. If `AIEW_HOME` is set, use it as a backwards-compatible override.
 4. If none of the above locates the toolkit root, continue lightweight flows without heavy tooling, or stop
-   Full Workflow with a clear installation error.
+   Full Workflow / Git Publish with a clear installation error.
+
+Use `node "<toolkit-root>/bin/core.mjs" ...` and `node "<toolkit-root>/bin/pre-push-check.mjs" ...`; do not
+assume Codex was launched from the toolkit repository.
 
 Useful deterministic commands:
 
 | Need | Command |
 |---|---|
+| shared daily router | `node "<toolkit-root>/bin/core.mjs" daily-route --stdin` |
 | self-check toolkit | `node "<toolkit-root>/scripts/self-check.mjs"` |
 | execution context | `node "<toolkit-root>/bin/execution-context.mjs" --workflow-root "<toolkit-root>" --project-root "<target-project-root>" --workspace-root "<target-project-root>" --task-artifact-root "<run-dir>"` |
 | git state and branch options | `node "<toolkit-root>/bin/git-state.mjs" --cwd <repo> [--mode <m>] [--target-branch <b>]` |
+| branch strategy | `node "<toolkit-root>/bin/core.mjs" branch-choice --stdin` |
+| pre-push publish gate | `node "<toolkit-root>/bin/pre-push-check.mjs" --cwd <repo> --branch-mode <current-branch|new-branch|switch-existing>` |
 | plan readiness | `node "<toolkit-root>/bin/core.mjs" readiness <finalStatus>` |
 | delivery / publish / persist status | `node "<toolkit-root>/bin/core.mjs" <deliver-status|publish-status|persist-outcome> --input <json-file>` |
 | git red-line guard | `node "<toolkit-root>/bin/core.mjs" git-guard --stdin` |

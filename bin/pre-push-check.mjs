@@ -92,7 +92,7 @@ function main() {
     },
     remoteName,
     targetBranch: arg('--target-branch') || gitState.currentBranch,
-    branchChoice: { resolvedMode: arg('--branch-mode') || 'current-branch' },
+    branchChoice: { resolvedMode: arg('--branch-mode') || null },
   })
 
   process.stdout.write(JSON.stringify({ cwd, ...result }, null, 2) + '\n')

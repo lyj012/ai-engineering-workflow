@@ -464,6 +464,36 @@ for (const failure of runProjectTypeTests()) errors.push(failure)
 for (const failure of runGitStateTests()) errors.push(failure)
 for (const failure of runBranchChoiceTests()) errors.push(failure)
 for (const failure of runDailyRouteTests()) errors.push(failure)
+{
+  const expectedRoutes = [
+    ['/analysis 分析一下支付回调', 'ROUTE_ANALYSIS'],
+    ['/review-changes 审查支付代码', 'ROUTE_REVIEW'],
+    ['/delivery-summary 总结支付回调改动', 'ROUTE_DELIVERY_SUMMARY'],
+    ['/pre-push-check 检查认证模块的改动', 'ROUTE_PRE_PUSH_CHECK'],
+    ['analyze this module', 'ROUTE_ANALYSIS'],
+    ['assess this implementation', 'ROUTE_ANALYSIS'],
+    ['clarify how this code works', 'ROUTE_ANALYSIS'],
+    ['explain this architecture', 'ROUTE_ANALYSIS'],
+    ['run the full workflow', 'ROUTE_FULL_WORKFLOW'],
+    ['use Full Workflow', 'ROUTE_FULL_WORKFLOW'],
+    ['走完整工作流', 'ROUTE_FULL_WORKFLOW'],
+    ['执行全流程', 'ROUTE_FULL_WORKFLOW'],
+    ['修改商品价格标签', 'ROUTE_FAST_DEV'],
+    ['调整 CSS design token', 'ROUTE_FAST_DEV'],
+    ['重构 JavaScript callback', 'ROUTE_REFACTOR'],
+    ['统计模型 token 数量', 'ROUTE_FAST_DEV'],
+  ]
+  for (const [input, expected] of expectedRoutes) {
+    const result = classifyDailyRoute(input)
+    if (result.finalStatus !== expected) errors.push(`daily router semantic regression for ${input}: expected ${expected}, got ${result.finalStatus}`)
+  }
+  for (const input of ['no need to push after commit', "don't create a PR for this change", 'do not open a PR', "commit only, don't push", '不用推送', '无需提交', '先别推送', '别创建 PR', '不要开 PR', '只检查，不要修改']) {
+    const result = classifyDailyRoute(input)
+    if (result.stopBeforeGitWrites !== true) errors.push(`daily router must stop git writes for no-git phrase: ${input}`)
+  }
+  const readOnlyHighRisk = classifyDailyRoute('/analysis 分析一下支付回调')
+  if (readOnlyHighRisk.route !== 'analysis' || !readOnlyHighRisk.highRiskMatches?.length || !readOnlyHighRisk.warnings?.length) errors.push('daily router must preserve high-risk read-only routes with warning metadata')
+}
 for (const failure of runPrePushStatusTests()) errors.push(failure)
 // scriptified mechanical ops (shared deterministic bin/ scripts): SCOPE check + sandbox cleanup + persist
 for (const failure of runScopeCheckTests()) errors.push(failure)
@@ -582,6 +612,11 @@ if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guar
       '/review-changes',
       '/delivery-summary',
       '/critical-check',
+      'node "<toolkit-root>/bin/core.mjs" daily-route --stdin',
+      'Use the router result as the truth source',
+      'High-risk triggers escalate modification tasks, not pure read-only requests',
+      'price labels, design tokens, JavaScript callbacks, token counts, pricing-page styling',
+      'node "<toolkit-root>/bin/pre-push-check.mjs" --cwd <repo> --branch-mode <current-branch|new-branch|switch-existing>',
       '<toolkit-root>/codex/pipeline.md',
       '<toolkit-root>/codex/plan-from-requirement.md',
       'validate-plan-artifacts.mjs',
@@ -618,7 +653,12 @@ if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guar
     for (const needle of [
       '/dev-fast', '/dev-feature', '/review-changes', '/delivery-summary', '/pre-push-check', '/critical-check',
       'plan-from-requirement.js', 'deliver-from-plan.js', 'publish-delivery.js', 'auto-deliver.js',
-      'node bin/core.mjs daily-route', 'node bin/core.mjs pre-push-status', 'node bin/pre-push-check.mjs',
+      'node "<toolkit-root>/bin/core.mjs" daily-route --stdin', 'node "<toolkit-root>/bin/core.mjs" pre-push-status', 'node "<toolkit-root>/bin/pre-push-check.mjs"',
+      'Before deterministic routing or git safety checks, resolve the toolkit root',
+      'Use the router result as the truth source',
+      'High-risk triggers escalate modification tasks, not pure read-only requests',
+      'price labels, design tokens, JavaScript callbacks, token counts, and pricing-page styling',
+      '--branch-mode <current-branch|new-branch|switch-existing>',
       'No `git add .`', 'No force-push', 'Remote URLs must be masked', 'PREPUSH_READY', 'does not mean `PUBLISHED`',
     ]) if (!skillText.includes(needle)) errors.push(`${claudeSkillFile} must enforce daily router contract detail: ${needle}`)
   }
@@ -812,6 +852,9 @@ const readmeMust = [
   'Workflow({ scriptPath:',
   'examples/minimal-target',
   'node scripts/self-check.mjs',
+  'node "<toolkit-root>/bin/core.mjs" daily-route --stdin',
+  'Read-only intent is classified before high-risk modification escalation',
+  '--branch-mode <current-branch|new-branch|switch-existing>',
 ]
 for (const needle of readmeMust) if (!readme.includes(needle)) errors.push(`README.md missing expected content: ${needle}`)
 
