@@ -83,7 +83,12 @@ function main() {
     highRisk,
     allowProtectedBranchPublish,
     allowHighRiskPublish,
-    remote: { name: remoteName, url: remoteInfo.safeUrl || remoteInfo.maskedUrl, hasCredentials: remoteInfo.hasCredentials },
+    remote: {
+      name: remoteName,
+      url: remoteInfo.safeUrl || remoteInfo.maskedUrl,
+      hasCredentials: remoteInfo.hasCredentials,
+      readOk: remoteUrlRaw.ok,
+    },
     remoteName,
     targetBranch: arg('--target-branch') || gitState.currentBranch,
     branchChoice: { resolvedMode: arg('--branch-mode') || '' },

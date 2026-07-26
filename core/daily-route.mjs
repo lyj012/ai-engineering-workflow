@@ -7,14 +7,21 @@ const FULL_REQUEST_PATTERNS = [
   /strict\s+audit/i,
   /critical\s+check/i,
   /\/critical-check\b/i,
-  /independent\s+review/i,
-  /independent\s+verification/i,
   /sandbox\s+delivery/i,
   /formal\s+audit/i,
   /完整流程/,
   /严格审计/,
-  /独立\s*(review|评审|verification|验证)/i,
   /沙箱实现/,
+]
+
+const INDEPENDENT_REVIEW_PATTERNS = [
+  /independent\s+review/i,
+  /独立\s*(review|评审|审查)/i,
+]
+
+const INDEPENDENT_VERIFICATION_PATTERNS = [
+  /independent\s+verification/i,
+  /独立\s*(verification|验证)/i,
 ]
 
 const HIGH_RISK_PATTERNS = [
@@ -47,17 +54,57 @@ const NO_GIT_WRITE_PATTERNS = [
   /不(要|得)?(提交|推送|发布)/,
 ]
 
-const ROUTE_RULES = [
-  ['analysis', 'ROUTE_ANALYSIS', [/\/analysis\b/i, /only\s+(analyze|analyse|clarify|assess)/i, /分析|澄清|评估/]],
+const EXPLICIT_ROUTE_RULES = [
+  ['analysis', 'ROUTE_ANALYSIS', [/\/analysis\b/i]],
+  ['review', 'ROUTE_REVIEW', [/\/review-changes\b/i]],
+  ['delivery-summary', 'ROUTE_DELIVERY_SUMMARY', [/\/delivery-summary\b/i]],
+  ['pre-push-check', 'ROUTE_PRE_PUSH_CHECK', [/\/pre-push-check\b/i]],
+  ['feature-dev', 'ROUTE_FEATURE_DEV', [/\/dev-feature\b/i]],
+  ['fast-dev', 'ROUTE_FAST_DEV', [/\/dev-fast\b/i]],
+]
+
+const INTENT_ROUTE_RULES = [
+  ['analysis', 'ROUTE_ANALYSIS', [/only\s+(analyze|analyse|clarify|assess)/i, /分析|澄清|评估/]],
   ['bugfix', 'ROUTE_BUGFIX', [/bug|error|exception|crash|failed|failure|regression/i, /修复|报错|异常|失败|回归/]],
   ['refactor', 'ROUTE_REFACTOR', [/refactor|restructure|simplify|optimi[sz]e\s+structure/i, /重构|优化结构|整理结构/]],
-  ['review', 'ROUTE_REVIEW', [/\/review-changes\b/i, /review\s+(diff|changes|pr|pull request|code)/i, /代码审查|评审.*(diff|改动|PR)/i]],
-  ['delivery-summary', 'ROUTE_DELIVERY_SUMMARY', [/\/delivery-summary\b/i, /delivery\s+summary|handoff\s+notes|acceptance\s+notes/i, /交付摘要|验收说明|交接说明/]],
-  ['pre-push-check', 'ROUTE_PRE_PUSH_CHECK', [/\/pre-push-check\b/i, /pre[-\s]?push\s+check/i, /提交前检查|推送前检查/]],
+  ['review', 'ROUTE_REVIEW', [/\breview\b.*\b(diff|changes|pr|pull request|code)\b/i, /independent\s+review/i, /代码审查|评审.*(diff|改动|PR)/i]],
+  ['delivery-summary', 'ROUTE_DELIVERY_SUMMARY', [/delivery\s+summary|handoff\s+notes|acceptance\s+notes/i, /交付摘要|验收说明|交接说明/]],
+  ['pre-push-check', 'ROUTE_PRE_PUSH_CHECK', [/pre[-\s]?push\s+check/i, /提交前检查|推送前检查/]],
   ['git-publish', 'ROUTE_GIT_PUBLISH', [/\b(commit|push|open\s+pr|create\s+pr)\b/i, /提交|推送|创建PR|打开PR/i]],
-  ['feature-dev', 'ROUTE_FEATURE_DEV', [/\/dev-feature\b/i, /complete\s+(feature|page|crud|module)/i, /new\s+(feature|page|api|module|crud)/i, /完整(功能|页面|CRUD|模块)|新增(功能|页面|接口|模块)/i]],
-  ['fast-dev', 'ROUTE_FAST_DEV', [/\/dev-fast\b/i, /change|adjust|update|add\s+(field|button|state)|fix\s+style/i, /改一下|修一下|加个字段|调个页面|调整|更新/]],
+  ['feature-dev', 'ROUTE_FEATURE_DEV', [/complete\s+(feature|page|crud|module)/i, /new\s+(feature|page|api|module|crud)/i, /完整(功能|页面|CRUD|模块)|新增(功能|页面|接口|模块)/i]],
+  ['fast-dev', 'ROUTE_FAST_DEV', [/change|adjust|update|add\s+(field|button|state)|fix\s+style/i, /改一下|修一下|加个字段|调个页面|调整|更新/]],
 ]
+
+const FLOW_BY_ROUTE = {
+  'analysis': 'Analysis Flow',
+  'bugfix': 'Bugfix Flow',
+  'refactor': 'Refactor Flow',
+  'review': 'Review Flow',
+  'delivery-summary': 'Delivery Summary Flow',
+  'pre-push-check': 'Pre-Push Check',
+  'git-publish': 'Git Publish Flow',
+  'feature-dev': 'Feature Dev',
+  'fast-dev': 'Fast Dev',
+}
+
+function verificationLevelForRoute(route) {
+  if (route === 'feature-dev') return 'core-path'
+  if (route === 'pre-push-check' || route === 'delivery-summary' || route === 'git-publish') return 'submit-ready'
+  if (route === 'analysis' || route === 'review') return 'read-only'
+  return 'light'
+}
+
+function routeResult(route, finalStatus, reasons, warnings, stopBeforeGitWrites) {
+  return {
+    finalStatus,
+    route,
+    flow: FLOW_BY_ROUTE[route],
+    verificationLevel: verificationLevelForRoute(route),
+    reasons,
+    warnings,
+    stopBeforeGitWrites,
+  }
+}
 
 function textOf(input) {
   if (typeof input === 'string') return input
@@ -95,7 +142,10 @@ export function classifyDailyRoute(input) {
     }
   }
 
-  if (matchesAny(text, FULL_REQUEST_PATTERNS)) {
+  const independentReviewRequested = matchesAny(text, INDEPENDENT_REVIEW_PATTERNS)
+  const independentVerificationRequested = matchesAny(text, INDEPENDENT_VERIFICATION_PATTERNS)
+
+  if (matchesAny(text, FULL_REQUEST_PATTERNS) || (independentReviewRequested && independentVerificationRequested)) {
     reasons.push('explicit full workflow / audit / independent review+verify request')
     return {
       finalStatus: 'ROUTE_FULL_WORKFLOW',
@@ -122,6 +172,13 @@ export function classifyDailyRoute(input) {
     }
   }
 
+  for (const [route, finalStatus, patterns] of EXPLICIT_ROUTE_RULES) {
+    if (!matchesAny(text, patterns)) continue
+    reasons.push(`explicit command matched ${route}`)
+    const stopBeforeGitWrites = matchesAny(text, NO_GIT_WRITE_PATTERNS) || route !== 'git-publish'
+    return routeResult(route, finalStatus, reasons, warnings, stopBeforeGitWrites)
+  }
+
   if (matchesAny(text, FORMAL_DELIVERY_PATTERNS)) {
     reasons.push('formal handoff / submission / delivery intent')
     return {
@@ -135,26 +192,11 @@ export function classifyDailyRoute(input) {
     }
   }
 
-  for (const [route, finalStatus, patterns] of ROUTE_RULES) {
+  for (const [route, finalStatus, patterns] of INTENT_ROUTE_RULES) {
     if (!matchesAny(text, patterns)) continue
     reasons.push(`intent matched ${route}`)
-    const stopBeforeGitWrites = matchesAny(text, NO_GIT_WRITE_PATTERNS) || !['git-publish'].includes(route)
-    const verificationLevel = route === 'feature-dev' ? 'core-path'
-      : route === 'pre-push-check' || route === 'delivery-summary' || route === 'git-publish' ? 'submit-ready'
-        : route === 'analysis' || route === 'review' ? 'read-only'
-          : 'light'
-    const flow = {
-      'analysis': 'Analysis Flow',
-      'bugfix': 'Bugfix Flow',
-      'refactor': 'Refactor Flow',
-      'review': 'Review Flow',
-      'delivery-summary': 'Delivery Summary Flow',
-      'pre-push-check': 'Pre-Push Check',
-      'git-publish': 'Git Publish Flow',
-      'feature-dev': 'Feature Dev',
-      'fast-dev': 'Fast Dev',
-    }[route]
-    return { finalStatus, route, flow, verificationLevel, reasons, warnings, stopBeforeGitWrites }
+    const stopBeforeGitWrites = matchesAny(text, NO_GIT_WRITE_PATTERNS) || route !== 'git-publish'
+    return routeResult(route, finalStatus, reasons, warnings, stopBeforeGitWrites)
   }
 
   if (/crud/i.test(lower) || /页面|接口|功能|模块/.test(text)) {

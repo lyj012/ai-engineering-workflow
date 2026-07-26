@@ -34,6 +34,7 @@ export const meta = {
 // `node bin/core.mjs daily-route --stdin` for deterministic route decisions.
 
 const DAILY_ROUTES = [
+  { command: '/analysis', route: 'ROUTE_ANALYSIS', flow: 'Analysis Flow', verification: 'read-only' },
   { command: '/dev-fast', route: 'ROUTE_FAST_DEV', flow: 'Fast Dev', verification: 'light' },
   { command: '/dev-feature', route: 'ROUTE_FEATURE_DEV', flow: 'Feature Dev', verification: 'core-path' },
   { command: 'bug / error / exception', route: 'ROUTE_BUGFIX', flow: 'Bugfix Flow', verification: 'targeted regression' },
@@ -42,7 +43,9 @@ const DAILY_ROUTES = [
   { command: '/delivery-summary', route: 'ROUTE_DELIVERY_SUMMARY', flow: 'Delivery Summary Flow', verification: 'submit-ready summary' },
   { command: '/pre-push-check', route: 'ROUTE_PRE_PUSH_CHECK', flow: 'Pre-Push Check', verification: 'read-only git safety' },
   { command: 'commit / push / open PR', route: 'ROUTE_GIT_PUBLISH', flow: 'Git Publish Flow', verification: 'remote verification required before PUBLISHED' },
+  { command: 'formal handoff / ready to deliver', route: 'ROUTE_FORMAL_DELIVERY', flow: 'Formal Delivery Flow', verification: 'necessary' },
   { command: '/critical-check', route: 'ROUTE_FULL_WORKFLOW', flow: 'Full Workflow', verification: 'full' },
+  { command: 'empty / ambiguous request', route: 'ROUTE_NEEDS_CLARIFICATION', flow: 'Needs Clarification', verification: 'none' },
 ]
 
 export function routeTable() {

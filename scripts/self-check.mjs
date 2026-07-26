@@ -45,6 +45,7 @@ import { runSafeRmTests } from './safe-rm.test.mjs'
 import { runVerifyDeliveryPersistTests } from './verify-delivery-persist.test.mjs'
 import { runValidateDeliveryArtifactsTests } from './validate-delivery-artifacts.test.mjs'
 import { runValidatePublishRecordTests } from './validate-publish-record.test.mjs'
+import { classifyDailyRoute } from '../core/daily-route.mjs'
 import { runDailyRouteTests } from './daily-route.test.mjs'
 import { runPrePushStatusTests } from './pre-push-status.test.mjs'
 
@@ -176,6 +177,10 @@ const workflowFiles = [
   '.claude/workflows/wf-docs-generation.js',
 ]
 
+const workflowDescriptorFiles = [
+  '.claude/workflows/daily-router.js',
+]
+
 for (const file of workflowFiles) {
   if (!exists(file)) continue
   const text = read(file)
@@ -186,6 +191,21 @@ for (const file of workflowFiles) {
     new Function(`return (async function workflowSyntaxCheck(){\n${transformed}\n});`)
   } catch (error) {
     errors.push(`${file} has invalid Workflow JS syntax: ${error.message}`)
+  }
+}
+
+for (const file of workflowDescriptorFiles) {
+  if (!exists(file)) continue
+  const text = read(file)
+  if (!text.includes('export const meta')) errors.push(`${file} missing export const meta`)
+  if (/Date\.now\(\)|Math\.random\(\)|new Date\(\)/.test(text)) errors.push(`${file} contains banned time/random API`)
+  const executableText = text.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')
+  if (/^\s*(?:await\s+)?(?:agent|workflow)\s*\(/m.test(executableText)) errors.push(`${file} must remain a descriptor, not an executable Workflow script`)
+  const transformed = text.replace('export const meta', 'const meta').replace(/export function /g, 'function ')
+  try {
+    new Function(`return (async function workflowDescriptorSyntaxCheck(){\n${transformed}\n});`)
+  } catch (error) {
+    errors.push(`${file} has invalid descriptor JS syntax: ${error.message}`)
   }
 }
 
@@ -607,6 +627,18 @@ if (!exists('scripts/git-guard-hook.mjs')) errors.push('missing scripts/git-guar
     const routerText = read(claudeRouterFile)
     for (const needle of ['export const meta', 'core/daily-route.mjs', 'core/pre-push-status.mjs', 'PREPUSH_READY must not mean PUBLISHED']) {
       if (!routerText.includes(needle)) errors.push(`${claudeRouterFile} missing expected contract detail: ${needle}`)
+    }
+    if (!routerText.includes('descriptor') && !routerText.includes('描述器')) errors.push(`${claudeRouterFile} must explicitly identify itself as a descriptor`)
+    if (!routerText.includes('routeTable')) errors.push(`${claudeRouterFile} must expose routeTable() for descriptor consistency checks`)
+    const descriptorRoutes = [...routerText.matchAll(/route:\s*'([^']+)'/g)].map(m => m[1])
+    const routeStatusKeys = Object.keys(JSON.parse(read('core/status.json')).routeStatuses || {})
+    const missingRoutes = routeStatusKeys.filter(status => !descriptorRoutes.includes(status))
+    const unknownRoutes = descriptorRoutes.filter(status => !routeStatusKeys.includes(status))
+    for (const status of missingRoutes) errors.push(`${claudeRouterFile} routeTable is missing status from core/status.json: ${status}`)
+    for (const status of unknownRoutes) errors.push(`${claudeRouterFile} routeTable includes unknown route status: ${status}`)
+    for (const sample of ['/review-changes review this bug fix', '/pre-push-check before committing the error fix', 'independent review and independent verification before delivery']) {
+      const status = classifyDailyRoute(sample).finalStatus
+      if (!routeStatusKeys.includes(status)) errors.push(`daily route classifier produced status not present in core/status.json: ${status}`)
     }
   }
   for (const ref of [

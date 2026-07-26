@@ -7,8 +7,8 @@ verifiable, and easy to hand off. The default daily path is direct scoped develo
 relevant context, make the smallest useful change, run practical verification, and report what remains
 unverified. The full audited pipeline remains available for high-risk or explicitly requested full-flow work.
 
-Claude Code Dynamic Workflows and Codex now share the same daily product shape: a lightweight `ai-engineering-workflow` entry,
-deterministic daily routing, pre-push safety checks, and escalation to the existing full Claude Workflow chain
+Claude Code and Codex now share the same daily routing contract and product positioning: a lightweight `ai-engineering-workflow` entry,
+deterministic daily routing, pre-push safety checks, and escalation to the existing Claude Code Dynamic Workflows
 when risk or explicit user intent requires it. `core/` owns the shared route/status/safety decisions; `bin/`
 exposes cross-platform CLIs; `.claude/` and `.agents/` are adapter layers, not separate methodologies. Codex
 Full Workflow is not positioned as a one-off experiment: it remains the complete feature/project delivery path
@@ -163,7 +163,7 @@ task hits a high-risk trigger.
 ## Verification Levels
 
 | Scenario | Recommended verification |
-|---|---|
+| --- | --- |
 | Text, style, small component, small field | `git diff --check`, then the smallest relevant build/lint/test item |
 | Ordinary frontend change | build/lint or focused page smoke check covering the core loading, interaction, or error state |
 | Ordinary backend change | compile or focused test; smoke one core API when practical |
@@ -428,7 +428,7 @@ These examples are static, public, and safe to inspect. They are not customer ou
 ## Status Meanings
 
 | Status | Meaning |
-|---|---|
+| --- | --- |
 | `PASS` | Plan passed review and has no known blocking gaps. |
 | `PARTIAL` | Plan passed but some coverage degraded or remains open; read `remainingGaps`. |
 | `CONDITIONAL` | No P0 blocker, but important P1 issues remain; use human judgment before coding. |

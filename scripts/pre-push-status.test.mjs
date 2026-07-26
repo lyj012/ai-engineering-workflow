@@ -20,6 +20,13 @@ export const CASES = [
   ['protected branch blocks without opt-in', { ...clean, targetBranch: 'main' }, 'PREPUSH_BLOCKED'],
   ['protected branch allowed with opt-in', { ...clean, targetBranch: 'main', allowProtectedBranchPublish: true }, 'PREPUSH_READY'],
   ['credentialed remote blocks', { ...clean, remote: { name: 'origin', url: 'https://TOKEN@github.com/acme/repo.git' } }, 'PREPUSH_BLOCKED'],
+  ['verification command without success blocks', { ...clean, verificationPassed: undefined }, 'PREPUSH_BLOCKED'],
+  ['remote name without URL blocks publish', { ...clean, remote: { name: 'origin', url: '' } }, 'PREPUSH_BLOCKED'],
+  ['remote read failure blocks publish', { ...clean, remote: { name: 'origin', url: '', readOk: false } }, 'PREPUSH_BLOCKED'],
+  ['invalid remote URL blocks publish', { ...clean, remote: { name: 'origin', url: 'not a url' } }, 'PREPUSH_BLOCKED'],
+  ['branch strategy not required without publish intent', { ...clean, publishIntent: false, branchChoice: {} }, 'PREPUSH_READY'],
+  ['partial task-file mismatch blocks unsafe env change', { ...clean, changedFiles: ['src/app.js', '.env'], taskFiles: ['src/app.js', '.env'] }, 'PREPUSH_BLOCKED'],
+  ['task file not in changed files blocks', { ...clean, changedFiles: ['src/app.js'], taskFiles: ['src/app.js', 'test/app.test.js'] }, 'PREPUSH_BLOCKED'],
 ]
 
 export function runPrePushStatusTests() {
@@ -31,6 +38,8 @@ export function runPrePushStatusTests() {
   }
   const ready = computePrePushStatus(clean)
   if (!ready.note.includes('does not mean PUBLISHED')) failures.push('PREPUSH_READY note must not imply PUBLISHED')
+  const scoped = computePrePushStatus({ ...clean, changedFiles: ['src/app.js', 'scratch.js'], taskFiles: ['src/app.js'] })
+  if (scoped.finalStatus !== 'PREPUSH_READY' || scoped.taskFiles.length !== 1 || scoped.taskFiles[0] !== 'src/app.js') failures.push('scoped task files should allow unrelated unselected changed files')
   return failures
 }
 

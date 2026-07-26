@@ -56,7 +56,7 @@ Ordinary CRUD is not data migration. Normal query, mapper, DTO/VO, pagination, f
 | `/review-changes` | Review | review current diff only, P0/P1/P2 findings |
 | `/delivery-summary` | Delivery Summary | changed files, behavior, verification, unverified scope, risks |
 | `/pre-push-check` | Pre-Push Check | branch/remote/status, task files, unsafe files, verification gaps |
-| commit / push / open PR | Git Publish | exact-file commit/push only after safety gates are clear |
+| commit / push / open PR | Git Publish | exact-file commit/push only after explicit customer authorization and clear safety gates |
 | `/critical-check` or high-risk | Full Workflow | existing plan -> deliver -> publish workflow chain |
 
 ## Deterministic Helpers
@@ -78,6 +78,7 @@ Use `--input <json-file>` or `--stdin` for object inputs on Windows PowerShell.
 
 Stop before git writes when:
 
+- the customer has not explicitly authorized the specific commit, push, or PR action in the current context;
 - the customer says not to commit or not to push;
 - unrelated or unsafe changes cannot be separated confidently;
 - required verification fails;
@@ -87,6 +88,8 @@ Stop before git writes when:
 
 Hard rules:
 
+- Git publish is a gated close-loop route, not an implicit side effect of ordinary Claude Code edits.
+- The Codex adapter may complete the daily commit/push loop when its Skill is explicitly invoked; Claude Code preserves the same shared safety contract but still requires explicit customer authorization for outward git writes.
 - No `git add .`.
 - No force-push.
 - No protected branch publishing without explicit opt-in.
